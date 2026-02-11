@@ -5,6 +5,13 @@
 const { sql } = require("@vercel/postgres");
 
 async function migrate() {
+  // POSTGRES_URL이 없으면 마이그레이션 건너뛰기
+  if (!process.env.POSTGRES_URL) {
+    console.log("[migrate] POSTGRES_URL이 없어서 마이그레이션을 건너뜁니다.");
+    console.log("[migrate] Vercel에서 데이터베이스를 연결한 후 다시 배포하세요.");
+    process.exit(0);
+  }
+
   try {
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS consulted_at TEXT`;
     console.log("[migrate] consulted_at OK");
