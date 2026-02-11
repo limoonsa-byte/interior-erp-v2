@@ -1,0 +1,9 @@
+// ========================================
+// include 함수 추가 위치
+// ========================================
+// doGet 함수 바로 다음에 추가하세요!
+
+/** HTML include */
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}

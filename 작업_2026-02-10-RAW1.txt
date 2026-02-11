@@ -1,0 +1,53 @@
+2026-02-10 작업 일지
+===================
+
+1. 로그인 방식 전환
+- 기존 Google(next-auth) 로그인 흐름 분석.
+- /login 페이지를 회사코드 기반 로그인/가입 화면으로 교체.
+- 회사명 플레이스홀더를 “예: 오로인테리어” 로 변경.
+
+2. DB 구조 정리 (companies / members / consultations)
+- Vercel SQL Editor(Neon)에서 기존 테이블 리셋 후 재생성:
+  - companies: id, name, code, password_hash, plan, created_at
+  - members: id, company_id, email, role, joined_at
+  - consultations: id, company_id, customer_name, contact, region, address, pyung, status, pic, note, created_at
+
+3. 회사코드 가입/로그인 API 구현
+- app/api/company/signup/route.ts
+  - name, code, password, ownerEmail 입력으로 회사 생성.
+  - companies.code 중복 체크.
+  - ownerEmail 이 있으면 members에 owner 역할로 등록.
+  - 성공 시 company 쿠키(id, code, name) 발급.
+- app/api/company/login/route.ts
+  - code, password로 회사 조회 및 비밀번호 검증(현재는 평문 비교).
+  - 성공 시 company 쿠키 발급.
+
+4. 세션/보안 처리
+- middleware.ts 를 company 쿠키 기반으로 재구현:
+  - company 쿠키 없으면 /login 으로 리다이렉트.
+  - /login 만 예외 경로로 허용.
+
+5. 상담 API 회사 세션 연동
+- app/api/consultations/route.ts
+  - cookies()에서 company 쿠키 읽어 회사 식별.
+  - GET: 해당 company_id의 상담만 조회.
+  - POST: company_id로 상담 INSERT.
+
+6. 상담 화면(/consulting) 정리
+- 초기 더미 데이터 유지하되, 마운트 시 /api/consultations 호출로 DB 데이터 로딩.
+- 상세 모달의 “저장” 버튼이 /api/consultations 에 POST 후, 저장 성공 시 목록 새로고침.
+
+7. 헤더/사이드바 회사명 표시
+- /api/company/me 라우트 추가: company 쿠키에서 회사 정보 반환.
+- Sidebar 상단:
+  - “인테리어 ERP” 아래에 “{회사명} 님, 환영합니다. (클릭 시 로그아웃)” 표시.
+  - 클릭 시 company 쿠키 삭제 후 /login 으로 이동.
+- Header 우측의 “로그인 사용자 님, 환영합니다.” 문구 제거(심플한 헤더 유지).
+
+8. 빌드/배포 에러 처리
+- bcryptjs 모듈 문제 → 의존성 제거 후 임시 평문 비밀번호 사용.
+- cookies() 타입 문제 → await cookies() 후 get 사용으로 수정.
+- React.useState 사용 시 React 미 import → Sidebar에 React, useState, useEffect import 추가.
+- userEmail 미정의 오류 → 관련 코드 정리.
+- 각 수정 후 Git 커밋 및 GitHub main 푸시, Vercel 빌드/배포 확인.
+

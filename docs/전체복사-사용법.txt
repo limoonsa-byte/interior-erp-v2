@@ -1,0 +1,75 @@
+========================================
+전체 복사 사용법
+========================================
+
+1. 기존 code.gs 파일을 열어서 전체 복사 (Ctrl+A, Ctrl+C)
+
+2. 아래 "수정할 부분"을 참고하여 수정:
+
+   A. doGet 함수 맨 위에 추가 (4번째 줄 다음):
+      // ★ ERP 도면 목록 API: ?action=list 일 때 JSON 배열 반환
+      if (params.action == 'list') {
+        try {
+          var list = getDrawingListForErp_();
+          return ContentService.createTextOutput(list)
+            .setMimeType(ContentService.MimeType.JSON)
+            .setHeader('Access-Control-Allow-Origin', '*');
+        } catch (err) {
+          return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
+            .setMimeType(ContentService.MimeType.JSON)
+            .setHeader('Access-Control-Allow-Origin', '*');
+        }
+      }
+
+   B. doGet 함수에서 === 를 == 로 변경 (3곳):
+      - if (params.format === 'json') → if (params.format == 'json')
+      (약 20번째 줄, 30번째 줄, 37번째 줄)
+
+   C. 파일 맨 아래 (setupPriceTables 함수 뒤)에 추가:
+      function getDrawingListForErp_() {
+        try {
+          var ss = getSpreadsheet_();
+          var sheet = getDrawingSheet_(ss);
+          if (!sheet || sheet.getLastRow() < 2) return '[]';
+          var lastRow = sheet.getLastRow();
+          var rows = sheet.getRange(2, 1, lastRow, 5).getValues();
+          var list = [];
+          for (var r = 0; r < rows.length; r++) {
+            var row = rows[r];
+            var dVal = row[0];
+            var siteName = String(row[1] || '').trim();
+            var summary = String(row[3] || '').trim();
+            var jsonStr = row[4];
+            var savedAt = (dVal instanceof Date)
+              ? Utilities.formatDate(dVal, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss')
+              : String(dVal || '');
+            var data = null;
+            if (typeof jsonStr == 'string' && jsonStr.trim()) {
+              try {
+                data = JSON.parse(jsonStr);
+              } catch (e) {}
+            }
+            list.push({
+              siteName: siteName,
+              savedAt: savedAt,
+              summary: summary,
+              data: data
+            });
+          }
+          list.sort(function(a, b) { return String(b.savedAt || '').localeCompare(String(a.savedAt || '')); });
+          return JSON.stringify(list);
+        } catch (e) {
+          return '[]';
+        }
+      }
+
+3. 수정 완료 후 저장 → 배포 → 웹 앱 → 버전 수정
+
+========================================
+또는 간단하게:
+========================================
+
+1. "doGet-수정본.txt" 파일 내용으로 doGet 함수 전체 교체
+2. "getDrawingListForErp_-추가할함수.txt" 파일 내용을 맨 아래에 추가
+
+이렇게 하면 됩니다!

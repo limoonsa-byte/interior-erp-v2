@@ -1,0 +1,85 @@
+============================================
+스마트 현장관리 code.gs 에 추가할 코드
+============================================
+(doGet 맨 위에 분기 추가 + 아래 함수 추가 후 저장 → 배포에서 "버전 수정" 또는 "배포" 한 번 더)
+
+-------- 1) doGet(e) 함수 "맨 앞"에 아래 블록 추가 --------
+
+function doGet(e) {
+  e = e || {};
+  var params = e.parameter || {};
+
+  // ★ ERP 도면 목록 API: ?action=list 일 때 JSON 배열 반환
+  if (params.action === 'list') {
+    try {
+      var list = getDrawingListForErp_();
+      return ContentService.createTextOutput(list)
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeader('Access-Control-Allow-Origin', '*');
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({ error: String(err.message || err) }))
+        .setMimeType(ContentService.MimeType.JSON)
+        .setHeader('Access-Control-Allow-Origin', '*');
+    }
+  }
+
+  // 기존 downloadPdf 분기
+  if (params.downloadPdf && (params.fileId || params.siteName)) {
+    ... (기존 코드 그대로)
+  }
+  return HtmlService.createTemplateFromFile('index')
+    ...
+}
+
+-------- 2) 아래 함수를 code.gs 아무 위치에 추가 (getDataList 근처 권장) --------
+
+/**
+ * ERP용 도면 보관함 목록 (저장시각, 현장명, 요약, 전체 데이터 JSON)
+ * - 반환: JSON 문자열. 배열 [ { siteName, savedAt, summary, data }, ... ]
+ */
+function getDrawingListForErp_() {
+  try {
+    var ss = getSpreadsheet_();
+    var sheet = getDrawingSheet_(ss);
+    if (!sheet || sheet.getLastRow() < 2) return '[]';
+
+    var lastRow = sheet.getLastRow();
+    var rows = sheet.getRange(2, 1, lastRow, 5).getValues();
+    var list = [];
+
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      var dVal = row[0];
+      var siteName = String(row[1] || '').trim();
+      var summary = String(row[3] || '').trim();
+      var jsonStr = row[4];
+      var savedAt = (dVal instanceof Date)
+        ? Utilities.formatDate(dVal, 'Asia/Seoul', 'yyyy-MM-dd HH:mm:ss')
+        : String(dVal || '');
+
+      var data = null;
+      if (typeof jsonStr === 'string' && jsonStr.trim()) {
+        try {
+          data = JSON.parse(jsonStr);
+        } catch (e) {}
+      }
+      list.push({
+        siteName: siteName,
+        savedAt: savedAt,
+        summary: summary,
+        data: data
+      });
+    }
+    list.sort(function(a, b) { return String(b.savedAt || '').localeCompare(String(a.savedAt || '')); });
+    return JSON.stringify(list);
+  } catch (e) {
+    return '[]';
+  }
+}
+
+============================================
+적용 후: ERP에서 사용하는 URL
+============================================
+https://script.google.com/macros/s/AKfycbwIhVGUxxCb4hEbssvbryYmTlBSEtljhcIK7YKk_l1AfvVwFgCrRWDyTFG0NGyqYxfN/exec?action=list
+
+(ERP에는 이미 ?action=list 가 붙은 URL이 기본값으로 들어가 있습니다.)
