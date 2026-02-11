@@ -1,0 +1,56 @@
+2026-02-11 작업 일지
+===================
+
+1. v2 프로젝트 초기 설정
+- GitHub 리포지토리 생성 및 연결: interior-erp-v2
+- Vercel 프로젝트 생성 및 배포 설정
+- 배포 주소: https://interior-erp-v2.vercel.app
+
+2. 빌드 오류 수정
+- scripts/migrate.js 수정: POSTGRES_URL이 없을 때 마이그레이션 건너뛰기
+- 빌드 시 데이터베이스 연결 오류 해결
+- Git 커밋 및 푸시 완료
+
+3. 환경 변수 설정
+- Vercel Environment Variables 설정:
+  - GOOGLE_CLIENT_ID: Google OAuth 클라이언트 ID
+  - GOOGLE_CLIENT_SECRET: Google OAuth 클라이언트 시크릿
+  - NEXTAUTH_SECRET: NextAuth 세션 암호화 키
+  - NEXTAUTH_URL: https://interior-erp-v2.vercel.app
+  - POSTGRES_URL: Neon 데이터베이스 연결 문자열 (자동 생성)
+
+4. Google OAuth 설정
+- Google Cloud Console에서 OAuth 클라이언트 생성
+- 클라이언트 ID: 1010180350599-889fsq835hoo2fgdskom7a278n84m39v.apps.googleusercontent.com
+- 승인된 리디렉션 URI 추가:
+  - https://interior-erp-v2.vercel.app/api/auth/callback/google
+
+5. Neon 데이터베이스 연결
+- Vercel Storage에서 Neon 데이터베이스 연결
+- 데이터베이스: interiorerpsystem
+- POSTGRES_URL 환경 변수 자동 생성
+- 연결 완료: 2026-02-11
+
+6. 패키지 업데이트
+- @types/node: ^20 → ^22
+- typescript: ^5 → ^5.7
+- lucide-react: ^0.563.0 → ^0.468.0 (최신 안정 버전)
+- 기타 패키지 최신 버전 확인
+
+7. 배포 완료
+- Vercel 배포 성공 확인
+- 데이터베이스 마이그레이션 자동 실행 준비 완료
+- 환경 변수 설정 완료
+
+---
+
+## 배포 정보
+- **배포 주소:** https://interior-erp-v2.vercel.app
+- **GitHub 리포지토리:** limoonsa-byte/interior-erp-v2
+- **데이터베이스:** Neon (interiorerpsystem)
+- **배포 날짜:** 2026-02-11
+
+## 다음 단계
+- [ ] 배포 후 마이그레이션 성공 확인
+- [ ] 사이트에서 로그인 테스트
+- [ ] 기능 테스트 및 버그 수정
