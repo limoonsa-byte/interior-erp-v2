@@ -640,7 +640,11 @@ function EstimateForm({
         }
         if (newItems.length > 0) {
           setItems(newItems);
-          setProcessOrder(processOrderSeen.length > 0 ? processOrderSeen : [...new Set(newItems.map((i) => i.processGroup).filter(Boolean))]);
+          setProcessOrder(
+            processOrderSeen.length > 0
+              ? processOrderSeen
+              : [...new Set(newItems.map((i) => i.processGroup ?? "").filter((x): x is string => x !== ""))]
+          );
         } else {
           alert("엑셀에서 항목을 찾지 못했습니다. 9행부터 공정 그룹 헤더 또는 품목 행이 있는지 확인해 주세요.");
         }
