@@ -29,6 +29,8 @@ type Consultation = {
   siteMeasurementAt?: string;
   estimateMeetingAt?: string;
   materialMeetingAt?: string;
+  contractMeetingAt?: string;
+  designMeetingAt?: string;
   scope?: string[];
   budget?: string;
   completionYear?: string;
@@ -51,10 +53,10 @@ function parseBudgetToSave(display: string): string {
 type PicItem = { id: number; name: string };
 
 /** 진행상태 옵션 (상담종료 제거) */
-const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성 미팅", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
 
 /** 견적완료 이상이면 접수/현장실측/견적미팅 선택 비활성화 */
-const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성 미팅", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
   return (STATUS_LOCKED_AFTER as readonly string[]).includes(savedStatus);
 }
@@ -85,6 +87,8 @@ function DetailModal({
   const siteMeasurementInputRef = useRef<HTMLInputElement | null>(null);
   const estimateMeetingInputRef = useRef<HTMLInputElement | null>(null);
   const materialMeetingInputRef = useRef<HTMLInputElement | null>(null);
+  const contractMeetingInputRef = useRef<HTMLInputElement | null>(null);
+  const designMeetingInputRef = useRef<HTMLInputElement | null>(null);
   const [statusSelection, setStatusSelection] = useState(normalizeStatusDisplay(data.status) || "접수");
   const defaultScopeItems = [
     "샤시제외", "전체시공", "도배", "바닥", "거실욕실", "안방욕실", "싱크대", "전기조명",
@@ -178,6 +182,8 @@ function DetailModal({
       siteMeasurementAt: (fd.get("siteMeasurementAt") as string)?.trim() || undefined,
       estimateMeetingAt: (fd.get("estimateMeetingAt") as string)?.trim() || undefined,
       materialMeetingAt: (fd.get("materialMeetingAt") as string)?.trim() || undefined,
+      contractMeetingAt: (fd.get("contractMeetingAt") as string)?.trim() || undefined,
+      designMeetingAt: (fd.get("designMeetingAt") as string)?.trim() || undefined,
       scope,
       budget: budget || undefined,
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
@@ -350,6 +356,76 @@ function DetailModal({
                 type="datetime-local"
                 className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.estimateMeetingAt ? data.estimateMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                min={getTodayDatetimeLocal()}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* 계약서 작성 미팅날짜 (계약서 작성 미팅 선택 시 또는 저장된 날짜가 있으면 표시) */}
+        {(statusSelection === "계약서 작성 미팅" || data.contractMeetingAt) && (
+          <section className="mb-5">
+            <p className="mb-2 text-sm font-semibold text-gray-700">계약서 작성 미팅날짜</p>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (typeof contractMeetingInputRef.current?.showPicker === "function") {
+                  contractMeetingInputRef.current.showPicker();
+                } else {
+                  contractMeetingInputRef.current?.focus();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  contractMeetingInputRef.current?.focus();
+                }
+              }}
+              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
+            >
+              <span className="whitespace-nowrap text-gray-700">계약서 작성 미팅날짜</span>
+              <input
+                ref={contractMeetingInputRef}
+                name="contractMeetingAt"
+                type="datetime-local"
+                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                defaultValue={data.contractMeetingAt ? data.contractMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                min={getTodayDatetimeLocal()}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </section>
+        )}
+
+        {/* 디자인미팅날짜 (디자인미팅 선택 시 또는 저장된 날짜가 있으면 표시) */}
+        {(statusSelection === "디자인미팅" || data.designMeetingAt) && (
+          <section className="mb-5">
+            <p className="mb-2 text-sm font-semibold text-gray-700">디자인미팅날짜</p>
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => {
+                if (typeof designMeetingInputRef.current?.showPicker === "function") {
+                  designMeetingInputRef.current.showPicker();
+                } else {
+                  designMeetingInputRef.current?.focus();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  designMeetingInputRef.current?.focus();
+                }
+              }}
+              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
+            >
+              <span className="whitespace-nowrap text-gray-700">디자인미팅날짜</span>
+              <input
+                ref={designMeetingInputRef}
+                name="designMeetingAt"
+                type="datetime-local"
+                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                defaultValue={data.designMeetingAt ? data.designMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
                 min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
@@ -753,9 +829,13 @@ function getProgressDateDisplay(item: Consultation): string {
       ? item.materialMeetingAt
       : item.status === "견적미팅" && item.estimateMeetingAt
         ? item.estimateMeetingAt
-        : item.status === "현장실측" && item.siteMeasurementAt
-          ? item.siteMeasurementAt
-          : item.consultedAt || item.date || "";
+        : item.status === "계약서 작성 미팅" && item.contractMeetingAt
+          ? item.contractMeetingAt
+          : item.status === "디자인미팅" && item.designMeetingAt
+            ? item.designMeetingAt
+            : item.status === "현장실측" && item.siteMeasurementAt
+              ? item.siteMeasurementAt
+              : item.consultedAt || item.date || "";
   if (!raw) return "-";
   try {
     const d = new Date(raw);
@@ -786,6 +866,8 @@ const emptyConsultation: Consultation = {
   siteMeasurementAt: undefined,
   estimateMeetingAt: undefined,
   materialMeetingAt: undefined,
+  contractMeetingAt: undefined,
+  designMeetingAt: undefined,
   date: "",
 };
 
@@ -816,6 +898,8 @@ export default function ConsultingPage() {
             siteMeasurementAt: item.siteMeasurementAt != null ? String(item.siteMeasurementAt) : undefined,
             estimateMeetingAt: item.estimateMeetingAt != null ? String(item.estimateMeetingAt) : undefined,
             materialMeetingAt: item.materialMeetingAt != null ? String(item.materialMeetingAt) : undefined,
+            contractMeetingAt: item.contractMeetingAt != null ? String(item.contractMeetingAt) : undefined,
+            designMeetingAt: item.designMeetingAt != null ? String(item.designMeetingAt) : undefined,
             scope: Array.isArray(item.scope) ? (item.scope as string[]) : undefined,
             budget: item.budget != null ? String(item.budget) : undefined,
             completionYear: item.completionYear != null ? String(item.completionYear) : undefined,

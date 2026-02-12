@@ -49,6 +49,8 @@ export async function GET() {
         siteMeasurementAt: row.site_measurement_at != null ? String(row.site_measurement_at) : undefined,
         estimateMeetingAt: row.estimate_meeting_at != null ? String(row.estimate_meeting_at) : undefined,
         materialMeetingAt: row.material_meeting_at != null ? String(row.material_meeting_at) : undefined,
+        contractMeetingAt: row.contract_meeting_at != null ? String(row.contract_meeting_at) : undefined,
+        designMeetingAt: row.design_meeting_at != null ? String(row.design_meeting_at) : undefined,
       };
     });
 
@@ -83,6 +85,8 @@ export async function POST(request: Request) {
       siteMeasurementAt,
       estimateMeetingAt,
       materialMeetingAt,
+      contractMeetingAt,
+      designMeetingAt,
     } = body;
 
     const scopeJson = Array.isArray(scope) ? JSON.stringify(scope) : null;
@@ -91,10 +95,12 @@ export async function POST(request: Request) {
     const siteMeasurementAtStr = siteMeasurementAt != null ? String(siteMeasurementAt) : null;
     const estimateMeetingAtStr = estimateMeetingAt != null ? String(estimateMeetingAt) : null;
     const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
+    const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
+    const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
 
     await sql`
-      INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at)
-      VALUES (${company.id}, ${customerName}, ${contact}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr})
+      INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at)
+      VALUES (${company.id}, ${customerName}, ${contact}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr}, ${contractMeetingAtStr}, ${designMeetingAtStr})
     `;
 
     return NextResponse.json({ message: "Success" }, { status: 200 });

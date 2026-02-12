@@ -43,6 +43,10 @@ async function migrate() {
     console.log("[migrate] estimate_meeting_at OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_meeting_at TEXT`;
     console.log("[migrate] material_meeting_at OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_at TEXT`;
+    console.log("[migrate] contract_meeting_at OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT`;
+    console.log("[migrate] design_meeting_at OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`
@@ -61,6 +65,15 @@ async function migrate() {
       )
     `;
     console.log("[migrate] estimates OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS env_backup (
+        id INT PRIMARY KEY DEFAULT 1,
+        content TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`INSERT INTO env_backup (id, content) VALUES (1, '') ON CONFLICT (id) DO NOTHING`;
+    console.log("[migrate] env_backup OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

@@ -49,6 +49,21 @@ export async function POST(request: Request) {
     `;
     results.push("company_pics 테이블 확인");
 
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_at TEXT`;
+    results.push("contract_meeting_at 컬럼 확인");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT`;
+    results.push("design_meeting_at 컬럼 확인");
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS env_backup (
+        id INT PRIMARY KEY DEFAULT 1,
+        content TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`INSERT INTO env_backup (id, content) VALUES (1, '') ON CONFLICT (id) DO NOTHING`;
+    results.push("env_backup 테이블 확인");
+
     return NextResponse.json({
       message: "마이그레이션 완료",
       done: results,

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 
 type PicItem = { id: number; name: string };
 
-type ModalKind = null | "pics" | "password-change" | "drawing-api";
+type ModalKind = null | "pics" | "password-change" | "drawing-api" | "env-backup";
 
 export default function AdminPage() {
   const [pinStatus, setPinStatus] = useState<{ hasPin: boolean } | null>(null);
@@ -26,6 +26,12 @@ export default function AdminPage() {
   const [drawingApiUrl, setDrawingApiUrl] = useState("");
   const [drawingApiLoading, setDrawingApiLoading] = useState(false);
   const [drawingApiMessage, setDrawingApiMessage] = useState("");
+
+  const [envBackupContent, setEnvBackupContent] = useState("");
+  const [envBackupPin, setEnvBackupPin] = useState("");
+  const [envBackupLoading, setEnvBackupLoading] = useState(false);
+  const [envBackupMessage, setEnvBackupMessage] = useState("");
+  const [envBackupUpdatedAt, setEnvBackupUpdatedAt] = useState<string | null>(null);
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -104,6 +110,12 @@ export default function AdminPage() {
         })
         .catch(() => {})
         .finally(() => setDrawingApiLoading(false));
+    }
+    if (modal === "env-backup") {
+      setEnvBackupContent("");
+      setEnvBackupPin("");
+      setEnvBackupMessage("");
+      setEnvBackupUpdatedAt(null);
     }
   }, [modal, loadPics]);
 
@@ -191,6 +203,57 @@ export default function AdminPage() {
         }
       })
       .catch(() => setPwMessage("오류가 발생했습니다."));
+  };
+
+  const handleEnvBackupLoad = () => {
+    const pin = envBackupPin.replace(/\D/g, "").slice(0, 4);
+    if (pin.length !== 4) {
+      setEnvBackupMessage("관리 비밀번호 4자리를 입력하세요.");
+      return;
+    }
+    setEnvBackupMessage("");
+    setEnvBackupLoading(true);
+    fetch("/api/admin/env-backup", {
+      headers: { "x-admin-pin": pin },
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setEnvBackupContent((data as { content?: string }).content ?? "");
+          setEnvBackupUpdatedAt((data as { updatedAt?: string | null }).updatedAt ?? null);
+          setEnvBackupMessage("불러왔습니다.");
+        } else {
+          setEnvBackupMessage((data as { error?: string }).error ?? "불러오기 실패");
+        }
+      })
+      .catch(() => setEnvBackupMessage("오류가 발생했습니다."))
+      .finally(() => setEnvBackupLoading(false));
+  };
+
+  const handleEnvBackupSave = () => {
+    const pin = envBackupPin.replace(/\D/g, "").slice(0, 4);
+    if (pin.length !== 4) {
+      setEnvBackupMessage("관리 비밀번호 4자리를 입력하세요.");
+      return;
+    }
+    setEnvBackupMessage("");
+    setEnvBackupLoading(true);
+    fetch("/api/admin/env-backup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin, content: envBackupContent }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setEnvBackupMessage("저장되었습니다.");
+          setEnvBackupUpdatedAt(new Date().toISOString());
+        } else {
+          setEnvBackupMessage((data as { error?: string }).error ?? "저장 실패");
+        }
+      })
+      .catch(() => setEnvBackupMessage("오류가 발생했습니다."))
+      .finally(() => setEnvBackupLoading(false));
   };
 
   const handleSaveDrawingApi = () => {
@@ -288,6 +351,15 @@ export default function AdminPage() {
             className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
           >
             관리 비밀번호 변경
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => setModal("env-backup")}
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+          >
+            .env.local 백업 (DB 저장/불러오기)
           </button>
         </li>
       </ul>
@@ -486,6 +558,95 @@ export default function AdminPage() {
                 className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 변경
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* .env.local 백업 모달 */}
+      {modal === "env-backup" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">.env.local 백업 (DB)</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-gray-600">
+              다른 PC에서 쓸 때 .env.local 내용을 여기 저장해 두었다가 불러와 사용하세요. 관리 비밀번호가 필요합니다.
+            </p>
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">관리 비밀번호 (4자리)</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={envBackupPin}
+                onChange={(e) => setEnvBackupPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="****"
+                className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-center tracking-widest"
+                disabled={envBackupLoading}
+              />
+            </div>
+            <div className="mb-3 flex-1 overflow-hidden">
+              <label className="mb-1 block text-xs font-medium text-gray-600">.env.local 내용</label>
+              <textarea
+                value={envBackupContent}
+                onChange={(e) => setEnvBackupContent(e.target.value)}
+                placeholder="GOOGLE_CLIENT_ID=&#10;NEXTAUTH_SECRET=..."
+                rows={12}
+                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
+                disabled={envBackupLoading}
+                spellCheck={false}
+              />
+            </div>
+            {envBackupUpdatedAt && (
+              <p className="mb-2 text-xs text-gray-500">
+                마지막 저장: {new Date(envBackupUpdatedAt).toLocaleString("ko-KR")}
+              </p>
+            )}
+            {envBackupMessage && (
+              <p
+                className={`mb-2 text-sm ${
+                  envBackupMessage.includes("저장") || envBackupMessage.includes("불러왔습니다")
+                    ? "text-green-600"
+                    : "text-red-600"
+                }`}
+              >
+                {envBackupMessage}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={envBackupLoading}
+              >
+                닫기
+              </button>
+              <button
+                type="button"
+                onClick={handleEnvBackupLoad}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                disabled={envBackupLoading}
+              >
+                {envBackupLoading ? "처리 중..." : "불러오기"}
+              </button>
+              <button
+                type="button"
+                onClick={handleEnvBackupSave}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                disabled={envBackupLoading}
+              >
+                저장
               </button>
             </div>
           </div>

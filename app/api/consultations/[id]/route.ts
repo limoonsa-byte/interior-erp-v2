@@ -48,6 +48,8 @@ export async function PATCH(
       siteMeasurementAt,
       estimateMeetingAt,
       materialMeetingAt,
+      contractMeetingAt,
+      designMeetingAt,
     } = body;
 
     const scopeJson = Array.isArray(scope) ? JSON.stringify(scope) : null;
@@ -56,6 +58,8 @@ export async function PATCH(
     const siteMeasurementAtStr = siteMeasurementAt != null ? String(siteMeasurementAt) : null;
     const estimateMeetingAtStr = estimateMeetingAt != null ? String(estimateMeetingAt) : null;
     const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
+    const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
+    const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
 
     const result = await sql`
       UPDATE consultations
@@ -73,7 +77,9 @@ export async function PATCH(
         completion_year = ${completionYearStr},
         site_measurement_at = ${siteMeasurementAtStr},
         estimate_meeting_at = ${estimateMeetingAtStr},
-        material_meeting_at = ${materialMeetingAtStr}
+        material_meeting_at = ${materialMeetingAtStr},
+        contract_meeting_at = ${contractMeetingAtStr},
+        design_meeting_at = ${designMeetingAtStr}
       WHERE id = ${consultationId} AND company_id = ${company.id}
       RETURNING id
     `;
