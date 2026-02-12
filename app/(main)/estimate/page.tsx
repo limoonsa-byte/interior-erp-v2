@@ -604,7 +604,7 @@ function EstimateForm({
         setContact(get(1, 1));
         setAddress(get(2, 1));
         setTitle(get(3, 1));
-        setEstimateDate(get(4, 1) || undefined);
+        setEstimateDate(get(4, 1) || "");
         setNote(get(5, 1));
         const processOrderSeen: string[] = [];
         const newItems: EstimateItem[] = [];
