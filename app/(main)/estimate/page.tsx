@@ -50,11 +50,16 @@ function formatNumber(n: number): string {
 }
 
 type EstimateItem = {
+  processGroup?: string;
   category: string;
   spec: string;
   unit: string;
   qty: number;
-  unitPrice: number;
+  /** 재료비 단가 (기존 unitPrice 호환: 없으면 unitPrice 사용) */
+  materialUnitPrice?: number;
+  /** 노무비 단가 */
+  laborUnitPrice?: number;
+  unitPrice?: number;
   note: string;
 };
 
@@ -81,16 +86,28 @@ type Estimate = {
 };
 
 const emptyItem: EstimateItem = {
+  processGroup: "",
   category: "",
   spec: "",
   unit: "식",
   qty: 1,
-  unitPrice: 0,
+  materialUnitPrice: 0,
+  laborUnitPrice: 0,
   note: "",
 };
 
+function materialAmount(item: EstimateItem): number {
+  const q = Number(item.qty) || 0;
+  const p = Number(item.materialUnitPrice ?? item.unitPrice ?? 0) || 0;
+  return q * p;
+}
+function laborAmount(item: EstimateItem): number {
+  const q = Number(item.qty) || 0;
+  const p = Number(item.laborUnitPrice ?? 0) || 0;
+  return q * p;
+}
 function amount(item: EstimateItem): number {
-  return Number(item.qty) * Number(item.unitPrice);
+  return materialAmount(item) + laborAmount(item);
 }
 
 /** 스마트 현장관리 페이로드 → 견적 항목으로 변환 (치수/문 개수/방면적 등) */
@@ -99,11 +116,13 @@ function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateI
   if (payload.items && payload.items.length > 0) {
     payload.items.forEach((it) =>
       result.push({
+        processGroup: (it as EstimateItem).processGroup ?? "",
         category: it.category || "",
         spec: it.spec || "",
         unit: it.unit || "식",
         qty: Number(it.qty) || 0,
-        unitPrice: Number(it.unitPrice) || 0,
+        materialUnitPrice: Number((it as EstimateItem).materialUnitPrice ?? it.unitPrice ?? 0) || 0,
+        laborUnitPrice: Number((it as EstimateItem).laborUnitPrice ?? 0) || 0,
         note: it.note || "",
       })
     );
@@ -111,33 +130,39 @@ function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateI
   }
   if (payload.doorCount != null && payload.doorCount > 0) {
     result.push({
+      processGroup: "",
       category: "문",
       spec: "문 개수",
       unit: "개",
       qty: Number(payload.doorCount),
-      unitPrice: 0,
+      materialUnitPrice: 0,
+      laborUnitPrice: 0,
       note: "",
     });
   }
   if (payload.roomAreas && payload.roomAreas.length > 0) {
     payload.roomAreas.forEach((r) => {
       result.push({
+        processGroup: "",
         category: "방면적",
         spec: r.name || "",
         unit: "m²",
         qty: Number(r.area) || 0,
-        unitPrice: 0,
+        materialUnitPrice: 0,
+        laborUnitPrice: 0,
         note: "",
       });
     });
   }
   if (payload.totalArea != null && payload.totalArea > 0 && result.every((i) => i.category !== "전체면적")) {
     result.unshift({
+      processGroup: "",
       category: "전체면적",
       spec: "계",
       unit: "m²",
       qty: Number(payload.totalArea),
-      unitPrice: 0,
+      materialUnitPrice: 0,
+      laborUnitPrice: 0,
       note: payload.dimensions || "",
     });
   } else if (payload.dimensions) {
@@ -165,7 +190,16 @@ function EstimateForm({
   const [estimateDate, setEstimateDate] = useState(estimate?.estimateDate ?? getTodayDateLocal());
   const [note, setNote] = useState(estimate?.note ?? "");
   const [items, setItems] = useState<EstimateItem[]>(
-    estimate?.items?.length ? estimate.items.map((i) => ({ ...i, qty: Number(i.qty) || 0, unitPrice: Number(i.unitPrice) || 0 })) : [{ ...emptyItem }]
+    estimate?.items?.length
+      ? estimate.items.map((i) => ({
+          ...emptyItem,
+          ...i,
+          processGroup: i.processGroup ?? "",
+          qty: Number(i.qty) || 0,
+          materialUnitPrice: Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0,
+          laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
+        }))
+      : [{ ...emptyItem }]
   );
   const [saving, setSaving] = useState(false);
 
@@ -181,6 +215,8 @@ function EstimateForm({
   const [smartFieldListUrl, setSmartFieldListUrl] = useState("");
   const [smartFieldList, setSmartFieldList] = useState<DrawingListRow[] | null>(null);
   const [smartFieldLoading, setSmartFieldLoading] = useState(false);
+  /** 도면에서 불러온 참조값 (항목에 넣지 않고 상단 표로만 표시) */
+  const [drawingReference, setDrawingReference] = useState<SmartFieldEstimatePayload | null>(null);
 
   // 회사 정보에서 API URL 가져오기
   useEffect(() => {
@@ -194,7 +230,13 @@ function EstimateForm({
       .catch(() => {});
   }, []);
 
-  const addRow = () => setItems((prev) => [...prev, { ...emptyItem }]);
+  const addRow = () =>
+    setItems((prev) => [
+      ...prev,
+      { ...emptyItem, processGroup: prev.length > 0 ? prev[prev.length - 1].processGroup ?? "" : "" },
+    ]);
+  const addNewSection = () =>
+    setItems((prev) => [...prev, { ...emptyItem, processGroup: `\u200B${Date.now()}` }]);
   
   const loadSmartFieldList = () => {
     const url = smartFieldListUrl.trim();
@@ -233,13 +275,12 @@ function EstimateForm({
     const data = row.data ?? row.데이터;
     const summary = row.summary ?? row.요약 ?? "";
     const payload = drawingDataToPayload(data, summary);
-    const newItems = smartFieldPayloadToItems(payload);
-    if (newItems.length > 0) {
-      setItems((prev) => [...newItems, ...prev]);
+    const hasRef = payload.doorCount != null || (payload.roomAreas && payload.roomAreas.length > 0) || payload.totalArea != null || payload.dimensions;
+    if (hasRef) {
+      setDrawingReference(payload);
       setSmartFieldModalOpen(false);
-      alert(`${newItems.length}개 항목을 견적에 반영했습니다. 단가는 입력해 주세요.`);
     } else {
-      alert("선택한 도면에 사용할 수 있는 데이터가 없습니다.");
+      alert("선택한 도면에 사용할 수 있는 참조 데이터가 없습니다.");
     }
   };
   const removeRow = (idx: number) => {
@@ -250,10 +291,22 @@ function EstimateForm({
     setItems((prev) => {
       const next = [...prev];
       (next[idx] as Record<string, unknown>)[field] = value;
-      if (field === "qty" || field === "unitPrice") {
+      if (field === "qty" || field === "materialUnitPrice" || field === "laborUnitPrice") {
         next[idx].qty = Number(next[idx].qty) || 0;
-        next[idx].unitPrice = Number(next[idx].unitPrice) || 0;
+        next[idx].materialUnitPrice = Number(next[idx].materialUnitPrice ?? 0) || 0;
+        next[idx].laborUnitPrice = Number(next[idx].laborUnitPrice ?? 0) || 0;
       }
+      return next;
+    });
+  };
+
+  /** 같은 공정의 모든 항목 processGroup 일괄 변경 (섹션 제목 수정 시) */
+  const updateProcessGroupForIndices = (indices: number[], newName: string) => {
+    setItems((prev) => {
+      const next = [...prev];
+      indices.forEach((i) => {
+        next[i] = { ...next[i], processGroup: newName };
+      });
       return next;
     });
   };
@@ -275,11 +328,13 @@ function EstimateForm({
         estimateDate: estimateDate || undefined,
         note: note.trim(),
         items: items.map((it) => ({
+          processGroup: it.processGroup ?? "",
           category: it.category,
           spec: it.spec,
           unit: it.unit,
           qty: Number(it.qty) || 0,
-          unitPrice: Number(it.unitPrice) || 0,
+          materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
+          laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
           note: it.note,
         })),
       };
@@ -366,6 +421,7 @@ function EstimateForm({
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
+        <p className="mb-2 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
         <div className="flex gap-2">
           <button
             type="button"
@@ -377,11 +433,81 @@ function EstimateForm({
           <button type="button" onClick={addRow} className="rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50">
             + 항목 추가
           </button>
+          <button type="button" onClick={addNewSection} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+            + 공정 추가
+          </button>
         </div>
       </div>
       <p className="mb-2 text-xs text-gray-500">
-        &quot;도면 보관함에서 불러오기&quot;로 스마트 현장관리 도면 목록 API에서 한 건을 선택하면 문 개수·방 면적·치수가 견적 항목에 자동 입력됩니다.
+        &quot;도면 보관함에서 불러오기&quot;로 한 건을 선택하면 방·거실·방면적·문 개수 등이 상단 참조 표에만 표시됩니다. (항목에는 자동 입력되지 않습니다.)
       </p>
+      <p className="mb-4 text-xs text-amber-700">
+        ※스마트현장관리 앱설치필수
+      </p>
+
+      {/* 도면에서 불러온 참조값 표 (항목에 넣지 않고 참고용) */}
+      {drawingReference && (
+        <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="mb-2 text-xs font-semibold text-gray-600">도면 참조값</p>
+          <div className="overflow-x-auto">
+            <table className="w-full max-w-2xl border-collapse text-sm">
+              <tbody className="divide-y divide-gray-200">
+                {drawingReference.roomAreas && drawingReference.roomAreas.length > 0 && (
+                  <>
+                    {drawingReference.roomAreas.filter((r) => !(r.name || "").includes("거실")).length > 0 && (
+                      <tr>
+                        <td className="py-1 pr-4 font-medium text-gray-700">방</td>
+                        <td className="py-1 text-gray-800">
+                          {drawingReference.roomAreas.filter((r) => !(r.name || "").includes("거실")).length}개
+                        </td>
+                      </tr>
+                    )}
+                    {drawingReference.roomAreas.filter((r) => (r.name || "").includes("거실")).length > 0 && (
+                      <tr>
+                        <td className="py-1 pr-4 font-medium text-gray-700">거실</td>
+                        <td className="py-1 text-gray-800">
+                          {drawingReference.roomAreas.filter((r) => (r.name || "").includes("거실")).length}개
+                        </td>
+                      </tr>
+                    )}
+                    <tr>
+                      <td className="py-1 pr-4 font-medium text-gray-700">방면적</td>
+                      <td className="py-1 text-gray-800">
+                        {drawingReference.roomAreas.map((r) => `${r.name || "방"} ${r.area}m²`).join(", ")}
+                      </td>
+                    </tr>
+                  </>
+                )}
+                {drawingReference.doorCount != null && drawingReference.doorCount > 0 && (
+                  <tr>
+                    <td className="py-1 pr-4 font-medium text-gray-700">문</td>
+                    <td className="py-1 text-gray-800">{drawingReference.doorCount}개</td>
+                  </tr>
+                )}
+                {drawingReference.totalArea != null && drawingReference.totalArea > 0 && (
+                  <tr>
+                    <td className="py-1 pr-4 font-medium text-gray-700">전체면적</td>
+                    <td className="py-1 text-gray-800">{drawingReference.totalArea}m²</td>
+                  </tr>
+                )}
+                {drawingReference.dimensions && (
+                  <tr>
+                    <td className="py-1 pr-4 font-medium text-gray-700">비고</td>
+                    <td className="py-1 text-gray-800">{drawingReference.dimensions}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDrawingReference(null)}
+            className="mt-2 text-xs text-gray-500 underline hover:text-gray-700"
+          >
+            참조값 지우기
+          </button>
+        </div>
+      )}
 
       {smartFieldModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
@@ -434,83 +560,147 @@ function EstimateForm({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-700">
-              <th className="p-2">공종/항목</th>
+              <th className="p-2 w-14">No</th>
+              <th className="p-2">품목</th>
               <th className="p-2">규격</th>
-              <th className="p-2 w-20">단위</th>
-              <th className="p-2 w-24">수량</th>
-              <th className="p-2 w-28">단가</th>
-              <th className="p-2 w-28">금액</th>
+              <th className="p-2 w-16">단위</th>
+              <th className="p-2 w-20">수량</th>
+              <th className="p-2 w-24">재료비단가</th>
+              <th className="p-2 w-24">재료비금액</th>
+              <th className="p-2 w-24">노무비단가</th>
+              <th className="p-2 w-24">노무비금액</th>
+              <th className="p-2 w-24">금액</th>
               <th className="p-2">비고</th>
               <th className="w-10 p-2" />
             </tr>
           </thead>
           <tbody>
-            {items.map((item, idx) => (
-              <tr key={idx} className="border-b border-gray-100">
-                <td className="p-2">
-                  <input
-                    type="text"
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.category}
-                    onChange={(e) => updateItem(idx, "category", e.target.value)}
-                    placeholder="도배, 바닥 등"
-                  />
-                </td>
-                <td className="p-2">
-                  <input
-                    type="text"
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.spec}
-                    onChange={(e) => updateItem(idx, "spec", e.target.value)}
-                    placeholder="규격"
-                  />
-                </td>
-                <td className="p-2">
-                  <input
-                    type="text"
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.unit}
-                    onChange={(e) => updateItem(idx, "unit", e.target.value)}
-                    placeholder="식, m²"
-                  />
-                </td>
-                <td className="p-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step={1}
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.qty || ""}
-                    onChange={(e) => updateItem(idx, "qty", e.target.value)}
-                  />
-                </td>
-                <td className="p-2">
-                  <input
-                    type="number"
-                    min={0}
-                    step={1000}
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.unitPrice || ""}
-                    onChange={(e) => updateItem(idx, "unitPrice", e.target.value)}
-                  />
-                </td>
-                <td className="p-2 text-right font-medium">{formatNumber(amount(item))}</td>
-                <td className="p-2">
-                  <input
-                    type="text"
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                    value={item.note}
-                    onChange={(e) => updateItem(idx, "note", e.target.value)}
-                    placeholder="비고"
-                  />
-                </td>
-                <td className="p-2">
-                  <button type="button" onClick={() => removeRow(idx)} className="text-red-500 hover:underline" disabled={items.length <= 1}>
-                    삭제
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {(() => {
+              const sortedIndices = items
+                .map((_, i) => i)
+                .sort((a, b) => {
+                  const pa = items[a].processGroup ?? "";
+                  const pb = items[b].processGroup ?? "";
+                  if (pa !== pb) return pa.localeCompare(pb, "ko");
+                  return a - b;
+                });
+              const groups: { name: string; indices: number[] }[] = [];
+              let currentName = "";
+              let currentIndices: number[] = [];
+              sortedIndices.forEach((idx) => {
+                const name = items[idx].processGroup ?? "";
+                if (name !== currentName) {
+                  if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
+                  currentName = name;
+                  currentIndices = [idx];
+                } else {
+                  currentIndices.push(idx);
+                }
+              });
+              if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
+
+              const rows: React.ReactNode[] = [];
+              groups.forEach((grp) => {
+                const isNewSection = /^\u200B/.test(grp.name);
+                rows.push(
+                  <tr key={`h-${grp.name}-${grp.indices[0]}`} className="border-b border-gray-200 bg-gray-100">
+                    <td colSpan={12} className="p-2">
+                      <input
+                        type="text"
+                        className="w-full max-w-xs rounded border border-gray-300 bg-white px-2 py-1.5 font-semibold text-gray-800"
+                        value={isNewSection ? "" : grp.name}
+                        onChange={(e) => updateProcessGroupForIndices(grp.indices, e.target.value)}
+                        placeholder="가설철거, 목공사 등"
+                      />
+                    </td>
+                  </tr>
+                );
+                grp.indices.forEach((origIdx, subNo) => {
+                  const item = items[origIdx];
+                  const noLabel = `${subNo + 1}.`;
+                  rows.push(
+                    <tr key={origIdx} className="border-b border-gray-100">
+                      <td className="p-2 font-mono text-gray-600">{noLabel}</td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.category}
+                          onChange={(e) => updateItem(origIdx, "category", e.target.value)}
+                          placeholder="도배, 바닥 등"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.spec}
+                          onChange={(e) => updateItem(origIdx, "spec", e.target.value)}
+                          placeholder="규격"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.unit}
+                          onChange={(e) => updateItem(origIdx, "unit", e.target.value)}
+                          placeholder="식, m²"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.qty || ""}
+                          onChange={(e) => updateItem(origIdx, "qty", e.target.value.replace(/\D/g, "") || 0)}
+                          placeholder="숫자만"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.materialUnitPrice ?? ""}
+                          onChange={(e) => updateItem(origIdx, "materialUnitPrice", e.target.value.replace(/\D/g, "") || 0)}
+                          placeholder="숫자만"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-medium">{formatNumber(materialAmount(item))}</td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.laborUnitPrice ?? ""}
+                          onChange={(e) => updateItem(origIdx, "laborUnitPrice", e.target.value.replace(/\D/g, "") || 0)}
+                          placeholder="숫자만"
+                        />
+                      </td>
+                      <td className="p-2 text-right font-medium">{formatNumber(laborAmount(item))}</td>
+                      <td className="p-2 text-right font-medium">{formatNumber(amount(item))}</td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          value={item.note}
+                          onChange={(e) => updateItem(origIdx, "note", e.target.value)}
+                          placeholder="비고"
+                        />
+                      </td>
+                      <td className="p-2">
+                        <button type="button" onClick={() => removeRow(origIdx)} className="text-red-500 hover:underline" disabled={items.length <= 1}>
+                          삭제
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                });
+              });
+              return rows;
+            })()}
           </tbody>
         </table>
       </div>
@@ -721,7 +911,13 @@ export default function EstimatePage() {
                   </tr>
                 ) : (
                   estimates.map((est) => {
-                    const subtotal = (est.items || []).reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.unitPrice) || 0), 0);
+                    const subtotal = (est.items || []).reduce(
+                      (s, i) =>
+                        s +
+                        (Number(i.qty) || 0) * (Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0) +
+                        (Number(i.qty) || 0) * (Number(i.laborUnitPrice ?? 0) || 0),
+                      0
+                    );
                     const total = subtotal + Math.floor(subtotal * 0.1);
                     return (
                       <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
