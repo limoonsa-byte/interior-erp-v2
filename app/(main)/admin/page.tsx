@@ -353,15 +353,17 @@ export default function AdminPage() {
             관리 비밀번호 변경
           </button>
         </li>
-        <li>
-          <button
-            type="button"
-            onClick={() => setModal("env-backup")}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
-          >
-            .env.local 백업 (DB 저장/불러오기)
-          </button>
-        </li>
+        {process.env.NODE_ENV === "development" && (
+          <li>
+            <button
+              type="button"
+              onClick={() => setModal("env-backup")}
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+            >
+              .env.local 백업 (DB 저장/불러오기)
+            </button>
+          </li>
+        )}
       </ul>
 
       {/* 담당자 설정 모달 */}
@@ -564,8 +566,8 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* .env.local 백업 모달 */}
-      {modal === "env-backup" && (
+      {/* .env.local 백업 모달 (개발 환경에서만 메뉴 노출, 모달은 개발 시에만 사용) */}
+      {process.env.NODE_ENV === "development" && modal === "env-backup" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">

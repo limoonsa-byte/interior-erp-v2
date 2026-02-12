@@ -871,12 +871,63 @@ const emptyConsultation: Consultation = {
   date: "",
 };
 
+/** 접수기간 프리셋: 금일/작일/당월 날짜 범위 */
+function getDatePresetRange(preset: "금일" | "작일" | "당월"): { from: string; to: string } {
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  const todayStr = `${y}-${m}-${d}`;
+  if (preset === "금일") return { from: todayStr, to: todayStr };
+  if (preset === "작일") {
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yd = String(yesterday.getDate()).padStart(2, "0");
+    const ym = String(yesterday.getMonth() + 1).padStart(2, "0");
+    return { from: `${yesterday.getFullYear()}-${ym}-${yd}`, to: `${yesterday.getFullYear()}-${ym}-${yd}` };
+  }
+  const first = `${y}-${m}-01`;
+  const last = new Date(y, today.getMonth() + 1, 0);
+  const lastStr = `${y}-${String(last.getMonth() + 1).padStart(2, "0")}-${String(last.getDate()).padStart(2, "0")}`;
+  return { from: first, to: lastStr };
+}
+
 export default function ConsultingPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [active, setActive] = useState<Consultation | null>(null);
   const [editId, setEditId] = useState<number | null>(null);
   const [picList, setPicList] = useState<PicItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  const [filterCustomerName, setFilterCustomerName] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterPic, setFilterPic] = useState("");
+  const [filterPyungMin, setFilterPyungMin] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [filterDatePreset, setFilterDatePreset] = useState<"" | "금일" | "작일" | "당월">("");
+
+  const filteredConsultations = React.useMemo(() => {
+    return consultations.filter((item) => {
+      if (filterCustomerName.trim()) {
+        if (!item.customerName?.toLowerCase().includes(filterCustomerName.trim().toLowerCase())) return false;
+      }
+      if (filterStatus) {
+        if (item.status !== filterStatus) return false;
+      }
+      if (filterPic) {
+        if (item.pic !== filterPic) return false;
+      }
+      const pyungMin = filterPyungMin.replace(/\D/g, "");
+      if (pyungMin && item.pyung < Number(pyungMin)) return false;
+      if (filterDateFrom || filterDateTo) {
+        const consultDate = item.consultedAt?.slice(0, 10) ?? item.date?.slice(0, 10) ?? "";
+        if (filterDateFrom && consultDate < filterDateFrom) return false;
+        if (filterDateTo && consultDate > filterDateTo) return false;
+      }
+      return true;
+    });
+  }, [consultations, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
 
   const loadFromDb = () => {
     fetch("/api/consultations")
@@ -927,10 +978,34 @@ export default function ConsultingPage() {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedIds(new Set(consultations.map((c) => c.id)));
+      setSelectedIds(new Set(filteredConsultations.map((c) => c.id)));
     } else {
       setSelectedIds(new Set());
     }
+  };
+
+  const handleSearch = () => {
+    loadFromDb();
+  };
+
+  const handleDownload = () => {
+    const rows = filteredConsultations.map((c) => ({
+      No: c.id,
+      진행상태: c.status,
+      진행날짜: getProgressDateDisplay(c),
+      고객명: c.customerName,
+      연락처: c.contact,
+      주소: c.address,
+      평수: c.pyung,
+    }));
+    const header = "No,진행상태,진행날짜,고객명,연락처,주소,평수\n";
+    const csv = header + rows.map((r) => `"${r.No}","${(r.진행상태 ?? "").replace(/"/g, '""')}","${(r.진행날짜 ?? "").replace(/"/g, '""')}","${(r.고객명 ?? "").replace(/"/g, '""')}","${(r.연락처 ?? "").replace(/"/g, '""')}","${(r.주소 ?? "").replace(/"/g, '""')}","${r.평수 ?? ""}"`).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `상담목록_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
   };
 
   const handleToggleSelect = (id: number) => {
@@ -970,7 +1045,7 @@ export default function ConsultingPage() {
   return (
     <div className="p-6 bg-white min-h-screen">
       <h2 className="mb-6 text-xl font-bold text-gray-800">
-        상담 <span className="text-blue-600">({consultations.length})</span>건
+        상담 <span className="text-blue-600">({filteredConsultations.length})</span>건
       </h2>
 
       <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -979,6 +1054,9 @@ export default function ConsultingPage() {
             <label className="w-16 text-sm font-bold text-gray-600">고객명</label>
             <input
               type="text"
+              value={filterCustomerName}
+              onChange={(e) => setFilterCustomerName(e.target.value)}
+              placeholder="고객명 입력"
               className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
@@ -986,19 +1064,30 @@ export default function ConsultingPage() {
             <label className="w-16 text-sm font-bold text-gray-600">
               진행상태
             </label>
-            <select className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm">
-              <option>선택</option>
-              <option>신규</option>
-              <option>상담중</option>
-              <option>완료</option>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">선택</option>
+              {STATUS_OPTIONS.map((opt) => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <label className="w-16 text-sm font-bold text-gray-600">
               담당자명
             </label>
-            <select className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm">
-              <option>전체</option>
+            <select
+              value={filterPic}
+              onChange={(e) => setFilterPic(e.target.value)}
+              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">전체</option>
+              {picList.map((p) => (
+                <option key={p.id} value={p.name}>{p.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -1012,6 +1101,9 @@ export default function ConsultingPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
+                  inputMode="numeric"
+                  value={filterPyungMin}
+                  onChange={(e) => setFilterPyungMin(e.target.value.replace(/\D/g, ""))}
                   className="w-20 rounded border border-gray-300 px-2 py-1.5 text-right text-sm"
                 />
                 <span className="text-sm text-gray-600">평 이상</span>
@@ -1025,11 +1117,15 @@ export default function ConsultingPage() {
               <div className="flex items-center gap-1">
                 <input
                   type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
                   className="rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />
                 <span className="text-gray-400">~</span>
                 <input
                   type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
                   className="rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />
               </div>
@@ -1037,22 +1133,63 @@ export default function ConsultingPage() {
 
             <div className="flex gap-2 text-sm">
               <label className="flex cursor-pointer items-center gap-1">
-                <input type="radio" name="date" /> 금일
+                <input
+                  type="radio"
+                  name="datePreset"
+                  checked={filterDatePreset === "금일"}
+                  onChange={() => {
+                    setFilterDatePreset("금일");
+                    const { from, to } = getDatePresetRange("금일");
+                    setFilterDateFrom(from);
+                    setFilterDateTo(to);
+                  }}
+                />
+                금일
               </label>
               <label className="flex cursor-pointer items-center gap-1">
-                <input type="radio" name="date" /> 작일
+                <input
+                  type="radio"
+                  name="datePreset"
+                  checked={filterDatePreset === "작일"}
+                  onChange={() => {
+                    setFilterDatePreset("작일");
+                    const { from, to } = getDatePresetRange("작일");
+                    setFilterDateFrom(from);
+                    setFilterDateTo(to);
+                  }}
+                />
+                작일
               </label>
               <label className="flex cursor-pointer items-center gap-1">
-                <input type="radio" name="date" /> 당월
+                <input
+                  type="radio"
+                  name="datePreset"
+                  checked={filterDatePreset === "당월"}
+                  onChange={() => {
+                    setFilterDatePreset("당월");
+                    const { from, to } = getDatePresetRange("당월");
+                    setFilterDateFrom(from);
+                    setFilterDateTo(to);
+                  }}
+                />
+                당월
               </label>
             </div>
           </div>
 
           <div className="flex gap-2">
-            <button className="rounded border border-green-500 bg-white px-4 py-2 text-sm font-bold text-green-600 hover:bg-green-50">
+            <button
+              type="button"
+              onClick={handleDownload}
+              className="rounded border border-green-500 bg-white px-4 py-2 text-sm font-bold text-green-600 hover:bg-green-50"
+            >
               다운로드
             </button>
-            <button className="rounded bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700">
+            <button
+              type="button"
+              onClick={handleSearch}
+              className="rounded bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700"
+            >
               검색
             </button>
           </div>
@@ -1066,7 +1203,7 @@ export default function ConsultingPage() {
               <th className="w-10 p-3">
                 <input
                   type="checkbox"
-                  checked={consultations.length > 0 && selectedIds.size === consultations.length}
+                  checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
                   onChange={(e) => handleSelectAll(e.target.checked)}
                   className="cursor-pointer"
                 />
@@ -1081,7 +1218,7 @@ export default function ConsultingPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {consultations.map((item, idx) => (
+            {filteredConsultations.map((item, idx) => (
               <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
                 <td className="p-3">
                   <input
