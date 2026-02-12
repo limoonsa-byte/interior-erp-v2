@@ -18,7 +18,7 @@ export async function GET() {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
     const result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, created_at
+      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
       FROM estimates WHERE company_id = ${company.id} ORDER BY id DESC
     `;
     const rows = result.rows.map((row) => {
@@ -28,6 +28,14 @@ export async function GET() {
           items = JSON.parse(String(row.items)) as unknown[];
         } catch {
           items = [];
+        }
+      }
+      let processOrder: string[] | undefined;
+      if (row.process_order != null && String(row.process_order).trim() !== "") {
+        try {
+          processOrder = JSON.parse(String(row.process_order)) as string[];
+        } catch {
+          processOrder = undefined;
         }
       }
       return {
@@ -40,6 +48,7 @@ export async function GET() {
         estimateDate: row.estimate_date != null ? String(row.estimate_date).slice(0, 10) : undefined,
         note: row.note ?? "",
         items,
+        processOrder,
         createdAt: row.created_at != null ? String(row.created_at) : undefined,
       };
     });
@@ -55,12 +64,13 @@ export async function POST(request: Request) {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
     const body = await request.json();
-    const { consultationId, customerName, contact, address, title, estimateDate, note, items } = body;
+    const { consultationId, customerName, contact, address, title, estimateDate, note, items, processOrder } = body;
     const itemsJson = Array.isArray(items) ? JSON.stringify(items) : "[]";
+    const processOrderJson = Array.isArray(processOrder) ? JSON.stringify(processOrder) : null;
     const estimateDateVal = estimateDate != null && String(estimateDate).trim() !== "" ? String(estimateDate).slice(0, 10) : null;
     await sql`
-      INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items)
-      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson})
+      INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order)
+      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson})
     `;
     return NextResponse.json({ message: "저장되었습니다." }, { status: 200 });
   } catch (error) {

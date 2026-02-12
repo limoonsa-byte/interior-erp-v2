@@ -4,7 +4,9 @@ import React, { useCallback, useEffect, useState } from "react";
 
 type PicItem = { id: number; name: string };
 
-type ModalKind = null | "pics" | "password-change" | "drawing-api" | "env-backup";
+type EstimateTemplateItem = { id: number; title: string; createdAt?: string };
+
+type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates";
 
 export default function AdminPage() {
   const [pinStatus, setPinStatus] = useState<{ hasPin: boolean } | null>(null);
@@ -27,11 +29,10 @@ export default function AdminPage() {
   const [drawingApiLoading, setDrawingApiLoading] = useState(false);
   const [drawingApiMessage, setDrawingApiMessage] = useState("");
 
-  const [envBackupContent, setEnvBackupContent] = useState("");
-  const [envBackupPin, setEnvBackupPin] = useState("");
-  const [envBackupLoading, setEnvBackupLoading] = useState(false);
-  const [envBackupMessage, setEnvBackupMessage] = useState("");
-  const [envBackupUpdatedAt, setEnvBackupUpdatedAt] = useState<string | null>(null);
+  const [estimateTemplates, setEstimateTemplates] = useState<EstimateTemplateItem[]>([]);
+  const [estimateTemplateTitle, setEstimateTemplateTitle] = useState("");
+  const [estimateTemplateLoading, setEstimateTemplateLoading] = useState(false);
+  const [estimateTemplateError, setEstimateTemplateError] = useState<string | null>(null);
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -111,11 +112,16 @@ export default function AdminPage() {
         .catch(() => {})
         .finally(() => setDrawingApiLoading(false));
     }
-    if (modal === "env-backup") {
-      setEnvBackupContent("");
-      setEnvBackupPin("");
-      setEnvBackupMessage("");
-      setEnvBackupUpdatedAt(null);
+    if (modal === "estimate-templates") {
+      fetch("/api/company/estimate-templates")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setEstimateTemplates(data.map((t: { id: number; title: string; createdAt?: string }) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
+          else setEstimateTemplates([]);
+        })
+        .catch(() => setEstimateTemplates([]));
+      setEstimateTemplateTitle("");
+      setEstimateTemplateError(null);
     }
   }, [modal, loadPics]);
 
@@ -205,55 +211,50 @@ export default function AdminPage() {
       .catch(() => setPwMessage("오류가 발생했습니다."));
   };
 
-  const handleEnvBackupLoad = () => {
-    const pin = envBackupPin.replace(/\D/g, "").slice(0, 4);
-    if (pin.length !== 4) {
-      setEnvBackupMessage("관리 비밀번호 4자리를 입력하세요.");
+  const handleAddEstimateTemplate = () => {
+    const title = estimateTemplateTitle.trim();
+    if (!title) {
+      setEstimateTemplateError("커스텀 견적 제목을 입력해 주세요.");
       return;
     }
-    setEnvBackupMessage("");
-    setEnvBackupLoading(true);
-    fetch("/api/admin/env-backup", {
-      headers: { "x-admin-pin": pin },
-    })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) {
-          setEnvBackupContent((data as { content?: string }).content ?? "");
-          setEnvBackupUpdatedAt((data as { updatedAt?: string | null }).updatedAt ?? null);
-          setEnvBackupMessage("불러왔습니다.");
-        } else {
-          setEnvBackupMessage((data as { error?: string }).error ?? "불러오기 실패");
-        }
-      })
-      .catch(() => setEnvBackupMessage("오류가 발생했습니다."))
-      .finally(() => setEnvBackupLoading(false));
-  };
-
-  const handleEnvBackupSave = () => {
-    const pin = envBackupPin.replace(/\D/g, "").slice(0, 4);
-    if (pin.length !== 4) {
-      setEnvBackupMessage("관리 비밀번호 4자리를 입력하세요.");
-      return;
-    }
-    setEnvBackupMessage("");
-    setEnvBackupLoading(true);
-    fetch("/api/admin/env-backup", {
+    setEstimateTemplateError(null);
+    setEstimateTemplateLoading(true);
+    fetch("/api/company/estimate-templates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin, content: envBackupContent }),
+      body: JSON.stringify({ title, items: [], processOrder: [] }),
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
-          setEnvBackupMessage("저장되었습니다.");
-          setEnvBackupUpdatedAt(new Date().toISOString());
+          setEstimateTemplateTitle("");
+          fetch("/api/company/estimate-templates")
+            .then((r) => r.json())
+            .then((arr) => {
+              if (Array.isArray(arr)) {
+                setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
+              }
+            });
         } else {
-          setEnvBackupMessage((data as { error?: string }).error ?? "저장 실패");
+          setEstimateTemplateError((data as { error?: string }).error || "저장 실패");
         }
       })
-      .catch(() => setEnvBackupMessage("오류가 발생했습니다."))
-      .finally(() => setEnvBackupLoading(false));
+      .catch(() => setEstimateTemplateError("저장 중 오류가 발생했습니다."))
+      .finally(() => setEstimateTemplateLoading(false));
+  };
+
+  const handleDeleteEstimateTemplate = (id: number) => {
+    if (!confirm("이 견적 템플릿을 삭제할까요?")) return;
+    fetch(`/api/company/estimate-templates/${id}`, { method: "DELETE" })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setEstimateTemplates((prev) => prev.filter((t) => t.id !== id));
+        } else {
+          alert((data as { error?: string }).error || "삭제 실패");
+        }
+      })
+      .catch(() => alert("삭제 중 오류가 발생했습니다."));
   };
 
   const handleSaveDrawingApi = () => {
@@ -347,23 +348,21 @@ export default function AdminPage() {
         <li>
           <button
             type="button"
+            onClick={() => setModal("estimate-templates")}
+            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+          >
+            견적서 관리
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
             onClick={() => setModal("password-change")}
             className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
           >
             관리 비밀번호 변경
           </button>
         </li>
-        {process.env.NODE_ENV === "development" && (
-          <li>
-            <button
-              type="button"
-              onClick={() => setModal("env-backup")}
-              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
-            >
-              .env.local 백업 (DB 저장/불러오기)
-            </button>
-          </li>
-        )}
       </ul>
 
       {/* 담당자 설정 모달 */}
@@ -490,6 +489,72 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* 견적서 관리 모달 (커스텀 견적 제목 저장) */}
+      {modal === "estimate-templates" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">견적서 관리</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              커스텀 견적 제목을 정해서 저장해 두면, 견적서 작성 화면에서 &quot;커스텀 견적 불러오기&quot;로 불러올 수 있습니다. 여기서는 제목만 등록하고, 견적서 작성에서 항목을 채운 뒤 &quot;템플릿으로 저장&quot;하면 해당 제목의 템플릿에 내용이 저장됩니다.
+            </p>
+            <div className="mb-4 flex gap-2">
+              <input
+                type="text"
+                value={estimateTemplateTitle}
+                onChange={(e) => setEstimateTemplateTitle(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddEstimateTemplate()}
+                placeholder="예: 아파트 표준견적, 상가 견적"
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleAddEstimateTemplate}
+                disabled={estimateTemplateLoading || !estimateTemplateTitle.trim()}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                저장
+              </button>
+            </div>
+            {estimateTemplateError && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {estimateTemplateError}
+              </div>
+            )}
+            {estimateTemplates.length === 0 ? (
+              <p className="text-sm text-gray-500">등록된 견적 템플릿이 없습니다. 위에서 커스텀 제목을 입력 후 저장해 주세요.</p>
+            ) : (
+              <ul className="space-y-2">
+                {estimateTemplates.map((t) => (
+                  <li
+                    key={t.id}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium text-gray-800">{t.title}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteEstimateTemplate(t.id)}
+                      className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 관리 비밀번호 변경 모달 */}
       {modal === "password-change" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -560,95 +625,6 @@ export default function AdminPage() {
                 className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700"
               >
                 변경
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* .env.local 백업 모달 (개발 환경에서만 메뉴 노출, 모달은 개발 시에만 사용) */}
-      {process.env.NODE_ENV === "development" && modal === "env-backup" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800">.env.local 백업 (DB)</h2>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
-                aria-label="닫기"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="mb-3 text-sm text-gray-600">
-              다른 PC에서 쓸 때 .env.local 내용을 여기 저장해 두었다가 불러와 사용하세요. 관리 비밀번호가 필요합니다.
-            </p>
-            <div className="mb-3">
-              <label className="mb-1 block text-xs font-medium text-gray-600">관리 비밀번호 (4자리)</label>
-              <input
-                type="password"
-                inputMode="numeric"
-                maxLength={4}
-                value={envBackupPin}
-                onChange={(e) => setEnvBackupPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="****"
-                className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-center tracking-widest"
-                disabled={envBackupLoading}
-              />
-            </div>
-            <div className="mb-3 flex-1 overflow-hidden">
-              <label className="mb-1 block text-xs font-medium text-gray-600">.env.local 내용</label>
-              <textarea
-                value={envBackupContent}
-                onChange={(e) => setEnvBackupContent(e.target.value)}
-                placeholder="GOOGLE_CLIENT_ID=&#10;NEXTAUTH_SECRET=..."
-                rows={12}
-                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm"
-                disabled={envBackupLoading}
-                spellCheck={false}
-              />
-            </div>
-            {envBackupUpdatedAt && (
-              <p className="mb-2 text-xs text-gray-500">
-                마지막 저장: {new Date(envBackupUpdatedAt).toLocaleString("ko-KR")}
-              </p>
-            )}
-            {envBackupMessage && (
-              <p
-                className={`mb-2 text-sm ${
-                  envBackupMessage.includes("저장") || envBackupMessage.includes("불러왔습니다")
-                    ? "text-green-600"
-                    : "text-red-600"
-                }`}
-              >
-                {envBackupMessage}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                disabled={envBackupLoading}
-              >
-                닫기
-              </button>
-              <button
-                type="button"
-                onClick={handleEnvBackupLoad}
-                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                disabled={envBackupLoading}
-              >
-                {envBackupLoading ? "처리 중..." : "불러오기"}
-              </button>
-              <button
-                type="button"
-                onClick={handleEnvBackupSave}
-                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                disabled={envBackupLoading}
-              >
-                저장
               </button>
             </div>
           </div>

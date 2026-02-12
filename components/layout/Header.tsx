@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings } from "lucide-react";
+import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Link2 } from "lucide-react";
 import { clsx } from "clsx";
 
-const menuItems = [
+/** 기본 메뉴는 메인(앱)에서 제공 */
+const defaultMenuItems = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
@@ -19,9 +20,30 @@ const menuItems = [
   { href: "/admin", label: "관리", icon: Settings },
 ];
 
+type MenuEntry = { id?: number; href: string; label: string; icon: React.ComponentType<{ className?: string }>; external?: boolean };
+
 export function Header() {
   const [open, setOpen] = useState(false);
+  const [customMenu, setCustomMenu] = useState<{ id: number; label: string; href: string }[]>([]);
   const pathname = usePathname();
+
+  useEffect(() => {
+    fetch("/api/company/custom-menu")
+      .then((res) => res.json())
+      .then((data) => (Array.isArray(data) ? setCustomMenu(data) : setCustomMenu([])))
+      .catch(() => setCustomMenu([]));
+  }, []);
+
+  const menuItems: MenuEntry[] = [
+    ...defaultMenuItems.map((m) => ({ ...m, id: undefined })),
+    ...customMenu.map((m) => ({
+      id: m.id,
+      href: m.href,
+      label: m.label,
+      icon: Link2,
+      external: /^https?:\/\//i.test(m.href),
+    })),
+  ];
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6">
@@ -50,21 +72,37 @@ export function Header() {
             onClick={(e) => e.stopPropagation()}
           >
             <ul className="py-2">
-              {menuItems.map(({ href, label, icon: Icon }) => (
-                <li key={href}>
-                  <Link
-                    href={href}
-                    onClick={() => setOpen(false)}
-                    className={clsx(
-                      "flex items-center gap-3 px-4 py-3 text-sm",
-                      pathname === href
-                        ? "bg-gray-100 font-medium text-gray-900"
-                        : "text-gray-600 hover:bg-gray-50"
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {label}
-                  </Link>
+              {menuItems.map(({ id, href, label, icon: Icon, external }) => (
+                <li key={id != null ? `custom-${id}` : href}>
+                  {external ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setOpen(false)}
+                      className={clsx(
+                        "flex items-center gap-3 px-4 py-3 text-sm",
+                        "text-gray-600 hover:bg-gray-50"
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {label}
+                    </a>
+                  ) : (
+                    <Link
+                      href={href}
+                      onClick={() => setOpen(false)}
+                      className={clsx(
+                        "flex items-center gap-3 px-4 py-3 text-sm",
+                        pathname === href
+                          ? "bg-gray-100 font-medium text-gray-900"
+                          : "text-gray-600 hover:bg-gray-50"
+                      )}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {label}
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

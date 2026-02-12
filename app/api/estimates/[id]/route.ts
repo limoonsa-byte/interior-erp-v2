@@ -22,6 +22,14 @@ function rowToEstimate(row: Record<string, unknown>) {
       items = [];
     }
   }
+  let processOrder: string[] | undefined;
+  if (row.process_order != null && String(row.process_order).trim() !== "") {
+    try {
+      processOrder = JSON.parse(String(row.process_order)) as string[];
+    } catch {
+      processOrder = undefined;
+    }
+  }
   return {
     id: row.id,
     consultationId: row.consultation_id ?? undefined,
@@ -32,6 +40,7 @@ function rowToEstimate(row: Record<string, unknown>) {
     estimateDate: row.estimate_date != null ? String(row.estimate_date).slice(0, 10) : undefined,
     note: row.note ?? "",
     items,
+    processOrder,
     createdAt: row.created_at != null ? String(row.created_at) : undefined,
   };
 }
@@ -51,7 +60,7 @@ export async function GET(
       return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
     }
     const result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, created_at
+      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
       FROM estimates
       WHERE id = ${estimateId} AND company_id = ${company.id}
     `;
@@ -89,8 +98,10 @@ export async function PATCH(
       estimateDate,
       note,
       items,
+      processOrder,
     } = body;
     const itemsJson = Array.isArray(items) ? JSON.stringify(items) : null;
+    const processOrderJson = Array.isArray(processOrder) ? JSON.stringify(processOrder) : undefined;
     const estimateDateVal = estimateDate != null && String(estimateDate).trim() !== "" ? String(estimateDate).slice(0, 10) : null;
     const result = await sql`
       UPDATE estimates
@@ -102,7 +113,8 @@ export async function PATCH(
         title = COALESCE(${title ?? null}, title),
         estimate_date = ${estimateDateVal},
         note = COALESCE(${note ?? null}, note),
-        items = COALESCE(${itemsJson}, items)
+        items = COALESCE(${itemsJson}, items),
+        process_order = COALESCE(${processOrderJson ?? null}, process_order)
       WHERE id = ${estimateId} AND company_id = ${company.id}
       RETURNING id
     `;

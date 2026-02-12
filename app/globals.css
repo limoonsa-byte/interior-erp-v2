@@ -24,3 +24,27 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 견적서 미리보기 인쇄 시 해당 영역만 출력 */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #estimate-preview-print,
+  #estimate-preview-print * {
+    visibility: visible;
+  }
+  #estimate-preview-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    background: white;
+    box-shadow: none;
+  }
+  .no-print {
+    display: none !important;
+  }
+}
