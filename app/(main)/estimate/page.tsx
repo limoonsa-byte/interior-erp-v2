@@ -1102,7 +1102,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.qty === 0 || item.qty === undefined || item.qty === "" ? "" : String(item.qty)}
+                          value={item.qty === 0 || item.qty === undefined ? "" : String(item.qty)}
                           onCompositionEnd={(e) => {
                             const raw = e.currentTarget.value.replace(/\D/g, "");
                             updateItem(origIdx, "qty", raw === "" ? 0 : raw);
