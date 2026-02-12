@@ -190,12 +190,12 @@ function DetailModal({
       status: statusSelection,
       pic: (fd.get("pic") as string) ?? data.pic,
       note: (fd.get("note") as string) ?? "",
-      consultedAt: (fd.get("consultedAt") as string) || undefined,
-      siteMeasurementAt: (fd.get("siteMeasurementAt") as string)?.trim() || undefined,
-      estimateMeetingAt: (fd.get("estimateMeetingAt") as string)?.trim() || undefined,
-      materialMeetingAt: (fd.get("materialMeetingAt") as string)?.trim() || undefined,
-      contractMeetingAt: (fd.get("contractMeetingAt") as string)?.trim() || undefined,
-      designMeetingAt: (fd.get("designMeetingAt") as string)?.trim() || undefined,
+      consultedAt: consultedDone ? (data.consultedAt ?? undefined) : ((fd.get("consultedAt") as string) || undefined),
+      siteMeasurementAt: siteMeasurementDone ? (data.siteMeasurementAt ?? undefined) : ((fd.get("siteMeasurementAt") as string)?.trim() || undefined),
+      estimateMeetingAt: estimateMeetingDone ? (data.estimateMeetingAt ?? undefined) : ((fd.get("estimateMeetingAt") as string)?.trim() || undefined),
+      materialMeetingAt: materialMeetingDone ? (data.materialMeetingAt ?? undefined) : ((fd.get("materialMeetingAt") as string)?.trim() || undefined),
+      contractMeetingAt: contractMeetingDone ? (data.contractMeetingAt ?? undefined) : ((fd.get("contractMeetingAt") as string)?.trim() || undefined),
+      designMeetingAt: designMeetingDone ? (data.designMeetingAt ?? undefined) : ((fd.get("designMeetingAt") as string)?.trim() || undefined),
       scope,
       budget: budget || undefined,
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
@@ -325,8 +325,9 @@ function DetailModal({
                 ref={materialMeetingInputRef}
                 name="materialMeetingAt"
                 type="datetime-local"
-                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${materialMeetingDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
                 defaultValue={data.materialMeetingAt ? data.materialMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                disabled={materialMeetingDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -347,8 +348,9 @@ function DetailModal({
                 ref={estimateMeetingInputRef}
                 name="estimateMeetingAt"
                 type="datetime-local"
-                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${estimateMeetingDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
                 defaultValue={data.estimateMeetingAt ? data.estimateMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                disabled={estimateMeetingDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -369,8 +371,9 @@ function DetailModal({
                 ref={contractMeetingInputRef}
                 name="contractMeetingAt"
                 type="datetime-local"
-                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${contractMeetingDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
                 defaultValue={data.contractMeetingAt ? data.contractMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                disabled={contractMeetingDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -391,8 +394,9 @@ function DetailModal({
                 ref={designMeetingInputRef}
                 name="designMeetingAt"
                 type="datetime-local"
-                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${designMeetingDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
                 defaultValue={data.designMeetingAt ? data.designMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
+                disabled={designMeetingDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -413,8 +417,9 @@ function DetailModal({
                 ref={siteMeasurementInputRef}
                 name="siteMeasurementAt"
                 type="datetime-local"
-                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${siteMeasurementDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
                 defaultValue={data.siteMeasurementAt ? data.siteMeasurementAt.slice(0, 16) : getTodayDatetimeLocal()}
+                disabled={siteMeasurementDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -435,8 +440,9 @@ function DetailModal({
               id="consulting-datetime"
               name="consultedAt"
               type="datetime-local"
-              className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+              className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${consultedDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
               defaultValue={data.consultedAt ? data.consultedAt.slice(0, 16) : getTodayDatetimeLocal()}
+              disabled={consultedDone}
               onClick={(e) => e.stopPropagation()}
             />
             <label className="flex items-center gap-1.5 cursor-pointer">
