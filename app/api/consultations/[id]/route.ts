@@ -50,6 +50,12 @@ export async function PATCH(
       materialMeetingAt,
       contractMeetingAt,
       designMeetingAt,
+      consultedDone,
+      siteMeasurementDone,
+      estimateMeetingDone,
+      materialMeetingDone,
+      contractMeetingDone,
+      designMeetingDone,
     } = body;
 
     const scopeJson = Array.isArray(scope) ? JSON.stringify(scope) : null;
@@ -79,7 +85,13 @@ export async function PATCH(
         estimate_meeting_at = ${estimateMeetingAtStr},
         material_meeting_at = ${materialMeetingAtStr},
         contract_meeting_at = ${contractMeetingAtStr},
-        design_meeting_at = ${designMeetingAtStr}
+        design_meeting_at = ${designMeetingAtStr},
+        consulted_done = ${consultedDone === true},
+        site_measurement_done = ${siteMeasurementDone === true},
+        estimate_meeting_done = ${estimateMeetingDone === true},
+        material_meeting_done = ${materialMeetingDone === true},
+        contract_meeting_done = ${contractMeetingDone === true},
+        design_meeting_done = ${designMeetingDone === true}
       WHERE id = ${consultationId} AND company_id = ${company.id}
       RETURNING id
     `;

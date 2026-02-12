@@ -51,6 +51,12 @@ export async function GET() {
         materialMeetingAt: row.material_meeting_at != null ? String(row.material_meeting_at) : undefined,
         contractMeetingAt: row.contract_meeting_at != null ? String(row.contract_meeting_at) : undefined,
         designMeetingAt: row.design_meeting_at != null ? String(row.design_meeting_at) : undefined,
+        consultedDone: Boolean((row as { consulted_done?: boolean }).consulted_done),
+        siteMeasurementDone: Boolean((row as { site_measurement_done?: boolean }).site_measurement_done),
+        estimateMeetingDone: Boolean((row as { estimate_meeting_done?: boolean }).estimate_meeting_done),
+        materialMeetingDone: Boolean((row as { material_meeting_done?: boolean }).material_meeting_done),
+        contractMeetingDone: Boolean((row as { contract_meeting_done?: boolean }).contract_meeting_done),
+        designMeetingDone: Boolean((row as { design_meeting_done?: boolean }).design_meeting_done),
       };
     });
 

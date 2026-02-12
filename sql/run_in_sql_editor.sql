@@ -35,8 +35,21 @@ ALTER TABLE consultations ADD COLUMN IF NOT EXISTS site_measurement_at TEXT;
 -- 8) 견적미팅날짜
 ALTER TABLE consultations ADD COLUMN IF NOT EXISTS estimate_meeting_at TEXT;
 
--- 9) region 컬럼 제거 (선택 사항, 앱에서 미사용)
+-- 9) 자재/계약서/디자인 미팅날짜
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_meeting_at TEXT;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_at TEXT;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT;
+
+-- 10) 각 날짜별 완료 플래그 (체크 완료용)
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS consulted_done BOOLEAN DEFAULT false;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS site_measurement_done BOOLEAN DEFAULT false;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS estimate_meeting_done BOOLEAN DEFAULT false;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_meeting_done BOOLEAN DEFAULT false;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_done BOOLEAN DEFAULT false;
+ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_done BOOLEAN DEFAULT false;
+
+-- 11) region 컬럼 제거 (선택 사항, 앱에서 미사용)
 ALTER TABLE consultations DROP COLUMN IF EXISTS region;
 
--- 10) 회사별 도면 보관함 API URL
+-- 12) 회사별 도면 보관함 API URL
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS drawing_list_api_url TEXT;

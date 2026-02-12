@@ -59,6 +59,8 @@ async function migrate() {
       )
     `;
     console.log("[migrate] company_pics OK");
+    await sql`ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS phone TEXT`;
+    console.log("[migrate] company_pics phone OK");
     await sql`
       CREATE TABLE IF NOT EXISTS company_admin_pin (
         company_id INT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
@@ -80,6 +82,13 @@ async function migrate() {
     console.log("[migrate] contract_meeting_at OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT`;
     console.log("[migrate] design_meeting_at OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS consulted_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS site_measurement_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS estimate_meeting_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_meeting_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_done BOOLEAN DEFAULT false`;
+    console.log("[migrate] date_done flags OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`

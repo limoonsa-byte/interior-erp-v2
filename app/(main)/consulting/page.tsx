@@ -35,6 +35,12 @@ type Consultation = {
   budget?: string;
   completionYear?: string;
   date: string;
+  consultedDone?: boolean;
+  siteMeasurementDone?: boolean;
+  estimateMeetingDone?: boolean;
+  materialMeetingDone?: boolean;
+  contractMeetingDone?: boolean;
+  designMeetingDone?: boolean;
 };
 
 /** 시공예산 숫자 → 콤마 포맷 (예: 33000000 → "33,000,000") */
@@ -120,6 +126,12 @@ function DetailModal({
   const [budgetDisplay, setBudgetDisplay] = useState(() =>
     formatBudgetDisplay(data.budget ?? "33000000")
   );
+  const [consultedDone, setConsultedDone] = useState(!!data.consultedDone);
+  const [siteMeasurementDone, setSiteMeasurementDone] = useState(!!data.siteMeasurementDone);
+  const [estimateMeetingDone, setEstimateMeetingDone] = useState(!!data.estimateMeetingDone);
+  const [materialMeetingDone, setMaterialMeetingDone] = useState(!!data.materialMeetingDone);
+  const [contractMeetingDone, setContractMeetingDone] = useState(!!data.contractMeetingDone);
+  const [designMeetingDone, setDesignMeetingDone] = useState(!!data.designMeetingDone);
 
   const handleSearchAddress = () => {
     if (typeof window === "undefined") return;
@@ -187,6 +199,16 @@ function DetailModal({
       scope,
       budget: budget || undefined,
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
+      ...(editId !== null && editId > 0
+        ? {
+            consultedDone,
+            siteMeasurementDone,
+            estimateMeetingDone,
+            materialMeetingDone,
+            contractMeetingDone,
+            designMeetingDone,
+          }
+        : {}),
     };
   };
 
@@ -297,33 +319,20 @@ function DetailModal({
         {(statusSelection === "자재미팅" || data.materialMeetingAt) && (
           <section className="mb-5">
             <p className="mb-2 text-sm font-semibold text-gray-700">자재미팅날짜</p>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (typeof materialMeetingInputRef.current?.showPicker === "function") {
-                  materialMeetingInputRef.current.showPicker();
-                } else {
-                  materialMeetingInputRef.current?.focus();
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  materialMeetingInputRef.current?.focus();
-                }
-              }}
-              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-            >
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
               <span className="whitespace-nowrap text-gray-700">자재미팅날짜</span>
               <input
                 ref={materialMeetingInputRef}
                 name="materialMeetingAt"
                 type="datetime-local"
-                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.materialMeetingAt ? data.materialMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
-                min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={materialMeetingDone} onChange={() => setMaterialMeetingDone((v) => !v)} className="rounded border-gray-300" />
+                <span className="text-gray-700">완료</span>
+              </label>
             </div>
           </section>
         )}
@@ -332,33 +341,20 @@ function DetailModal({
         {(statusSelection === "견적미팅" || data.estimateMeetingAt) && (
           <section className="mb-5">
             <p className="mb-2 text-sm font-semibold text-gray-700">견적미팅날짜</p>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (typeof estimateMeetingInputRef.current?.showPicker === "function") {
-                  estimateMeetingInputRef.current.showPicker();
-                } else {
-                  estimateMeetingInputRef.current?.focus();
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  estimateMeetingInputRef.current?.focus();
-                }
-              }}
-              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-            >
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
               <span className="whitespace-nowrap text-gray-700">견적미팅날짜</span>
               <input
                 ref={estimateMeetingInputRef}
                 name="estimateMeetingAt"
                 type="datetime-local"
-                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.estimateMeetingAt ? data.estimateMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
-                min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={estimateMeetingDone} onChange={() => setEstimateMeetingDone((v) => !v)} className="rounded border-gray-300" />
+                <span className="text-gray-700">완료</span>
+              </label>
             </div>
           </section>
         )}
@@ -367,33 +363,20 @@ function DetailModal({
         {(statusSelection === "계약서 작성 미팅" || data.contractMeetingAt) && (
           <section className="mb-5">
             <p className="mb-2 text-sm font-semibold text-gray-700">계약서 작성 미팅날짜</p>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (typeof contractMeetingInputRef.current?.showPicker === "function") {
-                  contractMeetingInputRef.current.showPicker();
-                } else {
-                  contractMeetingInputRef.current?.focus();
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  contractMeetingInputRef.current?.focus();
-                }
-              }}
-              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-            >
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
               <span className="whitespace-nowrap text-gray-700">계약서 작성 미팅날짜</span>
               <input
                 ref={contractMeetingInputRef}
                 name="contractMeetingAt"
                 type="datetime-local"
-                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.contractMeetingAt ? data.contractMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
-                min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={contractMeetingDone} onChange={() => setContractMeetingDone((v) => !v)} className="rounded border-gray-300" />
+                <span className="text-gray-700">완료</span>
+              </label>
             </div>
           </section>
         )}
@@ -402,33 +385,20 @@ function DetailModal({
         {(statusSelection === "디자인미팅" || data.designMeetingAt) && (
           <section className="mb-5">
             <p className="mb-2 text-sm font-semibold text-gray-700">디자인미팅날짜</p>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (typeof designMeetingInputRef.current?.showPicker === "function") {
-                  designMeetingInputRef.current.showPicker();
-                } else {
-                  designMeetingInputRef.current?.focus();
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  designMeetingInputRef.current?.focus();
-                }
-              }}
-              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-            >
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
               <span className="whitespace-nowrap text-gray-700">디자인미팅날짜</span>
               <input
                 ref={designMeetingInputRef}
                 name="designMeetingAt"
                 type="datetime-local"
-                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.designMeetingAt ? data.designMeetingAt.slice(0, 16) : getTodayDatetimeLocal()}
-                min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={designMeetingDone} onChange={() => setDesignMeetingDone((v) => !v)} className="rounded border-gray-300" />
+                <span className="text-gray-700">완료</span>
+              </label>
             </div>
           </section>
         )}
@@ -437,33 +407,20 @@ function DetailModal({
         {(statusSelection === "현장실측" || data.siteMeasurementAt) && (
           <section className="mb-5">
             <p className="mb-2 text-sm font-semibold text-gray-700">현장실측날짜</p>
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => {
-                if (typeof siteMeasurementInputRef.current?.showPicker === "function") {
-                  siteMeasurementInputRef.current.showPicker();
-                } else {
-                  siteMeasurementInputRef.current?.focus();
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  siteMeasurementInputRef.current?.focus();
-                }
-              }}
-              className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-            >
+            <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
               <span className="whitespace-nowrap text-gray-700">현장실측날짜</span>
               <input
                 ref={siteMeasurementInputRef}
                 name="siteMeasurementAt"
                 type="datetime-local"
-                className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+                className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
                 defaultValue={data.siteMeasurementAt ? data.siteMeasurementAt.slice(0, 16) : getTodayDatetimeLocal()}
-                min={getTodayDatetimeLocal()}
                 onClick={(e) => e.stopPropagation()}
               />
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={siteMeasurementDone} onChange={() => setSiteMeasurementDone((v) => !v)} className="rounded border-gray-300" />
+                <span className="text-gray-700">완료</span>
+              </label>
             </div>
           </section>
         )}
@@ -471,38 +428,21 @@ function DetailModal({
         {/* 상담 예약날짜 */}
         <section className="mb-5">
           <p className="mb-2 text-sm font-semibold text-gray-700">상담 예약날짜</p>
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => {
-              if (typeof dateInputRef.current?.showPicker === "function") {
-                dateInputRef.current.showPicker();
-              } else {
-                dateInputRef.current?.focus();
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                if (typeof dateInputRef.current?.showPicker === "function") {
-                  dateInputRef.current.showPicker();
-                } else {
-                  dateInputRef.current?.focus();
-                }
-              }
-            }}
-            className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4 cursor-pointer hover:bg-gray-100/80 transition-colors"
-          >
+          <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
             <span className="whitespace-nowrap text-gray-700">상담 예약날짜</span>
             <input
               ref={dateInputRef}
               id="consulting-datetime"
               name="consultedAt"
               type="datetime-local"
-              className="flex-1 min-w-0 cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+              className="w-72 max-w-[330px] cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
               defaultValue={data.consultedAt ? data.consultedAt.slice(0, 16) : getTodayDatetimeLocal()}
-              min={getTodayDatetimeLocal()}
               onClick={(e) => e.stopPropagation()}
             />
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" checked={consultedDone} onChange={() => setConsultedDone((v) => !v)} className="rounded border-gray-300" />
+              <span className="text-gray-700">완료</span>
+            </label>
           </div>
         </section>
 

@@ -1399,12 +1399,10 @@ function EstimateForm({
                     <p className="text-gray-800">담 당 자: {consultationPic || "-"}</p>
                   </div>
                 </div>
-                <div className="mb-3 border-t border-gray-200 pt-3">
-                  <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-gray-700">
-                    <span>고객명 : {customerName || "-"}</span>
-                    <span>연락처: {contact || "-"}</span>
-                  </p>
-                  <p className="mt-1 text-gray-700">주소: {address || "-"}</p>
+                <div className="mb-3 border-t border-gray-200 pt-3 space-y-1 text-gray-700">
+                  <p>고객명 : {customerName || "-"}</p>
+                  <p>고객전화번호 : {contact || "-"}</p>
+                  <p>주소: {address || "-"}</p>
                 </div>
               </div>
               {note && <p className="mb-3 text-gray-600">비고: {note}</p>}
