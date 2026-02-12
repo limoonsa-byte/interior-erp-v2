@@ -1,0 +1,41 @@
+2026-02-12 작업 일지
+===================
+
+1. 상담 화면 – 날짜별 완료 체크
+- 자재미팅/견적미팅/계약서 작성 미팅/디자인미팅/현장실측/상담 예약날짜 각각에 "완료" 체크박스 추가
+- 완료 체크 후 저장하면 해당 날짜 입력란 비활성화(회색 표시)
+- 날짜 입력 칸 너비 1.5배 확대 (w-72, max-w-[330px])
+- 별도 "완료" 버튼 제거, 체크박스만 사용
+
+2. DB·API
+- consultations 테이블에 완료 플래그 6개 컬럼 추가 (migrate.js):
+  consulted_done, site_measurement_done, estimate_meeting_done,
+  material_meeting_done, contract_meeting_done, design_meeting_done (BOOLEAN DEFAULT false)
+- API GET /api/consultations: 응답에 위 6개 필드 camelCase로 포함
+- API PATCH /api/consultations/[id]: body에서 6개 완료 플래그 수신 후 DB 반영
+- sql/run_in_sql_editor.sql: 자재/계약서/디자인 미팅날짜 컬럼 및 완료 플래그 6개 구문 추가
+
+3. 완료 체크 저장 후 유지
+- loadFromDb 시 API 응답의 consultedDone 등 6개를 목록 항목에 매핑하도록 수정
+- 저장 성공 시: 목록 refetch가 끝난 뒤에 모달 닫기 (loadFromDb Promise 반환 후 await)
+- 재오픈 시 서버에서 받은 완료 값으로 체크 상태 유지
+
+4. SQL 실행 스크립트
+- scripts/run-sql-file.js 추가: sql/run_in_sql_editor.sql 내용을 POSTGRES_URL DB에 실행
+- 사용: node scripts/run-sql-file.js (.env.local 필요)
+
+5. 의존성 최신화
+- react, react-dom: 19.2.3 → 19.2.4
+- @types/node: ^22 → ^25
+- typescript: ^5.7 → ^5.9
+- eslint: ^10 시도 후 eslint-config-next 호환 문제로 ^9 유지
+
+6. 배포
+- 상담 완료 체크·날짜 비활성화·목록 매핑·refetch 대기 등 반영 후 main 푸시
+- 배포 주소: https://interior-erp-v2.vercel.app
+
+---
+배포 정보
+- 배포 주소: https://interior-erp-v2.vercel.app
+- GitHub: limoonsa-byte/interior-erp-v2
+- 배포 날짜: 2026-02-12
