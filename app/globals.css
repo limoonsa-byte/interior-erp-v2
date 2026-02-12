@@ -25,25 +25,185 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* 견적서 미리보기 인쇄 시 해당 영역만 출력 */
+/* 견적서 미리보기 인쇄: 세로 모드, 머리글·바닥글 끔(Chrome은 여백 0이면 표시 안 함) */
 @media print {
-  body * {
-    visibility: hidden;
+  @page {
+    size: portrait;
+    margin: 0;
   }
-  #estimate-preview-print,
-  #estimate-preview-print * {
-    visibility: visible;
+}
+
+/* 인쇄용 복사본은 화면에서는 숨김 */
+#estimate-print-only {
+  display: none !important;
+}
+
+/* 견적 미리보기 품목 열: 가로로 표시(세로 한 글자씩 안 나오게) */
+#estimate-preview-print .estimate-preview-item-col,
+#estimate-print-only .estimate-preview-item-col {
+  writing-mode: horizontal-tb;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+/* 견적 미리보기 테이블: 헤더 한 줄, 글자 축소, 칸 규격 조절 */
+#estimate-preview-print .estimate-preview-table,
+#estimate-print-only .estimate-preview-table {
+  font-size: 11px;
+}
+#estimate-preview-print .estimate-preview-table thead th,
+#estimate-print-only .estimate-preview-table thead th {
+  white-space: nowrap;
+  font-size: 10px;
+  padding: 2px 4px;
+}
+#estimate-preview-print .estimate-preview-table th,
+#estimate-preview-print .estimate-preview-table td,
+#estimate-print-only .estimate-preview-table th,
+#estimate-print-only .estimate-preview-table td {
+  padding: 2px 4px;
+}
+#estimate-preview-print .estimate-preview-table th:nth-child(1),
+#estimate-preview-print .estimate-preview-table td:nth-child(1) { width: 3%; min-width: 24px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(2),
+#estimate-preview-print .estimate-preview-table td:nth-child(2) { width: 14%; }
+#estimate-preview-print .estimate-preview-table th:nth-child(3),
+#estimate-preview-print .estimate-preview-table td:nth-child(3) { width: 10%; }
+#estimate-preview-print .estimate-preview-table th:nth-child(4),
+#estimate-preview-print .estimate-preview-table td:nth-child(4) { width: 4%; min-width: 32px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(5),
+#estimate-preview-print .estimate-preview-table td:nth-child(5) { width: 4%; min-width: 32px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(6),
+#estimate-preview-print .estimate-preview-table td:nth-child(6) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(7),
+#estimate-preview-print .estimate-preview-table td:nth-child(7) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(8),
+#estimate-preview-print .estimate-preview-table td:nth-child(8) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(9),
+#estimate-preview-print .estimate-preview-table td:nth-child(9) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-preview-print .estimate-preview-table th:nth-child(10),
+#estimate-preview-print .estimate-preview-table td:nth-child(10) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-print-only .estimate-preview-table th:nth-child(1),
+#estimate-print-only .estimate-preview-table td:nth-child(1) { width: 3%; min-width: 24px; }
+#estimate-print-only .estimate-preview-table th:nth-child(2),
+#estimate-print-only .estimate-preview-table td:nth-child(2) { width: 14%; }
+#estimate-print-only .estimate-preview-table th:nth-child(3),
+#estimate-print-only .estimate-preview-table td:nth-child(3) { width: 10%; }
+#estimate-print-only .estimate-preview-table th:nth-child(4),
+#estimate-print-only .estimate-preview-table td:nth-child(4) { width: 4%; min-width: 32px; }
+#estimate-print-only .estimate-preview-table th:nth-child(5),
+#estimate-print-only .estimate-preview-table td:nth-child(5) { width: 4%; min-width: 32px; }
+#estimate-print-only .estimate-preview-table th:nth-child(6),
+#estimate-print-only .estimate-preview-table td:nth-child(6) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-print-only .estimate-preview-table th:nth-child(7),
+#estimate-print-only .estimate-preview-table td:nth-child(7) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-print-only .estimate-preview-table th:nth-child(8),
+#estimate-print-only .estimate-preview-table td:nth-child(8) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-print-only .estimate-preview-table th:nth-child(9),
+#estimate-print-only .estimate-preview-table td:nth-child(9) { width: 11%; text-align: right; min-width: 56px; }
+#estimate-print-only .estimate-preview-table th:nth-child(10),
+#estimate-print-only .estimate-preview-table td:nth-child(10) { width: 11%; text-align: right; min-width: 56px; }
+
+
+/* 견적서 미리보기 인쇄: body 직계로 복사한 #estimate-print-only만 보이게 → 페이지 수 정상 */
+@media print {
+  body.printing #estimate-print-only {
+    display: block !important;
   }
-  #estimate-preview-print {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    max-width: none;
-    padding: 0;
+  body.printing > *:not(#estimate-print-only) {
+    display: none !important;
+  }
+  #estimate-print-only {
+    display: block !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: 100% !important;
+    padding: 0.5in;
     background: white;
     box-shadow: none;
+    font-size: 11px;
   }
+  #estimate-print-only .estimate-preview-body {
+    position: relative;
+    display: block;
+  }
+  #estimate-print-only .estimate-preview-format2 {
+    display: block;
+  }
+  #estimate-print-only .estimate-preview-format2 .bg-gray-200 {
+    background: #e5e7eb;
+  }
+  #estimate-print-only .estimate-preview-dl {
+    display: block !important;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #d1d5db;
+    page-break-after: avoid;
+  }
+  #estimate-print-only .estimate-preview-dl > div {
+    display: flex !important;
+    gap: 0.5rem;
+    padding-bottom: 3px;
+    margin-bottom: 3px;
+  }
+  #estimate-print-only .estimate-preview-dl dt {
+    flex-shrink: 0;
+    min-width: 4.5rem;
+    font-weight: 600;
+    margin: 0;
+  }
+  #estimate-print-only .estimate-preview-dl dd {
+    word-break: break-word;
+    margin: 0;
+  }
+  #estimate-print-only table {
+    margin-top: 0;
+    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: inherit;
+    page-break-inside: auto;
+  }
+  #estimate-print-only tbody tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+  #estimate-print-only th,
+  #estimate-print-only td {
+    padding: 3px 5px;
+    border: 1px solid #d1d5db;
+    word-wrap: break-word;
+    word-break: keep-all;
+    box-sizing: border-box;
+  }
+  #estimate-print-only th:nth-child(n),
+  #estimate-print-only td:nth-child(n) {
+    overflow: visible;
+  }
+  #estimate-print-only td:nth-child(1),
+  #estimate-print-only th:nth-child(1) { width: 4%; overflow: hidden; }
+  #estimate-print-only td:nth-child(2),
+  #estimate-print-only th:nth-child(2) { width: 14%; overflow: hidden; }
+  #estimate-print-only td:nth-child(3),
+  #estimate-print-only th:nth-child(3) { width: 12%; overflow: hidden; }
+  #estimate-print-only td:nth-child(4),
+  #estimate-print-only th:nth-child(4) { width: 5%; overflow: hidden; }
+  #estimate-print-only td:nth-child(5),
+  #estimate-print-only th:nth-child(5) { width: 5%; overflow: hidden; }
+  #estimate-print-only td:nth-child(6),
+  #estimate-print-only th:nth-child(6) { width: 10%; text-align: right; }
+  #estimate-print-only td:nth-child(7),
+  #estimate-print-only th:nth-child(7) { width: 10%; text-align: right; }
+  #estimate-print-only td:nth-child(8),
+  #estimate-print-only th:nth-child(8) { width: 10%; text-align: right; }
+  #estimate-print-only td:nth-child(9),
+  #estimate-print-only th:nth-child(9) { width: 10%; text-align: right; }
+  #estimate-print-only td:nth-child(10),
+  #estimate-print-only th:nth-child(10) { width: 10%; text-align: right; }
   .no-print {
     display: none !important;
   }

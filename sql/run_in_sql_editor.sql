@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS company_pics (
   name TEXT NOT NULL,
   UNIQUE(company_id, name)
 );
+ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS phone TEXT;
 
 -- 4) 관리 비밀번호 (숫자 4자리)
 CREATE TABLE IF NOT EXISTS company_admin_pin (

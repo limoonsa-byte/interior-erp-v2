@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 
-type PicItem = { id: number; name: string };
+type PicItem = { id: number; name: string; phone?: string };
 
 type EstimateTemplateItem = { id: number; title: string; createdAt?: string };
 
@@ -17,6 +17,7 @@ export default function AdminPage() {
 
   const [pics, setPics] = useState<PicItem[]>([]);
   const [newName, setNewName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,12 +143,13 @@ export default function AdminPage() {
     fetch("/api/company/pics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, phone: newPhone.trim() }),
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setNewName("");
+          setNewPhone("");
           setError(null);
           loadPics();
         } else {
@@ -383,23 +385,33 @@ export default function AdminPage() {
             <p className="mb-4 text-sm text-gray-600">
               여기서 등록한 담당자는 상담 등록·수정 시 담당자 선택 목록에 표시됩니다.
             </p>
-            <div className="mb-4 flex gap-2">
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddPic()}
-                placeholder="담당자명 입력"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={handleAddPic}
-                disabled={loading || !newName.trim()}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                추가
-              </button>
+            <div className="mb-4 space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddPic()}
+                  placeholder="담당자명 입력"
+                  className="min-w-[120px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAddPic()}
+                  placeholder="담당자 전화번호"
+                  className="min-w-[120px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddPic}
+                  disabled={loading || !newName.trim()}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  추가
+                </button>
+              </div>
             </div>
             {error && (
               <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -418,6 +430,7 @@ export default function AdminPage() {
                     className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
                   >
                     <span className="font-medium text-gray-800">{item.name}</span>
+                    <span className="text-gray-600">{item.phone || "-"}</span>
                     <button
                       type="button"
                       onClick={() => handleDeletePic(item.id)}

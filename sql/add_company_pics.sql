@@ -3,5 +3,6 @@ CREATE TABLE IF NOT EXISTS company_pics (
   id SERIAL PRIMARY KEY,
   company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  phone TEXT,
   UNIQUE(company_id, name)
 );

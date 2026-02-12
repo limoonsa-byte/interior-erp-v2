@@ -22,7 +22,7 @@ export async function GET() {
     }
 
     const result = await sql`
-      SELECT id, name FROM company_pics
+      SELECT id, name, phone FROM company_pics
       WHERE company_id = ${company.id}
       ORDER BY id ASC
     `;
@@ -30,6 +30,7 @@ export async function GET() {
     const list = result.rows.map((row) => ({
       id: Number((row as { id: number }).id),
       name: String((row as { name: string }).name),
+      phone: (row as { phone?: string | null }).phone ?? "",
     }));
 
     return NextResponse.json(list);
@@ -53,13 +54,14 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name.trim() : "";
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     if (!name) {
       return NextResponse.json({ error: "담당자명을 입력해 주세요." }, { status: 400 });
     }
 
     await sql`
-      INSERT INTO company_pics (company_id, name)
-      VALUES (${company.id}, ${name})
+      INSERT INTO company_pics (company_id, name, phone)
+      VALUES (${company.id}, ${name}, ${phone || null})
       ON CONFLICT (company_id, name) DO NOTHING
     `;
 

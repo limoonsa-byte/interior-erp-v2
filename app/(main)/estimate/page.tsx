@@ -190,7 +190,7 @@ function EstimateForm({
   onCancel,
 }: {
   estimate: Estimate | null;
-  consultationPreFill: { customerName: string; contact: string; address: string; consultationId: number } | null;
+  consultationPreFill: { customerName: string; contact: string; address: string; consultationId: number; pic?: string } | null;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -220,8 +220,32 @@ function EstimateForm({
       setCustomerName(consultationPreFill.customerName);
       setContact(consultationPreFill.contact);
       setAddress(consultationPreFill.address);
+      setConsultationPic(consultationPreFill.pic ?? "");
+    } else if (!isEdit) {
+      setConsultationPic("");
     }
   }, [consultationPreFill, isEdit]);
+
+  const consultationId = estimate?.consultationId ?? consultationPreFill?.consultationId ?? null;
+  useEffect(() => {
+    if (!consultationId || consultationPreFill?.pic) return;
+    fetch("/api/consultations")
+      .then((res) => res.json())
+      .then((list) => {
+        const c = Array.isArray(list) ? list.find((x: { id: number }) => x.id === consultationId) : null;
+        if (c && (c as { pic?: string }).pic) setConsultationPic((c as { pic: string }).pic);
+      })
+      .catch(() => {});
+  }, [consultationId, consultationPreFill?.pic]);
+
+  useEffect(() => {
+    fetch("/api/company/pics")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) setPicList(data);
+      })
+      .catch(() => setPicList([]));
+  }, []);
 
   const [smartFieldModalOpen, setSmartFieldModalOpen] = useState(false);
   const [smartFieldListUrl, setSmartFieldListUrl] = useState("");
@@ -246,11 +270,43 @@ function EstimateForm({
     return order;
   });
   const [processOrderModalOpen, setProcessOrderModalOpen] = useState(false);
+  /** 공정 섹션 접기 상태: key = processGroup 이름, true면 접힌 상태 */
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewPrintRef = React.useRef<HTMLDivElement>(null);
+  const [companyName, setCompanyName] = useState("");
+  /** 상담에서 선택한 담당자명 → 미리보기 '담 당 자'에 표시 */
+  const [consultationPic, setConsultationPic] = useState("");
+  /** 관리 > 담당자 설정 목록(이름+전화번호) → 담당자 전화번호 표시용 */
+  const [picList, setPicList] = useState<{ id: number; name: string; phone?: string }[]>([]);
+  /** 인쇄: 견적 내용만 body 직계로 복사해 그 부분만 출력(73페이지처럼 전체 화면 잡히는 것 방지) */
+  const printEstimate = () => {
+    const el = document.getElementById("estimate-preview-print");
+    const printRootId = "estimate-print-only";
+    if (el) {
+      const wrap = document.createElement("div");
+      wrap.id = printRootId;
+      wrap.className = "estimate-print-only-root";
+      wrap.innerHTML = el.innerHTML;
+      document.body.appendChild(wrap);
+      document.body.classList.add("printing");
+    }
+    const prevTitle = document.title;
+    document.title = "";
+    window.print();
+    const cleanup = () => {
+      document.title = prevTitle;
+      document.body.classList.remove("printing");
+      const root = document.getElementById(printRootId);
+      if (root) root.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(cleanup, 2000);
+  };
   const excelInputRef = useRef<HTMLInputElement>(null);
 
-  /** 커스텀 견적 불러오기 / 템플릿으로 저장 */
+  /** 템플릿 불러오기 / 템플릿으로 저장 */
   type EstimateTemplateRow = { id: number; title: string; items: EstimateItem[]; processOrder?: string[] };
   const [customTemplateModalOpen, setCustomTemplateModalOpen] = useState(false);
   const [customTemplateList, setCustomTemplateList] = useState<EstimateTemplateRow[]>([]);
@@ -276,14 +332,13 @@ function EstimateForm({
     }
   }, [items, processOrder.length]);
 
-  // 회사 정보에서 API URL 가져오기
+  // 회사 정보에서 API URL·회사명 가져오기
   useEffect(() => {
     fetch("/api/company")
       .then((res) => res.json())
       .then((data) => {
-        if (data?.drawingListApiUrl) {
-          setSmartFieldListUrl(data.drawingListApiUrl);
-        }
+        if (data?.drawingListApiUrl) setSmartFieldListUrl(data.drawingListApiUrl);
+        if (data?.name) setCompanyName(data.name);
       })
       .catch(() => {});
   }, []);
@@ -371,7 +426,7 @@ function EstimateForm({
       ...emptyItem,
       ...i,
       processGroup: i.processGroup ?? "",
-      qty: Number(i.qty) || 0,
+      qty: 0,
       materialUnitPrice: Number(i.materialUnitPrice ?? (i as EstimateItem & { unitPrice?: number }).unitPrice ?? 0) || 0,
       laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
     }));
@@ -491,19 +546,20 @@ function EstimateForm({
       });
       if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
 
+      const ROW_TYPE_COL = 7; // H열(0-based): 행구분. 수량 열 없이 저장
       const data: (string | number)[][] = [
-        ["고객명", customerName || ""],
-        ["연락처", contact || ""],
-        ["주소", address || ""],
-        ["제목", title || ""],
-        ["견적일자", estimateDate || ""],
-        ["비고", note || ""],
-        [],
-        ["no", "품목", "규격", "단위", "수량", "재료비단가", "노무비단가", "비고"],
+        ["고객명", customerName || "", "", "", "", "", "", ""],
+        ["연락처", contact || "", "", "", "", "", "", ""],
+        ["주소", address || "", "", "", "", "", "", ""],
+        ["제목", title || "", "", "", "", "", "", ""],
+        ["견적일자", estimateDate || "", "", "", "", "", "", ""],
+        ["비고", note || "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", ""],
+        ["no", "품목", "규격", "단위", "재료비단가", "노무비단가", "비고", "행구분"],
       ];
       groups.forEach((grp) => {
         const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
-        data.push([displayName, "", "", "", "", "", "", ""]);
+        data.push([displayName, "#", "", "", "", "", "", "공정"]);
         grp.indices.forEach((origIdx, subNo) => {
           const it = items[origIdx];
           data.push([
@@ -511,10 +567,10 @@ function EstimateForm({
             it.category ?? "",
             it.spec ?? "",
             it.unit ?? "",
-            Number(it.qty) || 0,
             Number(it.materialUnitPrice ?? 0) || 0,
             Number(it.laborUnitPrice ?? 0) || 0,
             it.note ?? "",
+            "",
           ]);
         });
       });
@@ -551,8 +607,9 @@ function EstimateForm({
           rowNumber > 8 &&
           rowIndex < data.length &&
           data[rowIndex] &&
-          String(data[rowIndex][0] ?? "").trim() !== "" &&
-          [1, 2, 3, 4, 5, 6, 7].every((c) => !String(data[rowIndex][c] ?? "").trim());
+          (String(data[rowIndex][ROW_TYPE_COL] ?? "").trim() === "공정" ||
+            (String(data[rowIndex][0] ?? "").trim() !== "" &&
+              [1, 2, 3, 4, 5, 6].every((c) => !String(data[rowIndex][c] ?? "").trim())));
         const hasBorder = rowNumber >= 8 && !isProcessNameRow;
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
           if (colNumber <= 8) {
@@ -591,52 +648,116 @@ function EstimateForm({
         const data = ev.target?.result;
         if (!data) return;
         const wb = XLSX.read(data, { type: "binary" });
-        const first = wb.SheetNames[0];
-        if (!first) return;
-        const ws = wb.Sheets[first];
-        const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" }) as (string | number)[][];
-        if (rows.length < 9) {
-          alert("엑셀 형식이 올바르지 않습니다. 견적서 엑셀 저장으로 내보낸 파일을 사용해 주세요.");
+        if (!wb.SheetNames?.length) {
+          alert("엑셀에 시트가 없습니다.");
           return;
         }
+        // "품목" 또는 "no" 헤더가 있는 시트 우선 사용 (여러 시트일 때)
+        let ws = wb.Sheets[wb.SheetNames[0]];
+        let sheetName = wb.SheetNames[0];
+        for (const name of wb.SheetNames) {
+          const s = wb.Sheets[name];
+          const preview = XLSX.utils.sheet_to_json<string[]>(s, { header: 1, defval: "", range: 0 }) as (string | number)[][];
+          for (let r = 0; r < Math.min(15, preview.length); r++) {
+            const a = String(preview[r]?.[0] ?? "").trim().toLowerCase();
+            const b = String(preview[r]?.[1] ?? "").trim();
+            const c = String(preview[r]?.[2] ?? "").trim();
+            if (a === "no" || (b === "품목" && c === "규격")) {
+              ws = s;
+              sheetName = name;
+              break;
+            }
+          }
+        }
+        const rawRows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" }) as (string | number)[][];
+        if (rawRows.length < 2) {
+          alert("엑셀에 데이터가 없습니다. 견적서 엑셀 저장으로 내보낸 파일을 사용해 주세요.");
+          return;
+        }
+        // 행마다 최소 9열로 채워서 빈 셀 접근 시 undefined 방지 (구 형식은 수량+행구분으로 9열)
+        const rows = rawRows.map((row) => {
+          const arr = Array.isArray(row) ? [...row] : [];
+          while (arr.length < 9) arr.push("");
+          return arr;
+        });
         const get = (r: number, col: number) => String(rows[r]?.[col] ?? "").trim();
-        setCustomerName(get(0, 1));
-        setContact(get(1, 1));
-        setAddress(get(2, 1));
-        setTitle(get(3, 1));
-        setEstimateDate(get(4, 1) || "");
-        setNote(get(5, 1));
+        /** 엑셀 셀 값을 숫자로 (쉼표·공백 제거 후 파싱, 수량·단가 0 누락 방지) */
+        const parseNum = (v: unknown): number => {
+          if (v == null || v === "") return 0;
+          const s = String(v).replace(/,/g, "").replace(/\s/g, "").trim();
+          const n = Number(s);
+          return Number.isFinite(n) ? n : 0;
+        };
+        // 헤더 행 찾기: "no" 또는 "품목"/"규격" 있는 행. 없으면 8행(0-based 7) 가정
+        let headerRow = 7;
+        for (let r = 0; r < Math.min(20, rows.length); r++) {
+          const c0 = get(r, 0).toLowerCase();
+          if (c0 === "no" || (get(r, 1) === "품목" && get(r, 2) === "규격")) {
+            headerRow = r;
+            break;
+          }
+        }
+        const dataStart = headerRow + 1;
+        if (dataStart >= rows.length) {
+          alert("엑셀에서 항목 행을 찾지 못했습니다. 1행에 no/품목/규격 헤더가 있는지 확인해 주세요.");
+          return;
+        }
+        // 수량 열 유무: 헤더 4열이 "수량"이면 구 형식, 아니면 신 형식(수량 열 없음)
+        const hasQtyCol = get(headerRow, 4) === "수량";
+        const colMat = hasQtyCol ? 5 : 4;
+        const colLabor = hasQtyCol ? 6 : 5;
+        const colNote = hasQtyCol ? 7 : 6;
+        const colRowType = hasQtyCol ? 8 : 7;
+        if (headerRow >= 6) {
+          setCustomerName(get(0, 1));
+          setContact(get(1, 1));
+          setAddress(get(2, 1));
+          setTitle(get(3, 1));
+          setEstimateDate(get(4, 1) || "");
+          setNote(get(5, 1));
+        }
         const processOrderSeen: string[] = [];
         const newItems: EstimateItem[] = [];
         let currentProcess = "";
-        for (let r = 8; r < rows.length; r++) {
+        const headerRowMatch = (r: number) =>
+          get(r, 0).toLowerCase() === "no" || (get(r, 1) === "품목" && get(r, 2) === "규격");
+        for (let r = dataStart; r < rows.length; r++) {
           const row = rows[r];
-          if (!row) continue;
-          const a = String(row[0] ?? "").trim();
-          const b = String(row[1] ?? "").trim();
-          const c = String(row[2] ?? "").trim();
-          const d = String(row[3] ?? "").trim();
-          const h = String(row[7] ?? "").trim();
-          const restEmpty = !b && !c && !d && !String(row[4] ?? "").trim() && !String(row[5] ?? "").trim() && !String(row[6] ?? "").trim() && !h;
-          if (a && restEmpty) {
-            currentProcess = a;
+          if (!row || row.length < 8) continue;
+          if (headerRowMatch(r)) continue;
+          const a = get(r, 0);
+          const b = get(r, 1);
+          const c = get(r, 2);
+          const d = get(r, 3);
+          const h = get(r, colNote);
+          const rowType = get(r, colRowType);
+          const qty = 0;
+          const mat = parseNum(rows[r]?.[colMat]);
+          const labor = parseNum(rows[r]?.[colLabor]);
+          // 공정명 행: I열 "공정" / B열 "#"이면서 A열이 공정명(숫자 아님) / 또는 A열만 글자이고 B·C·D 비어있고 숫자 아님
+          const noItemCols = !b && !c && !d;
+          const aIsNumber = /^\d+$/.test(a);
+          const isProcessNameRow = rowType === "공정" || (b === "#" && !aIsNumber) || (!!a && noItemCols && !aIsNumber);
+          if (isProcessNameRow) {
+            currentProcess = b === "#" ? (a || currentProcess) : a;
             if (currentProcess && !processOrderSeen.includes(currentProcess)) processOrderSeen.push(currentProcess);
             continue;
           }
+          // A열 숫자 + B열 "#" 행은 공정 표시가 아닌 잘못된 행으로 간주하고 무시
+          if (b === "#" && aIsNumber) continue;
           if (!currentProcess && !a && !b && !c) continue;
-          const processGroup = currentProcess || a;
-          if (processGroup && !processOrderSeen.includes(processGroup)) processOrderSeen.push(processGroup);
+          const processGroup = currentProcess || (newItems.length ? newItems[newItems.length - 1].processGroup ?? "" : "");
+          if (!processOrderSeen.includes(processGroup)) processOrderSeen.push(processGroup);
           newItems.push({
-            processGroup: processGroup || (newItems.length ? newItems[newItems.length - 1].processGroup : ""),
+            processGroup,
             category: b,
             spec: c,
             unit: d || "식",
-            qty: Number(row[4]) || 0,
-            materialUnitPrice: Number(row[5]) || 0,
-            laborUnitPrice: Number(row[6]) || 0,
+            qty,
+            materialUnitPrice: mat,
+            laborUnitPrice: labor,
             note: h,
           });
-          if (!currentProcess && a) currentProcess = a;
         }
         if (newItems.length > 0) {
           setItems(newItems);
@@ -646,7 +767,7 @@ function EstimateForm({
               : [...new Set(newItems.map((i) => i.processGroup ?? "").filter((x): x is string => x !== ""))]
           );
         } else {
-          alert("엑셀에서 항목을 찾지 못했습니다. 9행부터 공정 그룹 헤더 또는 품목 행이 있는지 확인해 주세요.");
+          alert("엑셀에서 항목을 찾지 못했습니다. no/품목/규격 헤더 다음 행부터 공정명(한 행) 또는 품목·규격·단위·수량이 있는 행이 있어야 합니다.");
         }
       } catch (err) {
         console.error(err);
@@ -798,42 +919,54 @@ function EstimateForm({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
         <p className="mb-2 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={openSmartFieldModal}
-            className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-          >
-            도면 보관함에서 불러오기
-          </button>
-          <button
-            type="button"
-            onClick={openCustomTemplateModal}
-            className="rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
-          >
-            커스텀 견적 불러오기
-          </button>
-          <button
-            type="button"
-            onClick={openSaveTemplateModal}
-            className="rounded-lg border border-gray-500 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            템플릿으로 저장
-          </button>
-          <button type="button" onClick={addNewSection} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-            + 공정 추가
-          </button>
-          <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-            공정 순서 변경
-          </button>
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={openSmartFieldModal}
+              className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+            >
+              도면 보관함에서 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={openCustomTemplateModal}
+              className="rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
+            >
+              템플릿 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={openSaveTemplateModal}
+              className="rounded-lg border border-gray-500 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              템플릿으로 저장
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={exportToExcel} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              엑셀 저장
+            </button>
+            <button type="button" onClick={() => excelInputRef.current?.click()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              엑셀 불러오기
+            </button>
+          </div>
         </div>
       </div>
       <p className="mb-2 text-xs text-gray-500">
         &quot;도면 보관함에서 불러오기&quot;로 한 건을 선택하면 방·거실·방면적·문 개수 등이 상단 참조 표에만 표시됩니다. (항목에는 자동 입력되지 않습니다.)
       </p>
-      <p className="mb-4 text-xs text-amber-700">
+      <p className="mb-2 text-xs text-amber-700">
         ※스마트현장관리 앱설치필수
       </p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button type="button" onClick={addNewSection} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+          + 공정 추가
+        </button>
+        <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
+          공정 순서 변경
+        </button>
+      </div>
 
       {/* 도면에서 불러온 참조값 표 (항목에 넣지 않고 참고용) */}
       {drawingReference && (
@@ -993,18 +1126,32 @@ function EstimateForm({
               if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
 
               const rows: React.ReactNode[] = [];
+              const toggleSection = (name: string) => {
+                setCollapsedSections((prev) => ({ ...prev, [name]: !prev[name] }));
+              };
               groups.forEach((grp) => {
-                const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
+                const visibleIndices = grp.indices;
                 if (visibleIndices.length === 0) return;
                 const isNewSection = /^\u200B/.test(grp.name);
+                const isCollapsed = collapsedSections[grp.name] === true;
+                const displayName = isNewSection ? "" : grp.name;
                 rows.push(
                   <tr key={`h-${grp.indices[0]}`} className="border-b border-gray-200 bg-gray-100">
                     <td colSpan={12} className="p-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => toggleSection(grp.name)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                          title={isCollapsed ? "펼치기" : "접기"}
+                          aria-label={isCollapsed ? "펼치기" : "접기"}
+                        >
+                          <span className="select-none text-sm">{isCollapsed ? "▶" : "▼"}</span>
+                        </button>
                         <input
                           type="text"
                           className="max-w-xs flex-1 rounded border border-gray-300 bg-white px-2 py-1.5 font-semibold text-gray-800"
-                          value={isNewSection ? "" : grp.name}
+                          value={displayName}
                           onChange={(e) => {
                             const v = e.target.value;
                             updateProcessGroupForIndices(grp.indices, v);
@@ -1012,17 +1159,23 @@ function EstimateForm({
                           }}
                           placeholder="가설철거, 목공사 등 (숫자 가능)"
                         />
-                        <button
-                          type="button"
-                          onClick={() => addRowToProcess(grp.name, grp.indices)}
-                          className="rounded border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
-                        >
-                          + 항목 추가
-                        </button>
+                        {isCollapsed && (
+                          <span className="text-sm text-gray-500">({visibleIndices.length}개 항목)</span>
+                        )}
+                        {!isCollapsed && (
+                          <button
+                            type="button"
+                            onClick={() => addRowToProcess(grp.name, grp.indices)}
+                            className="rounded border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                          >
+                            + 항목 추가
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
                 );
+                if (isCollapsed) return;
                 visibleIndices.forEach((origIdx, subNo) => {
                   const item = items[origIdx];
                   const noLabel = `${subNo + 1}.`;
@@ -1201,14 +1354,8 @@ function EstimateForm({
         <button type="button" onClick={() => setPreviewOpen(true)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           견적서 미리보기
         </button>
-        <button type="button" onClick={() => { setPreviewOpen(true); setTimeout(() => window.print(), 400); }} className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <button type="button" onClick={() => { setPreviewOpen(true); setTimeout(printEstimate, 400); }} className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           견적서 출력 / PDF 저장
-        </button>
-        <button type="button" onClick={exportToExcel} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          엑셀 저장
-        </button>
-        <button type="button" onClick={() => excelInputRef.current?.click()} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-          엑셀 불러오기
         </button>
         <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
           취소
@@ -1221,44 +1368,59 @@ function EstimateForm({
 
     {/* 견적서 미리보기 모달 (인쇄 시 이 영역만 출력) */}
     {previewOpen && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-        <div className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl">
+      <div className="estimate-preview-modal fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+        <div className="estimate-preview-modal-inner flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl my-auto">
           <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
             <h3 className="text-sm font-semibold text-gray-800">견적서 미리보기</h3>
-            <div className="flex gap-2 no-print">
-              <button type="button" onClick={() => window.print()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            <div className="flex flex-wrap items-center gap-2 no-print">
+              <button type="button" onClick={printEstimate} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 인쇄 (PDF로 저장 가능)
               </button>
               <button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
                 닫기
               </button>
+              <span className="text-xs text-gray-500">인쇄 대화상자에서 &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
             </div>
           </div>
-          <div className="overflow-auto p-6" id="estimate-preview-print" ref={previewPrintRef}>
-            <div className="mx-auto max-w-2xl text-sm">
-              <h2 className="mb-4 text-lg font-bold text-gray-900">견적서</h2>
-              <div className="mb-4 grid grid-cols-2 gap-x-4 gap-y-1">
-                <div>고객명: {customerName || "-"}</div>
-                <div>연락처: {contact || "-"}</div>
-                <div className="col-span-2">주소: {address || "-"}</div>
-                <div>제목: {title || "-"}</div>
-                <div>견적일자: {formatDateYMD(estimateDate)}</div>
+          <div className="estimate-preview-print-wrap flex-1 min-h-0 overflow-auto p-4 flex justify-center" id="estimate-preview-print" ref={previewPrintRef}>
+            <div className="mx-auto max-w-3xl w-full min-w-0 shrink-0 text-sm estimate-preview-body">
+              {/* 2번 양식: 제목 바 + 좌우 2단 */}
+              <div className="estimate-preview-format2">
+                <div className="mb-3 bg-gray-200 py-2 text-center text-base font-bold text-gray-800">견 적 서</div>
+                <div className="mb-3 flex flex-wrap justify-between gap-x-8 gap-y-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-gray-800">공 사 명 : {title || "-"}</p>
+                    <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(subtotal)}</p>
+                    <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1 text-right">
+                    <p className="text-gray-800">회 사 명: {companyName || "-"}</p>
+                    <p className="text-gray-800">담당자 전화번호: {picList.find((p) => p.name === consultationPic)?.phone || "-"}</p>
+                    <p className="text-gray-800">담 당 자: {consultationPic || "-"}</p>
+                  </div>
+                </div>
+                <div className="mb-3 border-t border-gray-200 pt-3">
+                  <p className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-gray-700">
+                    <span>고객명 : {customerName || "-"}</span>
+                    <span>연락처: {contact || "-"}</span>
+                  </p>
+                  <p className="mt-1 text-gray-700">주소: {address || "-"}</p>
+                </div>
               </div>
               {note && <p className="mb-3 text-gray-600">비고: {note}</p>}
-              <table className="w-full border-collapse border border-gray-300 text-sm">
+              <table className="estimate-preview-table w-full border-collapse border border-gray-300 text-xs">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border border-gray-300 p-2 text-left">No</th>
-                    <th className="border border-gray-300 p-2 text-left">품목</th>
-                    <th className="border border-gray-300 p-2 text-left">규격</th>
-                    <th className="border border-gray-300 p-2 text-left">단위</th>
-                    <th className="border border-gray-300 p-2 text-right">수량</th>
-                    <th className="border border-gray-300 p-2 text-right">재료비 단가</th>
-                    <th className="border border-gray-300 p-2 text-right">재료비 금액</th>
-                    <th className="border border-gray-300 p-2 text-right">노무비 단가</th>
-                    <th className="border border-gray-300 p-2 text-right">노무비 금액</th>
-                    <th className="border border-gray-300 p-2 text-right">금액</th>
-                    <th className="border border-gray-300 p-2 text-left">비고</th>
+                    <th className="border border-gray-300 p-1.5 text-left">No</th>
+                    <th className="border border-gray-300 p-1.5 text-left estimate-preview-item-col">품목</th>
+                    <th className="border border-gray-300 p-1.5 text-left">규격</th>
+                    <th className="border border-gray-300 p-1.5 text-left">단위</th>
+                    <th className="border border-gray-300 p-1.5 text-right">수량</th>
+                    <th className="border border-gray-300 p-1.5 text-right">재료비 단가</th>
+                    <th className="border border-gray-300 p-1.5 text-right">재료비 금액</th>
+                    <th className="border border-gray-300 p-1.5 text-right">노무비 단가</th>
+                    <th className="border border-gray-300 p-1.5 text-right">노무비 금액</th>
+                    <th className="border border-gray-300 p-1.5 text-right">금액</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1296,7 +1458,7 @@ function EstimateForm({
                       if (displayName) {
                         rows.push(
                           <tr key={`ph-${grp.indices[0]}`} className="bg-gray-100 font-semibold">
-                            <td colSpan={11} className="border border-gray-300 p-2">{displayName}</td>
+                            <td colSpan={10} className="border border-gray-300 p-1.5">{displayName}</td>
                           </tr>
                         );
                       }
@@ -1304,17 +1466,16 @@ function EstimateForm({
                         const item = items[origIdx];
                         rows.push(
                           <tr key={origIdx}>
-                            <td className="border border-gray-300 p-2">{subNo + 1}.</td>
-                            <td className="border border-gray-300 p-2">{item.category ?? ""}</td>
-                            <td className="border border-gray-300 p-2">{item.spec ?? ""}</td>
-                            <td className="border border-gray-300 p-2">{item.unit ?? ""}</td>
-                            <td className="border border-gray-300 p-2 text-right">{item.qty ?? ""}</td>
-                            <td className="border border-gray-300 p-2 text-right">{formatNumber(Number(item.materialUnitPrice ?? 0) || 0)}</td>
-                            <td className="border border-gray-300 p-2 text-right">{formatNumber(materialAmount(item))}</td>
-                            <td className="border border-gray-300 p-2 text-right">{formatNumber(Number(item.laborUnitPrice ?? 0) || 0)}</td>
-                            <td className="border border-gray-300 p-2 text-right">{formatNumber(laborAmount(item))}</td>
-                            <td className="border border-gray-300 p-2 text-right">{formatNumber(amount(item))}</td>
-                            <td className="border border-gray-300 p-2">{item.note ?? ""}</td>
+                            <td className="border border-gray-300 p-1.5">{subNo + 1}</td>
+                            <td className="border border-gray-300 p-1.5 estimate-preview-item-col">{item.category ?? ""}</td>
+                            <td className="border border-gray-300 p-1.5">{item.spec ?? ""}</td>
+                            <td className="border border-gray-300 p-1.5">{item.unit ?? ""}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{item.qty ?? ""}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.materialUnitPrice ?? 0) || 0)}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(materialAmount(item))}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.laborUnitPrice ?? 0) || 0)}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(laborAmount(item))}</td>
+                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(amount(item))}</td>
                           </tr>
                         );
                       });
@@ -1390,12 +1551,12 @@ function EstimateForm({
       </div>
     )}
 
-    {/* 커스텀 견적 불러오기 모달 */}
+    {/* 템플릿 불러오기 모달 */}
     {customTemplateModalOpen && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
         <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
           <div className="border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-800">커스텀 견적 불러오기</h3>
+            <h3 className="text-sm font-semibold text-gray-800">템플릿 불러오기</h3>
             <button type="button" onClick={() => setCustomTemplateModalOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
           </div>
           <div className="p-4">
@@ -1482,13 +1643,14 @@ type Consultation = {
   customerName?: string;
   contact?: string;
   address?: string;
+  pic?: string;
   estimateMeetingAt?: string;
 };
 
 export default function EstimatePage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [formOpen, setFormOpen] = useState<"new" | number | null>(null);
-  const [consultationPreFill, setConsultationPreFill] = useState<{ customerName: string; contact: string; address: string; consultationId: number } | null>(null);
+  const [consultationPreFill, setConsultationPreFill] = useState<{ customerName: string; contact: string; address: string; consultationId: number; pic?: string } | null>(null);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loadingConsultations, setLoadingConsultations] = useState(false);
@@ -1520,7 +1682,8 @@ export default function EstimatePage() {
               customerName: c.customerName ?? "", 
               contact: c.contact ?? "", 
               address: c.address ?? "",
-              consultationId: c.id
+              consultationId: c.id,
+              pic: (c as { pic?: string }).pic ?? "",
             });
             setFormOpen("new");
           }
@@ -1551,6 +1714,7 @@ export default function EstimatePage() {
       contact: c.contact ?? "",
       address: c.address ?? "",
       consultationId: c.id,
+      pic: c.pic ?? "",
     });
     setConsultationModalOpen(false);
     setFormOpen("new");
