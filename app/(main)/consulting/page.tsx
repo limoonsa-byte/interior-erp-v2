@@ -86,7 +86,8 @@ function DetailModal({
   /** 관리에서 설정한 담당자 목록 */
   picList: PicItem[];
   onClose: () => void;
-  onSaved: () => void;
+  /** 저장 후 목록 갱신. Promise를 반환하면 완료 후 모달을 닫음 */
+  onSaved: () => void | Promise<void>;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
   const dateInputRef = useRef<HTMLInputElement | null>(null);
@@ -234,8 +235,9 @@ function DetailModal({
           const data = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
           alert(isEdit ? "상담이 수정되었습니다." : "상담이 등록되었습니다.");
+          const saved = onSaved();
+          if (saved && typeof (saved as Promise<unknown>).then === "function") await saved;
           onClose();
-          onSaved();
         })
         .catch((e) => {
           alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
@@ -875,12 +877,11 @@ export default function ConsultingPage() {
     });
   }, [consultations, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
 
-  const loadFromDb = () => {
-    fetch("/api/consultations")
+  const loadFromDb = (): Promise<void> => {
+    return fetch("/api/consultations")
       .then((res) => res.json())
       .then((data) => {
         if (!Array.isArray(data)) return;
-        // DB 데이터로 항상 갱신 (수정 후에도 메인 목록에 반영)
         setConsultations(
           data.map((item: Record<string, unknown>) => ({
             id: Number(item.id),
