@@ -1121,7 +1121,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.materialUnitPrice === 0 || item.materialUnitPrice === undefined || item.materialUnitPrice === "" ? "" : String(item.materialUnitPrice)}
+                          value={item.materialUnitPrice === 0 || item.materialUnitPrice === undefined ? "" : String(item.materialUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = e.currentTarget.value.replace(/\D/g, "");
                             updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
@@ -1141,7 +1141,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.laborUnitPrice === 0 || item.laborUnitPrice === undefined || item.laborUnitPrice === "" ? "" : String(item.laborUnitPrice)}
+                          value={item.laborUnitPrice === 0 || item.laborUnitPrice === undefined ? "" : String(item.laborUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = e.currentTarget.value.replace(/\D/g, "");
                             updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
