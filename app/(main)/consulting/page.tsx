@@ -901,6 +901,12 @@ export default function ConsultingPage() {
             budget: item.budget != null ? String(item.budget) : undefined,
             completionYear: item.completionYear != null ? String(item.completionYear) : undefined,
             date: "",
+            consultedDone: Boolean(item.consultedDone),
+            siteMeasurementDone: Boolean(item.siteMeasurementDone),
+            estimateMeetingDone: Boolean(item.estimateMeetingDone),
+            materialMeetingDone: Boolean(item.materialMeetingDone),
+            contractMeetingDone: Boolean(item.contractMeetingDone),
+            designMeetingDone: Boolean(item.designMeetingDone),
           }))
         );
       })
