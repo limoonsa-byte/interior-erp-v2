@@ -167,7 +167,7 @@ export default function MasterAdminPage() {
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-base font-semibold text-gray-800">기본 견적 템플릿 등록</h2>
         <p className="mb-4 text-sm text-gray-600">
-          제목을 입력하고, 견적서 형식의 엑셀 파일을 선택해 저장하면 모든 회사가 견적서 작성 → 커스텀 견적 불러오기에서 &quot;기본 템플릿&quot;으로 불러올 수 있습니다. (견적서 작성 화면에서 엑셀 저장으로 내보낸 파일을 그대로 사용하면 됩니다.)
+          제목을 입력하고, 견적서 형식의 엑셀 파일을 선택해 저장하면 모든 회사가 견적서 작성 → 템플릿 불러오기에서 &quot;기본 템플릿&quot;으로 불러올 수 있습니다. (견적서 작성 화면에서 엑셀 저장으로 내보낸 파일을 그대로 사용하면 됩니다.)
         </p>
         <div className="space-y-3">
           <div>

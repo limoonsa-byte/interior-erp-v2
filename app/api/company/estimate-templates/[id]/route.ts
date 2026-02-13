@@ -33,19 +33,26 @@ export async function PATCH(
     const body = await request.json();
     const items = Array.isArray(body.items) ? JSON.stringify(body.items) : null;
     const processOrder = Array.isArray(body.processOrder) ? JSON.stringify(body.processOrder) : null;
+    const hasNote = Object.prototype.hasOwnProperty.call(body, "note");
+    const note = hasNote ? (typeof body.note === "string" ? body.note : null) : null;
 
-    if (items == null && processOrder == null) {
-      return NextResponse.json({ error: "items 또는 processOrder가 필요합니다." }, { status: 400 });
+    if (items == null && processOrder == null && !hasNote) {
+      return NextResponse.json({ error: "items, processOrder 또는 note 중 하나는 필요합니다." }, { status: 400 });
     }
 
-    const result = await sql`
-      UPDATE company_estimate_templates
-      SET
-        items = COALESCE(${items}, items),
-        process_order = COALESCE(${processOrder}, process_order)
-      WHERE id = ${templateId} AND company_id = ${company.id}
-      RETURNING id
-    `;
+    const result = hasNote
+      ? await sql`
+          UPDATE company_estimate_templates
+          SET items = COALESCE(${items}, items), process_order = COALESCE(${processOrder}, process_order), note = ${note}
+          WHERE id = ${templateId} AND company_id = ${company.id}
+          RETURNING id
+        `
+      : await sql`
+          UPDATE company_estimate_templates
+          SET items = COALESCE(${items}, items), process_order = COALESCE(${processOrder}, process_order)
+          WHERE id = ${templateId} AND company_id = ${company.id}
+          RETURNING id
+        `;
 
     if (result.rows.length === 0) {
       return NextResponse.json(

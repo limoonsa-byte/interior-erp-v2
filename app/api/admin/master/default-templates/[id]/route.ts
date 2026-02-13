@@ -35,6 +35,8 @@ export async function PATCH(
     const title = typeof body.title === "string" ? body.title.trim() : undefined;
     const items = Array.isArray(body.items) ? JSON.stringify(body.items) : undefined;
     const processOrderJson = Array.isArray(body.processOrder) ? JSON.stringify(body.processOrder) : undefined;
+    const hasNote = Object.prototype.hasOwnProperty.call(body, "note");
+    const note = hasNote ? (typeof body.note === "string" ? body.note : null) : undefined;
 
     if (title !== undefined) {
       await sql`UPDATE master_default_estimate_templates SET title = ${title} WHERE id = ${id}`;
@@ -44,6 +46,9 @@ export async function PATCH(
     }
     if (processOrderJson !== undefined) {
       await sql`UPDATE master_default_estimate_templates SET process_order = ${processOrderJson} WHERE id = ${id}`;
+    }
+    if (hasNote) {
+      await sql`UPDATE master_default_estimate_templates SET note = ${note} WHERE id = ${id}`;
     }
     return NextResponse.json({ message: "수정되었습니다." }, { status: 200 });
   } catch (error) {

@@ -44,6 +44,14 @@ body {
     size: portrait;
     margin: 0;
   }
+  /* 인쇄 시 배경색·글자색 유지 (인쇄 대화상자에서 "배경 그래픽" 켜야 함) */
+  #estimate-preview-print,
+  #estimate-preview-print *,
+  #estimate-print-only,
+  #estimate-print-only * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }
 
 /* 인쇄용 복사본은 화면에서는 숨김 */
@@ -148,7 +156,28 @@ body {
     display: block;
   }
   #estimate-print-only .estimate-preview-format2 .bg-gray-200 {
-    background: #e5e7eb;
+    background: #e5e7eb !important;
+  }
+  /* 메인 견적 공사금액 조정계 / VAT 포함금액 배경색 인쇄 유지 */
+  #estimate-preview-print .bg-amber-100,
+  #estimate-print-only .bg-amber-100 {
+    background: #fef3c7 !important;
+  }
+  #estimate-preview-print .bg-sky-100,
+  #estimate-print-only .bg-sky-100 {
+    background: #e0f2fe !important;
+  }
+  #estimate-preview-print .bg-gray-50,
+  #estimate-print-only .bg-gray-50 {
+    background: #f9fafb !important;
+  }
+  #estimate-preview-print .bg-gray-100,
+  #estimate-print-only .bg-gray-100 {
+    background: #f3f4f6 !important;
+  }
+  #estimate-preview-print .text-red-600,
+  #estimate-print-only .text-red-600 {
+    color: #dc2626 !important;
   }
   #estimate-print-only .estimate-preview-dl {
     display: block !important;

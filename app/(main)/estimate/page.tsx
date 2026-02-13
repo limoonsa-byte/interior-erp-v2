@@ -122,6 +122,24 @@ function amount(item: EstimateItem): number {
   return materialAmount(item) + laborAmount(item);
 }
 
+/** 미리보기/인쇄용 *특이사항 블록 (note에 내용이 있을 때만 표시, 없으면 아무것도 안 함) */
+function EstimatePreviewSpecialNotes({ note }: { note: string }) {
+  const trimmed = note.trim();
+  if (!trimmed) return null;
+  const lines = trimmed.split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length === 0) return null;
+  return (
+    <div className="mt-4 pt-3 border-t-2 border-gray-800">
+      <p className="font-bold text-gray-900 mb-2">*특이사항</p>
+      <ul className="list-none space-y-1 text-red-600 text-xs">
+        {lines.map((line, i) => (
+          <li key={i} className="flex gap-2"><span className="text-gray-400">○</span> {line.trim()}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** 스마트 현장관리 페이로드 → 견적 항목으로 변환 (치수/문 개수/방면적 등). 추후 도면 보관함 연동 시 사용 */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateItem[] {
@@ -454,6 +472,7 @@ function EstimateForm({
       });
       if (order.length > 0) setProcessOrder(order);
     }
+    setNote(typeof (t as { note?: string }).note === "string" ? (t as { note?: string }).note ?? "" : "");
     setCustomTemplateModalOpen(false);
   };
 
@@ -483,6 +502,7 @@ function EstimateForm({
         note: it.note,
       })),
       processOrder,
+      note,
     };
     if (saveTemplateTargetId != null) {
       setSaveTemplateLoading(true);
@@ -511,7 +531,7 @@ function EstimateForm({
       fetch("/api/company/estimate-templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, title }),
+        body: JSON.stringify({ ...payload, title, note }),
       })
         .then((res) => {
           if (res.ok) {
@@ -563,7 +583,7 @@ function EstimateForm({
         ["주소", address || "", "", "", "", "", "", ""],
         ["제목", title || "", "", "", "", "", "", ""],
         ["견적일자", estimateDate || "", "", "", "", "", "", ""],
-        ["비고", note || "", "", "", "", "", "", ""],
+        ["특이사항", note || "", "", "", "", "", "", ""],
         ["", "", "", "", "", "", "", ""],
         ["no", "품목", "규격", "단위", "재료비단가", "노무비단가", "비고", "행구분"],
       ];
@@ -915,13 +935,12 @@ function EstimateForm({
           />
         </div>
         <div className="sm:col-span-2">
-          <label className="mb-1 block text-sm font-medium text-gray-700">비고</label>
-          <input
-            type="text"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+<label className="mb-1 block text-sm font-medium text-gray-700">특이사항 (비고)</label>
+            <textarea
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[80px]"
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="비고"
+            placeholder="인쇄·미리보기 *특이사항에 표시됩니다. 여러 줄 입력 가능."
           />
         </div>
       </div>
@@ -929,12 +948,8 @@ function EstimateForm({
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
-          <p className="mt-0.5 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
-          <p className="mt-1 text-xs text-gray-500">
-            &quot;도면 보관함에서 불러오기&quot;로 한 건을 선택하면 방·거실·방면적·문 개수 등이 상단 참조 표에만 표시됩니다. (항목에는 자동 입력되지 않습니다.)
-          </p>
-          <p className="mt-1 text-xs text-amber-700">
-            ※스마트현장관리 앱설치필수
+          <p className="mt-1 text-xs font-semibold text-amber-700">
+            ※도면보관함 불러오기는 스마트현장관리 앱설치필수
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={addNewSection} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
@@ -952,14 +967,14 @@ function EstimateForm({
               onClick={openSmartFieldModal}
               className="min-h-[44px] rounded-lg border border-emerald-600 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100"
             >
-              도면 보관함에서 불러오기
+              도면보관함 불러오기
             </button>
             <button
               type="button"
               onClick={openCustomTemplateModal}
               className="min-h-[44px] rounded-lg border border-blue-600 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
             >
-              커스텀 견적 불러오기
+              템플릿 불러오기
             </button>
             <button
               type="button"
@@ -1048,7 +1063,7 @@ function EstimateForm({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" role="dialog" aria-modal="true">
           <div className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">도면 보관함에서 불러오기</h3>
+              <h3 className="text-sm font-semibold text-gray-800">도면보관함 불러오기</h3>
               <button type="button" onClick={() => setSmartFieldModalOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
             </div>
             <div className="p-4">
@@ -1057,7 +1072,7 @@ function EstimateForm({
               ) : !smartFieldList ? (
                 <div className="text-center py-8">
                   <p className="text-sm text-gray-500 mb-3">도면 API URL이 설정되지 않았습니다.</p>
-                  <p className="text-xs text-gray-400">관리 페이지에서 도면 보관함 API URL을 먼저 설정해 주세요.</p>
+                  <p className="text-xs text-gray-400">관리 페이지에서 도면보관함 API URL을 먼저 설정해 주세요.</p>
                 </div>
               ) : smartFieldList.length === 0 ? (
                 <p className="text-center text-sm text-gray-500 py-8">저장된 도면이 없습니다.</p>
@@ -1188,6 +1203,13 @@ function EstimateForm({
                   </tr>
                 );
                 if (isCollapsed) return;
+                let groupMat = 0;
+                let groupLabor = 0;
+                visibleIndices.forEach((idx) => {
+                  groupMat += materialAmount(items[idx]);
+                  groupLabor += laborAmount(items[idx]);
+                });
+                const groupTotal = groupMat + groupLabor;
                 visibleIndices.forEach((origIdx, subNo) => {
                   const item = items[origIdx];
                   const noLabel = `${subNo + 1}.`;
@@ -1350,6 +1372,20 @@ function EstimateForm({
                     </tr>
                   );
                 });
+                rows.push(
+                  <tr key={`sub-${grp.indices[0]}`} className="border-b border-gray-200 bg-gray-50 font-medium">
+                    <td className="p-2" />
+                    <td className="p-2 text-gray-800" colSpan={4}>
+                      소 계
+                    </td>
+                    <td className="p-2" />
+                    <td className="p-2 text-right">{formatNumber(groupMat)}</td>
+                    <td className="p-2" />
+                    <td className="p-2 text-right">{formatNumber(groupLabor)}</td>
+                    <td className="p-2 text-right">{formatNumber(groupTotal)}</td>
+                    <td className="p-2" colSpan={2} />
+                  </tr>
+                );
               });
               return rows;
             })()}
@@ -1391,113 +1427,211 @@ function EstimateForm({
               <button type="button" onClick={() => setPreviewOpen(false)} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
                 닫기
               </button>
-              <span className="text-xs text-gray-500">인쇄 대화상자에서 &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
+              <span className="text-xs text-gray-500">인쇄 시 색상이 나오게 하려면 인쇄 대화상자에서 &quot;배경 그래픽&quot;을 켜 주세요. &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
             </div>
           </div>
           <div className="estimate-preview-print-wrap flex-1 min-h-0 overflow-auto p-4 flex justify-center" id="estimate-preview-print" ref={previewPrintRef}>
             <div className="mx-auto max-w-3xl w-full min-w-0 shrink-0 text-sm estimate-preview-body">
-              {/* 2번 양식: 제목 바 + 좌우 2단 */}
-              <div className="estimate-preview-format2">
-                <div className="mb-3 bg-gray-200 py-2 text-center text-base font-bold text-gray-800">견 적 서</div>
-                <div className="mb-3 flex flex-wrap justify-between gap-x-8 gap-y-2">
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <p className="text-gray-800">공 사 명 : {title || "-"}</p>
-                    <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(subtotal)}</p>
-                    <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
-                  </div>
-                  <div className="min-w-0 flex-1 space-y-1 text-right">
-                    <p className="text-gray-800">회 사 명: {companyName || "-"}</p>
-                    <p className="text-gray-800">담당자 전화번호: {picList.find((p) => p.name === consultationPic)?.phone || "-"}</p>
-                    <p className="text-gray-800">담 당 자: {consultationPic || "-"}</p>
-                  </div>
-                </div>
-                <div className="mb-3 border-t border-gray-200 pt-3 space-y-1 text-gray-700">
-                  <p>고객명 : {customerName || "-"}</p>
-                  <p>고객전화번호 : {contact || "-"}</p>
-                  <p>주소: {address || "-"}</p>
-                </div>
-              </div>
-              {note && <p className="mb-3 text-gray-600">비고: {note}</p>}
-              <table className="estimate-preview-table w-full border-collapse border border-gray-300 text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 p-1.5 text-left">No</th>
-                    <th className="border border-gray-300 p-1.5 text-left estimate-preview-item-col">품목</th>
-                    <th className="border border-gray-300 p-1.5 text-left">규격</th>
-                    <th className="border border-gray-300 p-1.5 text-left">단위</th>
-                    <th className="border border-gray-300 p-1.5 text-right">수량</th>
-                    <th className="border border-gray-300 p-1.5 text-right">재료비 단가</th>
-                    <th className="border border-gray-300 p-1.5 text-right">재료비 금액</th>
-                    <th className="border border-gray-300 p-1.5 text-right">노무비 단가</th>
-                    <th className="border border-gray-300 p-1.5 text-right">노무비 금액</th>
-                    <th className="border border-gray-300 p-1.5 text-right">금액</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
-                    const sortedIndices = items
-                      .map((_, i) => i)
-                      .sort((a, b) => {
-                        const pa = items[a].processGroup ?? "";
-                        const pb = items[b].processGroup ?? "";
-                        const ia = orderMap.get(pa) ?? processOrder.length;
-                        const ib = orderMap.get(pb) ?? processOrder.length;
-                        if (ia !== ib) return ia - ib;
-                        return a - b;
-                      });
-                    const groups: { name: string; indices: number[] }[] = [];
-                    let currentName = "";
-                    let currentIndices: number[] = [];
-                    sortedIndices.forEach((idx) => {
-                      const name = items[idx].processGroup ?? "";
-                      if (name !== currentName) {
-                        if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
-                        currentName = name;
-                        currentIndices = [idx];
-                      } else {
-                        currentIndices.push(idx);
-                      }
-                    });
+              {(() => {
+                const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
+                const sortedIndices = items
+                  .map((_, i) => i)
+                  .sort((a, b) => {
+                    const pa = items[a].processGroup ?? "";
+                    const pb = items[b].processGroup ?? "";
+                    const ia = orderMap.get(pa) ?? processOrder.length;
+                    const ib = orderMap.get(pb) ?? processOrder.length;
+                    if (ia !== ib) return ia - ib;
+                    return a - b;
+                  });
+                const groups: { name: string; indices: number[] }[] = [];
+                let currentName = "";
+                let currentIndices: number[] = [];
+                sortedIndices.forEach((idx) => {
+                  const name = items[idx].processGroup ?? "";
+                  if (name !== currentName) {
                     if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
-                    const rows: React.ReactNode[] = [];
-                    groups.forEach((grp) => {
-                      const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
-                      if (visibleIndices.length === 0) return;
-                      const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
-                      if (displayName) {
-                        rows.push(
-                          <tr key={`ph-${grp.indices[0]}`} className="bg-gray-100 font-semibold">
-                            <td colSpan={10} className="border border-gray-300 p-1.5">{displayName}</td>
+                    currentName = name;
+                    currentIndices = [idx];
+                  } else {
+                    currentIndices.push(idx);
+                  }
+                });
+                if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
+                const processRows: { name: string; amount: number }[] = [];
+                groups.forEach((grp) => {
+                  const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
+                  if (visibleIndices.length === 0) return;
+                  const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
+                  if (!displayName) return;
+                  let groupTotal = 0;
+                  visibleIndices.forEach((idx) => { groupTotal += amount(items[idx]); });
+                  processRows.push({ name: displayName, amount: groupTotal });
+                });
+                const mainSubtotal = processRows.reduce((s, r) => s + r.amount, 0);
+                const overhead = Math.floor(mainSubtotal * 0.05);
+                const profit = Math.floor(mainSubtotal * 0.1);
+                const adjustedAmount = Math.floor((mainSubtotal + overhead + profit) / 10000) * 10000;
+                const vatIncluded = Math.floor((adjustedAmount * 1.1) / 10000) * 10000;
+                return (
+                  <>
+                    {/* 1번: 상단 - 견적서 제목 + 공사/회사/고객 정보 */}
+                    <div className="estimate-preview-format2">
+                      <div className="mb-3 bg-gray-200 py-2 text-center text-base font-bold text-gray-800">견 적 서</div>
+                      <div className="mb-3 flex flex-wrap justify-between gap-x-8 gap-y-2">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <p className="text-gray-800">공 사 명 : {title || "-"}</p>
+                          <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(adjustedAmount)}</p>
+                          <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1 text-right">
+                          <p className="text-gray-800">회 사 명: {companyName || "-"}</p>
+                          <p className="text-gray-800">담당자 전화번호: {picList.find((p) => p.name === consultationPic)?.phone || "-"}</p>
+                          <p className="text-gray-800">담 당 자: {consultationPic || "-"}</p>
+                        </div>
+                      </div>
+                      <div className="mb-3 border-t border-gray-200 pt-3 space-y-1 text-gray-700">
+                        <p>고객명 : {customerName || "-"}</p>
+                        <p>고객전화번호 : {contact || "-"}</p>
+                        <p>주소: {address || "-"}</p>
+                      </div>
+                    </div>
+
+                    {/* 2번: 메인 견적 - 공정별 요약표 + 소계/공과잡비/이윤/조정계/VAT/특이사항 */}
+                    <table className="estimate-preview-table w-full border-collapse border border-gray-300 text-xs mb-2">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-300 p-1.5 text-left w-12">순번</th>
+                          <th className="border border-gray-300 p-1.5 text-left">품목</th>
+                          <th className="border border-gray-300 p-1.5 text-center w-16">단위</th>
+                          <th className="border border-gray-300 p-1.5 text-right w-16">수량</th>
+                          <th className="border border-gray-300 p-1.5 text-right">금액</th>
+                          <th className="border border-gray-300 p-1.5 text-left">비고</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {processRows.map((row, i) => (
+                          <tr key={i}>
+                            <td className="border border-gray-300 p-1.5">{i + 1}</td>
+                            <td className="border border-gray-300 p-1.5">{row.name}</td>
+                            <td className="border border-gray-300 p-1.5 text-center">식</td>
+                            <td className="border border-gray-300 p-1.5 text-right">1</td>
+                            <td className="border border-gray-300 p-1.5 text-right tabular-nums">{formatNumber(row.amount)}</td>
+                            <td className="border border-gray-300 p-1.5" />
                           </tr>
-                        );
-                      }
-                      visibleIndices.forEach((origIdx, subNo) => {
-                        const item = items[origIdx];
-                        rows.push(
-                          <tr key={origIdx}>
-                            <td className="border border-gray-300 p-1.5">{subNo + 1}</td>
-                            <td className="border border-gray-300 p-1.5 estimate-preview-item-col">{item.category ?? ""}</td>
-                            <td className="border border-gray-300 p-1.5">{item.spec ?? ""}</td>
-                            <td className="border border-gray-300 p-1.5">{item.unit ?? ""}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{item.qty ?? ""}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.materialUnitPrice ?? 0) || 0)}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(materialAmount(item))}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.laborUnitPrice ?? 0) || 0)}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(laborAmount(item))}</td>
-                            <td className="border border-gray-300 p-1.5 text-right">{formatNumber(amount(item))}</td>
+                        ))}
+                        <tr>
+                          <td className="border border-gray-300 p-1.5"></td>
+                          <td className="border border-gray-300 p-1.5 text-gray-800">소계</td>
+                          <td className="border border-gray-300 p-1.5"></td>
+                          <td className="border border-gray-300 p-1.5"></td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(mainSubtotal)}</td>
+                          <td className="border border-gray-300 p-1.5" />
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 p-1.5"></td>
+                          <td className="border border-gray-300 p-1.5 text-gray-800">공과잡비</td>
+                          <td className="border border-gray-300 p-1.5 text-center">%</td>
+                          <td className="border border-gray-300 p-1.5 text-right">5</td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(overhead)}</td>
+                          <td className="border border-gray-300 p-1.5" />
+                        </tr>
+                        <tr>
+                          <td className="border border-gray-300 p-1.5"></td>
+                          <td className="border border-gray-300 p-1.5 text-gray-800">이윤</td>
+                          <td className="border border-gray-300 p-1.5 text-center">%</td>
+                          <td className="border border-gray-300 p-1.5 text-right">10</td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(profit)}</td>
+                          <td className="border border-gray-300 p-1.5" />
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="border-t border-gray-300 mt-2 pt-2 space-y-1">
+                      <div className="flex justify-between items-center bg-amber-100 py-1.5 px-2 rounded">
+                        <span className="font-bold text-gray-800">공사금액 조정계</span>
+                        <span className="font-bold text-gray-800">{formatNumber(adjustedAmount)} (단위절삭)</span>
+                      </div>
+                      <div className="flex justify-between items-center bg-sky-100 py-1.5 px-2 rounded">
+                        <span className="font-bold text-gray-800">VAT 포함금액</span>
+                        <span className="font-bold text-gray-800">{formatNumber(vatIncluded)} (단위절삭)</span>
+                      </div>
+                    </div>
+                    <EstimatePreviewSpecialNotes note={note} />
+
+                    {/* 2페이지부터: 세부견적 (항목별 상세 테이블) */}
+                    <div className="mt-8 break-before-page" style={{ pageBreakBefore: "always" }}>
+                      <p className="text-base font-bold text-gray-900 mb-2">세부견적</p>
+                      <table className="estimate-preview-table w-full border-collapse border border-gray-300 text-xs">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-300 p-1.5 text-left">No</th>
+                            <th className="border border-gray-300 p-1.5 text-left estimate-preview-item-col">품목</th>
+                            <th className="border border-gray-300 p-1.5 text-left">규격</th>
+                            <th className="border border-gray-300 p-1.5 text-left">단위</th>
+                            <th className="border border-gray-300 p-1.5 text-right">수량</th>
+                            <th className="border border-gray-300 p-1.5 text-right">재료비 단가</th>
+                            <th className="border border-gray-300 p-1.5 text-right">재료비 금액</th>
+                            <th className="border border-gray-300 p-1.5 text-right">노무비 단가</th>
+                            <th className="border border-gray-300 p-1.5 text-right">노무비 금액</th>
+                            <th className="border border-gray-300 p-1.5 text-right">금액</th>
                           </tr>
-                        );
-                      });
-                    });
-                    return rows;
-                  })()}
-                </tbody>
-              </table>
-              <p className="mt-4 text-xs text-amber-700">※스마트현장관리 앱설치필수</p>
-              <div className="mt-4 border-t border-gray-200 pt-3 text-right">
-                소계: <strong>{formatNumber(subtotal)}</strong>원 · 부가세(10%): <strong>{formatNumber(vat)}</strong>원 · 합계: <strong>{formatNumber(total)}</strong>원
-              </div>
+                        </thead>
+                        <tbody>
+                          {groups.map((grp) => {
+                            const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
+                            if (visibleIndices.length === 0) return null;
+                            const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
+                            let groupMat = 0;
+                            let groupLabor = 0;
+                            visibleIndices.forEach((idx) => {
+                              groupMat += materialAmount(items[idx]);
+                              groupLabor += laborAmount(items[idx]);
+                            });
+                            const groupTotal = groupMat + groupLabor;
+                            const rows: React.ReactNode[] = [];
+                            if (displayName) {
+                              rows.push(
+                                <tr key={`dh-${grp.indices[0]}`} className="bg-gray-100 font-semibold">
+                                  <td colSpan={10} className="border border-gray-300 p-1.5">{displayName}</td>
+                                </tr>
+                              );
+                            }
+                            visibleIndices.forEach((origIdx, subNo) => {
+                              const item = items[origIdx];
+                              rows.push(
+                                <tr key={origIdx}>
+                                  <td className="border border-gray-300 p-1.5">{subNo + 1}</td>
+                                  <td className="border border-gray-300 p-1.5 estimate-preview-item-col">{item.category ?? ""}</td>
+                                  <td className="border border-gray-300 p-1.5">{item.spec ?? ""}</td>
+                                  <td className="border border-gray-300 p-1.5">{item.unit ?? ""}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{item.qty ?? ""}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.materialUnitPrice ?? 0) || 0)}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{formatNumber(materialAmount(item))}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{formatNumber(Number(item.laborUnitPrice ?? 0) || 0)}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{formatNumber(laborAmount(item))}</td>
+                                  <td className="border border-gray-300 p-1.5 text-right">{formatNumber(amount(item))}</td>
+                                </tr>
+                              );
+                            });
+                            rows.push(
+                              <tr key={`dsub-${grp.indices[0]}`} className="bg-gray-50 font-semibold">
+                                <td className="border border-gray-300 p-1.5" />
+                                <td className="border border-gray-300 p-1.5" colSpan={4}>소 계</td>
+                                <td className="border border-gray-300 p-1.5" />
+                                <td className="border border-gray-300 p-1.5 text-right">{formatNumber(groupMat)}</td>
+                                <td className="border border-gray-300 p-1.5" />
+                                <td className="border border-gray-300 p-1.5 text-right">{formatNumber(groupLabor)}</td>
+                                <td className="border border-gray-300 p-1.5 text-right">{formatNumber(groupTotal)}</td>
+                              </tr>
+                            );
+                            return <React.Fragment key={grp.indices[0]}>{rows}</React.Fragment>;
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -1881,15 +2015,16 @@ export default function EstimatePage() {
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                         <td className="p-2 sm:p-3">{est.title || "-"}</td>
                         <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
-                        <td className="p-2 sm:p-3">
-                          <div className="flex flex-wrap gap-2">
+                        <td className="whitespace-nowrap p-2 sm:p-3 align-middle">
+                          <div className="flex items-center gap-2">
                             <button
                               type="button"
                               onClick={() => setFormOpen(est.id)}
-                              className="min-h-[40px] min-w-[44px] rounded px-2 text-blue-600 hover:underline active:bg-blue-50"
+                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
                             >
                               수정
                             </button>
+                            <span className="text-gray-300">|</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -1898,7 +2033,7 @@ export default function EstimatePage() {
                                   .then((res) => res.ok && load())
                                   .catch(() => alert("삭제 실패"));
                               }}
-                              className="min-h-[40px] min-w-[44px] rounded px-2 text-red-500 hover:underline active:bg-red-50"
+                              className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
                             >
                               삭제
                             </button>

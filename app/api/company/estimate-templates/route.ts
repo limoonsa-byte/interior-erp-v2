@@ -22,38 +22,41 @@ export async function GET() {
     }
 
     const result = await sql`
-      SELECT id, title, items, process_order, created_at
+      SELECT id, title, items, process_order, note, created_at
       FROM company_estimate_templates
       WHERE company_id = ${company.id}
       ORDER BY created_at DESC
     `;
 
-    const list = result.rows.map((row) => {
+    function rowToTemplate(row: Record<string, unknown>) {
+      const r = row as { id: number; title: string; items: string; process_order: string | null; note: string | null; created_at: string };
       let items: unknown[] = [];
-      if ((row as { items: string }).items != null && String((row as { items: string }).items).trim() !== "") {
+      if (r.items != null && String(r.items).trim() !== "") {
         try {
-          items = JSON.parse(String((row as { items: string }).items)) as unknown[];
+          items = JSON.parse(String(r.items)) as unknown[];
         } catch {
           items = [];
         }
       }
       let processOrder: string[] | undefined;
-      const po = (row as { process_order: string | null }).process_order;
-      if (po != null && String(po).trim() !== "") {
+      if (r.process_order != null && String(r.process_order).trim() !== "") {
         try {
-          processOrder = JSON.parse(String(po)) as string[];
+          processOrder = JSON.parse(String(r.process_order)) as string[];
         } catch {
           processOrder = undefined;
         }
       }
       return {
-        id: Number((row as { id: number }).id),
-        title: String((row as { title: string }).title),
+        id: Number(r.id),
+        title: String(r.title),
         items,
         processOrder,
-        createdAt: (row as { created_at: string }).created_at != null ? String((row as { created_at: string }).created_at) : undefined,
+        note: r.note != null ? String(r.note) : undefined,
+        createdAt: r.created_at != null ? String(r.created_at) : undefined,
       };
-    });
+    }
+
+    const list = result.rows.map(rowToTemplate);
 
     return NextResponse.json(list);
   } catch (error) {
@@ -85,10 +88,11 @@ export async function POST(request: Request) {
 
     const items = Array.isArray(body.items) ? JSON.stringify(body.items) : "[]";
     const processOrderJson = Array.isArray(body.processOrder) ? JSON.stringify(body.processOrder) : "[]";
+    const note = typeof body.note === "string" ? body.note : null;
 
     await sql`
-      INSERT INTO company_estimate_templates (company_id, title, items, process_order)
-      VALUES (${company.id}, ${title}, ${items}, ${processOrderJson})
+      INSERT INTO company_estimate_templates (company_id, title, items, process_order, note)
+      VALUES (${company.id}, ${title}, ${items}, ${processOrderJson}, ${note})
     `;
 
     return NextResponse.json({ message: "저장되었습니다." }, { status: 200 });

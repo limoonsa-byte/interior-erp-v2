@@ -346,7 +346,7 @@ export default function AdminPage() {
             onClick={() => setModal("drawing-api")}
             className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
-            도면 보관함 API 설정
+            도면보관함 API 설정
           </button>
         </li>
         <li>
@@ -448,12 +448,12 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 도면 보관함 API 설정 모달 */}
+      {/* 도면보관함 API 설정 모달 */}
       {modal === "drawing-api" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800">도면 보관함 API 설정</h2>
+              <h2 className="text-base font-semibold text-gray-800">도면보관함 API 설정</h2>
               <button
                 type="button"
                 onClick={() => setModal(null)}
@@ -464,7 +464,7 @@ export default function AdminPage() {
               </button>
             </div>
             <p className="mb-3 text-sm text-gray-600">
-              Google Apps Script 웹앱 URL을 입력하세요. 견적서 작성 시 도면 보관함에서 불러오기 기능에 사용됩니다.
+              Google Apps Script 웹앱 URL을 입력하세요. 견적서 작성 시 도면보관함 불러오기 기능에 사용됩니다.
             </p>
             <div className="mb-3">
               <label className="mb-1 block text-xs font-medium text-gray-600">API URL (action=list 포함)</label>
@@ -520,7 +520,7 @@ export default function AdminPage() {
               </button>
             </div>
             <p className="mb-4 text-sm text-gray-600">
-              커스텀 견적 제목을 정해서 저장해 두면, 견적서 작성 화면에서 &quot;커스텀 견적 불러오기&quot;로 불러올 수 있습니다. 여기서는 제목만 등록하고, 견적서 작성에서 항목을 채운 뒤 &quot;템플릿으로 저장&quot;하면 해당 제목의 템플릿에 내용이 저장됩니다.
+              커스텀 견적 제목을 정해서 저장해 두면, 견적서 작성 화면에서 &quot;템플릿 불러오기&quot;로 불러올 수 있습니다. 여기서는 제목만 등록하고, 견적서 작성에서 항목을 채운 뒤 &quot;템플릿으로 저장&quot;하면 해당 제목의 템플릿에 내용이 저장됩니다.
             </p>
             <div className="mb-4 flex gap-2">
               <input

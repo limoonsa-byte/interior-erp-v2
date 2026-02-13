@@ -21,12 +21,12 @@ export async function GET() {
   }
   try {
     const result = await sql`
-      SELECT id, title, items, process_order, created_at
+      SELECT id, title, items, process_order, note, created_at
       FROM master_default_estimate_templates
       ORDER BY created_at DESC
     `;
-    const list = result.rows.map((row) => {
-      const r = row as { id: number; title: string; items: string; process_order: string | null; created_at: string };
+    function rowToTemplate(row: Record<string, unknown>) {
+      const r = row as { id: number; title: string; items: string; process_order: string | null; note: string | null; created_at: string };
       let items: unknown[] = [];
       if (r.items != null && String(r.items).trim() !== "") {
         try {
@@ -48,9 +48,11 @@ export async function GET() {
         title: String(r.title),
         items,
         processOrder,
+        note: r.note != null ? String(r.note) : undefined,
         createdAt: r.created_at != null ? String(r.created_at) : undefined,
       };
-    });
+    }
+    const list = result.rows.map(rowToTemplate);
     return NextResponse.json(list);
   } catch (error) {
     console.error("default-estimate-templates GET error:", error);

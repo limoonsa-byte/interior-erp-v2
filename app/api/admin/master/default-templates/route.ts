@@ -17,7 +17,7 @@ async function requireMaster() {
   }
 }
 
-function parseRow(row: { id: number; title: string; items: string; process_order: string | null; created_at: string }) {
+function parseRow(row: { id: number; title: string; items: string; process_order: string | null; note: string | null; created_at: string }) {
   let items: unknown[] = [];
   if (row.items != null && String(row.items).trim() !== "") {
     try {
@@ -39,6 +39,7 @@ function parseRow(row: { id: number; title: string; items: string; process_order
     title: String(row.title),
     items,
     processOrder,
+    note: row.note != null ? String(row.note) : undefined,
     createdAt: row.created_at != null ? String(row.created_at) : undefined,
   };
 }
@@ -51,7 +52,7 @@ export async function GET() {
   }
   try {
     const result = await sql`
-      SELECT id, title, items, process_order, created_at
+      SELECT id, title, items, process_order, note, created_at
       FROM master_default_estimate_templates
       ORDER BY created_at DESC
     `;
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
     }
     const itemsArr = Array.isArray(body.items) ? body.items : [];
     const processOrderArr = Array.isArray(body.processOrder) ? body.processOrder : [];
+    const note = typeof body.note === "string" ? body.note : null;
     const items = JSON.stringify(itemsArr);
     const processOrderJson = JSON.stringify(processOrderArr);
 
@@ -88,8 +90,8 @@ export async function POST(request: Request) {
     }
 
     await sql`
-      INSERT INTO master_default_estimate_templates (title, items, process_order)
-      VALUES (${title}, ${items}, ${processOrderJson})
+      INSERT INTO master_default_estimate_templates (title, items, process_order, note)
+      VALUES (${title}, ${items}, ${processOrderJson}, ${note})
     `;
     return NextResponse.json({ message: "저장되었습니다." }, { status: 200 });
   } catch (error) {
