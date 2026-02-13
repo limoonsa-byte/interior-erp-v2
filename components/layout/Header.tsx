@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Link2 } from "lucide-react";
+import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Shield, Link2 } from "lucide-react";
 import { clsx } from "clsx";
 
 /** 기본 메뉴는 메인(앱)에서 제공 */
@@ -25,6 +25,7 @@ type MenuEntry = { id?: number; href: string; label: string; icon: React.Compone
 export function Header() {
   const [open, setOpen] = useState(false);
   const [customMenu, setCustomMenu] = useState<{ id: number; label: string; href: string }[]>([]);
+  const [isMaster, setIsMaster] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -33,9 +34,19 @@ export function Header() {
       .then((data) => (Array.isArray(data) ? setCustomMenu(data) : setCustomMenu([])))
       .catch(() => setCustomMenu([]));
   }, []);
+  useEffect(() => {
+    fetch("/api/company/me")
+      .then((res) => res.json())
+      .then((data) => setIsMaster(Boolean(data.company?.isMaster)))
+      .catch(() => setIsMaster(false));
+  }, []);
 
-  const menuItems: MenuEntry[] = [
+  const baseItems: MenuEntry[] = [
     ...defaultMenuItems.map((m) => ({ ...m, id: undefined })),
+    ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield, id: undefined as number | undefined }] : []),
+  ];
+  const menuItems: MenuEntry[] = [
+    ...baseItems,
     ...customMenu.map((m) => ({
       id: m.id,
       href: m.href,

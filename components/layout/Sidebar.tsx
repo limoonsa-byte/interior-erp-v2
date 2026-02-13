@@ -15,12 +15,13 @@ import {
   BarChart3,
   UserPlus,
   Settings,
+  Shield,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
-const menuItems = [
+const baseMenuItems = [
   { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
@@ -37,6 +38,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { collapsed, setCollapsed } = useSidebar();
   const [companyLabel, setCompanyLabel] = useState("로그인 회사");
+  const [isMaster, setIsMaster] = useState(false);
 
   useEffect(() => {
     fetch("/api/company/me")
@@ -47,11 +49,18 @@ export function Sidebar() {
         } else if (data.company?.code) {
           setCompanyLabel(data.company.code);
         }
+        setIsMaster(Boolean(data.company?.isMaster));
       })
       .catch(() => {
         setCompanyLabel("로그인 회사");
+        setIsMaster(false);
       });
   }, []);
+
+  const menuItems = [
+    ...baseMenuItems,
+    ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield }] : []),
+  ];
 
   return (
     <aside

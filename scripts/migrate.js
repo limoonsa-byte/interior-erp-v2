@@ -139,6 +139,8 @@ async function migrate() {
       )
     `;
     console.log("[migrate] company_estimate_templates OK");
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS is_master BOOLEAN NOT NULL DEFAULT false`;
+    console.log("[migrate] companies.is_master OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);
