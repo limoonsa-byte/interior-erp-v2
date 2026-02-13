@@ -1498,50 +1498,58 @@ function EstimateForm({
                     </div>
 
                     {/* 2번: 메인 견적 - 공정별 요약표 + 소계/공과잡비/이윤/조정계/VAT/특이사항 */}
-                    <table className="estimate-preview-table w-full border-collapse border border-gray-300 text-xs mb-2">
+                    <table className="estimate-preview-table estimate-preview-summary-table w-full border-collapse border border-gray-300 text-xs mb-2 table-fixed">
+                      <colgroup>
+                        <col style={{ width: "7%" }} />
+                        <col style={{ width: "30%" }} />
+                        <col style={{ width: "7%" }} />
+                        <col style={{ width: "7%" }} />
+                        <col style={{ width: "30%" }} />
+                        <col style={{ width: "19%" }} />
+                      </colgroup>
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border border-gray-300 p-1.5 text-left w-12">순번</th>
-                          <th className="border border-gray-300 p-1.5 text-left">품목</th>
-                          <th className="border border-gray-300 p-1.5 text-center w-16">단위</th>
-                          <th className="border border-gray-300 p-1.5 text-right w-16">수량</th>
+                          <th className="border border-gray-300 p-1.5 text-center">순번</th>
+                          <th className="border border-gray-300 p-1.5 text-center">품목</th>
+                          <th className="border border-gray-300 p-1.5 text-center">단위</th>
+                          <th className="border border-gray-300 p-1.5 text-center">수량</th>
                           <th className="border border-gray-300 p-1.5 text-right">금액</th>
-                          <th className="border border-gray-300 p-1.5 text-left">비고</th>
+                          <th className="border border-gray-300 p-1.5 text-center">비고</th>
                         </tr>
                       </thead>
                       <tbody>
                         {processRows.map((row, i) => (
                           <tr key={i}>
-                            <td className="border border-gray-300 p-1.5">{i + 1}</td>
+                            <td className="border border-gray-300 p-1.5 text-center">{i + 1}</td>
                             <td className="border border-gray-300 p-1.5">{row.name}</td>
                             <td className="border border-gray-300 p-1.5 text-center">식</td>
-                            <td className="border border-gray-300 p-1.5 text-right">1</td>
-                            <td className="border border-gray-300 p-1.5 text-right tabular-nums">{formatNumber(row.amount)}</td>
+                            <td className="border border-gray-300 p-1.5 text-center">1</td>
+                            <td className="border border-gray-300 p-1.5 text-right tabular-nums whitespace-nowrap">{formatNumber(row.amount)}</td>
                             <td className="border border-gray-300 p-1.5" />
                           </tr>
                         ))}
                         <tr>
+                          <td className="border border-gray-300 p-1.5 text-center"></td>
+                          <td className="border border-gray-300 p-1.5 text-center text-gray-800">소     계</td>
                           <td className="border border-gray-300 p-1.5"></td>
-                          <td className="border border-gray-300 p-1.5 text-gray-800">소계</td>
                           <td className="border border-gray-300 p-1.5"></td>
-                          <td className="border border-gray-300 p-1.5"></td>
-                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(mainSubtotal)}</td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800 whitespace-nowrap">{formatNumber(mainSubtotal)}</td>
                           <td className="border border-gray-300 p-1.5" />
                         </tr>
                         <tr>
-                          <td className="border border-gray-300 p-1.5"></td>
-                          <td className="border border-gray-300 p-1.5 text-gray-800">공과잡비</td>
+                          <td className="border border-gray-300 p-1.5 text-center"></td>
+                          <td className="border border-gray-300 p-1.5 text-center text-gray-800">공과잡비</td>
                           <td className="border border-gray-300 p-1.5 text-center">%</td>
-                          <td className="border border-gray-300 p-1.5 text-right">5</td>
-                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(overhead)}</td>
+                          <td className="border border-gray-300 p-1.5 text-center">5</td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800 whitespace-nowrap">{formatNumber(overhead)}</td>
                           <td className="border border-gray-300 p-1.5" />
                         </tr>
                         <tr>
-                          <td className="border border-gray-300 p-1.5"></td>
-                          <td className="border border-gray-300 p-1.5 text-gray-800">이윤</td>
+                          <td className="border border-gray-300 p-1.5 text-center"></td>
+                          <td className="border border-gray-300 p-1.5 text-center text-gray-800">이     윤</td>
                           <td className="border border-gray-300 p-1.5 text-center">%</td>
-                          <td className="border border-gray-300 p-1.5 text-right">10</td>
-                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800">{formatNumber(profit)}</td>
+                          <td className="border border-gray-300 p-1.5 text-center">10</td>
+                          <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800 whitespace-nowrap">{formatNumber(profit)}</td>
                           <td className="border border-gray-300 p-1.5" />
                         </tr>
                       </tbody>

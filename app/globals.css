@@ -125,6 +125,32 @@ body {
 #estimate-print-only .estimate-preview-table th:nth-child(10),
 #estimate-print-only .estimate-preview-table td:nth-child(10) { width: 11%; text-align: right; min-width: 56px; }
 
+/* 메인 견적표 6열: 순번 7%, 품목 30%, 단위 7%, 수량 7%, 금액 30%, 비고 19% */
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(1),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(1),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(1),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(1) { width: 7%; text-align: center; }
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(2),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(2),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(2),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(2) { width: 30%; }
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(3),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(3),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(3),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(3) { width: 7%; text-align: center; }
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(4),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(4),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(4),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(4) { width: 7%; text-align: center; }
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(5),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(5),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(5),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(5) { width: 30%; text-align: right; }
+#estimate-preview-print .estimate-preview-summary-table th:nth-child(6),
+#estimate-preview-print .estimate-preview-summary-table td:nth-child(6),
+#estimate-print-only .estimate-preview-summary-table th:nth-child(6),
+#estimate-print-only .estimate-preview-summary-table td:nth-child(6) { width: 19%; text-align: center; }
+
 
 /* 견적서 미리보기 인쇄: body 직계로 복사한 #estimate-print-only만 보이게 → 페이지 수 정상 */
 @media print {
