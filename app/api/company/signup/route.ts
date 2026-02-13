@@ -45,6 +45,16 @@ export async function POST(request: Request) {
       `;
     }
 
+    // 가입 시 커스텀 견적 템플릿 1개 기본 제공 (견적서 작성 > 커스텀 견적 불러오기에서 사용)
+    try {
+      await sql`
+        INSERT INTO company_estimate_templates (company_id, title, items, process_order)
+        VALUES (${companyId}, '전체에 기본 양식 제공', '[]', '[]')
+      `;
+    } catch (templateErr) {
+      console.warn("기본 견적 템플릿 생성 실패(무시):", templateErr);
+    }
+
     const response = NextResponse.json(
       { companyId, code, name },
       { status: 201 }

@@ -13,6 +13,22 @@ async function getCompanyFromCookie() {
   }
 }
 
+/** DB에서 나온 estimate_date (Date 객체 또는 문자열) → YYYY-MM-DD */
+function toYYYYMMDD(val: unknown): string | undefined {
+  if (val == null) return undefined;
+  if (typeof val === "string") {
+    const s = val.trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined;
+  }
+  if (val instanceof Date && !Number.isNaN(val.getTime())) {
+    const y = val.getFullYear();
+    const m = String(val.getMonth() + 1).padStart(2, "0");
+    const d = String(val.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return undefined;
+}
+
 export async function GET() {
   try {
     const company = await getCompanyFromCookie();
@@ -45,7 +61,7 @@ export async function GET() {
         contact: row.contact ?? "",
         address: row.address ?? "",
         title: row.title ?? "",
-        estimateDate: row.estimate_date != null ? String(row.estimate_date).slice(0, 10) : undefined,
+        estimateDate: toYYYYMMDD(row.estimate_date),
         note: row.note ?? "",
         items,
         processOrder,

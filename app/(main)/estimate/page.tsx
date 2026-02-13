@@ -200,7 +200,10 @@ function EstimateForm({
   const [contact, setContact] = useState(estimate?.contact ?? consultationPreFill?.contact ?? "");
   const [address, setAddress] = useState(estimate?.address ?? consultationPreFill?.address ?? "");
   const [title, setTitle] = useState(estimate?.title ?? "");
-  const [estimateDate, setEstimateDate] = useState(estimate?.estimateDate ?? getTodayDateLocal());
+  const [estimateDate, setEstimateDate] = useState(() => {
+    const from = estimate?.estimateDate;
+    return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
+  });
   const [note, setNote] = useState(estimate?.note ?? "");
   const [items, setItems] = useState<EstimateItem[]>(
     estimate?.items?.length
@@ -311,6 +314,7 @@ function EstimateForm({
   type EstimateTemplateRow = { id: number; title: string; items: EstimateItem[]; processOrder?: string[] };
   const [customTemplateModalOpen, setCustomTemplateModalOpen] = useState(false);
   const [customTemplateList, setCustomTemplateList] = useState<EstimateTemplateRow[]>([]);
+  const [defaultTemplateList, setDefaultTemplateList] = useState<EstimateTemplateRow[]>([]);
   const [customTemplateLoading, setCustomTemplateLoading] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [saveTemplateList, setSaveTemplateList] = useState<{ id: number; title: string }[]>([]);
@@ -412,13 +416,18 @@ function EstimateForm({
   const openCustomTemplateModal = () => {
     setCustomTemplateModalOpen(true);
     setCustomTemplateLoading(true);
-    fetch("/api/company/estimate-templates")
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setCustomTemplateList(data as EstimateTemplateRow[]);
-        else setCustomTemplateList([]);
+    Promise.all([
+      fetch("/api/company/estimate-templates").then((res) => res.json()),
+      fetch("/api/company/default-estimate-templates").then((res) => res.json()),
+    ])
+      .then(([companyData, defaultData]) => {
+        setCustomTemplateList(Array.isArray(companyData) ? (companyData as EstimateTemplateRow[]) : []);
+        setDefaultTemplateList(Array.isArray(defaultData) ? (defaultData as EstimateTemplateRow[]) : []);
       })
-      .catch(() => setCustomTemplateList([]))
+      .catch(() => {
+        setCustomTemplateList([]);
+        setDefaultTemplateList([]);
+      })
       .finally(() => setCustomTemplateLoading(false));
   };
 
@@ -917,54 +926,58 @@ function EstimateForm({
         </div>
       </div>
 
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div>
+      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
           <p className="mt-0.5 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
+          <p className="mt-1 text-xs text-gray-500">
+            &quot;도면 보관함에서 불러오기&quot;로 한 건을 선택하면 방·거실·방면적·문 개수 등이 상단 참조 표에만 표시됩니다. (항목에는 자동 입력되지 않습니다.)
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            ※스마트현장관리 앱설치필수
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={addNewSection} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+              + 공정 추가
+            </button>
+            <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+              공정 순서 변경
+            </button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={openSmartFieldModal}
-            className="min-h-[44px] rounded-lg border border-emerald-600 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100"
-          >
-            도면 보관함에서 불러오기
-          </button>
-          <button
-            type="button"
-            onClick={openCustomTemplateModal}
-            className="min-h-[44px] rounded-lg border border-blue-600 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
-          >
-            커스텀 견적 불러오기
-          </button>
-          <button
-            type="button"
-            onClick={openSaveTemplateModal}
-            className="min-h-[44px] rounded-lg border border-gray-500 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
-          >
-            템플릿으로 저장
-          </button>
-          <button type="button" onClick={addNewSection} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
-            + 공정 추가
-          </button>
-          <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
-            공정 순서 변경
-          </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button
+              type="button"
+              onClick={openSmartFieldModal}
+              className="min-h-[44px] rounded-lg border border-emerald-600 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100"
+            >
+              도면 보관함에서 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={openCustomTemplateModal}
+              className="min-h-[44px] rounded-lg border border-blue-600 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
+            >
+              커스텀 견적 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={openSaveTemplateModal}
+              className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 active:bg-gray-100"
+            >
+              템플릿으로 저장
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <button type="button" onClick={exportToExcel} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+              엑셀 저장
+            </button>
+            <button type="button" onClick={() => excelInputRef.current?.click()} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+              엑셀 불러오기
+            </button>
+          </div>
         </div>
-      </div>
-      <p className="mb-2 text-xs text-gray-500">
-        &quot;도면 보관함에서 불러오기&quot;로 한 건을 선택하면 방·거실·방면적·문 개수 등이 상단 참조 표에만 표시됩니다. (항목에는 자동 입력되지 않습니다.)
-      </p>
-      <p className="mb-2 text-xs text-amber-700">
-        ※스마트현장관리 앱설치필수
-      </p>
-      <div className="mb-4 flex flex-wrap gap-2">
-        <button type="button" onClick={addNewSection} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-          + 공정 추가
-        </button>
-        <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="rounded-lg border border-gray-400 bg-white px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50">
-          공정 순서 변경
-        </button>
       </div>
 
       {/* 도면에서 불러온 참조값 표 (항목에 넣지 않고 참고용) */}
@@ -1356,12 +1369,6 @@ function EstimateForm({
         <button type="button" onClick={() => { setPreviewOpen(true); setTimeout(printEstimate, 400); }} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           견적서 출력 / PDF 저장
         </button>
-        <button type="button" onClick={exportToExcel} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
-          엑셀 저장
-        </button>
-        <button type="button" onClick={() => excelInputRef.current?.click()} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
-          엑셀 불러오기
-        </button>
         <button type="button" onClick={onCancel} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           취소
         </button>
@@ -1563,25 +1570,50 @@ function EstimateForm({
             <button type="button" onClick={() => setCustomTemplateModalOpen(false)} className="text-gray-500 hover:text-gray-700">✕</button>
           </div>
           <div className="p-4">
-            <p className="text-sm text-gray-600 mb-3">관리에서 저장한 견적 템플릿을 선택하면 현재 항목이 바뀝니다.</p>
+            <p className="text-sm text-gray-600 mb-3">기본 템플릿(전체 공용) 또는 우리 회사 템플릿을 선택하면 현재 항목이 바뀝니다.</p>
             {customTemplateLoading ? (
               <p className="text-sm text-gray-500 py-4">불러오는 중...</p>
-            ) : customTemplateList.length === 0 ? (
-              <p className="text-sm text-gray-500 py-4">저장된 템플릿이 없습니다. 관리 → 견적서 관리에서 커스텀 제목을 저장해 주세요.</p>
+            ) : defaultTemplateList.length === 0 && customTemplateList.length === 0 ? (
+              <p className="text-sm text-gray-500 py-4">저장된 템플릿이 없습니다. 관리 → 견적서 관리에서 커스텀 제목을 저장하거나, 마스터 관리에서 기본 템플릿을 등록해 주세요.</p>
             ) : (
-              <ul className="space-y-2">
-                {customTemplateList.map((t) => (
-                  <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => loadCustomTemplate(t)}
-                      className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
-                    >
-                      {t.title}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="space-y-4">
+                {defaultTemplateList.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-gray-500">기본 템플릿 (전체 공용)</p>
+                    <ul className="space-y-2">
+                      {defaultTemplateList.map((t) => (
+                        <li key={`default-${t.id}`}>
+                          <button
+                            type="button"
+                            onClick={() => loadCustomTemplate(t)}
+                            className="w-full rounded-lg border border-gray-200 bg-blue-50/50 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-blue-100"
+                          >
+                            {t.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {customTemplateList.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-gray-500">우리 회사 템플릿</p>
+                    <ul className="space-y-2">
+                      {customTemplateList.map((t) => (
+                        <li key={t.id}>
+                          <button
+                            type="button"
+                            onClick={() => loadCustomTemplate(t)}
+                            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+                          >
+                            {t.title}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -108,21 +108,23 @@ function DetailModal({
   );
   const [scopeEditOpen, setScopeEditOpen] = useState(false);
   const [scopeNewItem, setScopeNewItem] = useState("");
-  const [postcode, setPostcode] = useState(
-    data.address ? data.address.slice(0, 5).replace(/\D/g, "") || "42496" : "42496"
-  );
+  const [postcode, setPostcode] = useState(() => {
+    if (!data.address?.trim()) return "";
+    return data.address.slice(0, 5).replace(/\D/g, "") || "";
+  });
   const [roadAddress, setRoadAddress] = useState(() => {
-    const rest = data.address?.replace(/^\d+\s*/, "").trim() || "대구 남구 앞산순환로69길 19-1";
+    const rest = data.address?.replace(/^\d+\s*/, "").trim();
+    if (!rest) return "";
     const parts = rest.split(/\s+/);
     const last = parts.pop() ?? "";
     return last ? parts.join(" ") || rest : rest;
   });
   const [detailAddress, setDetailAddress] = useState(() => {
     const rest = data.address?.replace(/^\d+\s*/, "").trim();
-    if (!rest) return "202호";
+    if (!rest) return "";
     const parts = rest.split(/\s+/);
     const last = parts.pop() ?? "";
-    return last || "202호";
+    return last || "";
   });
   const [budgetDisplay, setBudgetDisplay] = useState(() =>
     formatBudgetDisplay(data.budget ?? "33000000")
@@ -996,15 +998,15 @@ export default function ConsultingPage() {
   };
 
   return (
-    <div className="p-6 bg-white min-h-screen">
-      <h2 className="mb-6 text-xl font-bold text-gray-800">
+    <div className="min-h-screen bg-white p-3 sm:p-6">
+      <h2 className="mb-4 sm:mb-6 text-lg sm:text-xl font-bold text-gray-800">
         상담 <span className="text-blue-600">({filteredConsultations.length})</span>건
       </h2>
 
-      <div className="mb-6 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="mb-4 sm:mb-6 rounded-lg border border-gray-200 bg-white p-4 sm:p-5 shadow-sm">
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div className="flex items-center gap-2">
-            <label className="w-16 text-sm font-bold text-gray-600">고객명</label>
+            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">고객명</label>
             <input
               type="text"
               value={filterCustomerName}
@@ -1014,7 +1016,7 @@ export default function ConsultingPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="w-16 text-sm font-bold text-gray-600">
+            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
               진행상태
             </label>
             <select
@@ -1029,7 +1031,7 @@ export default function ConsultingPage() {
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="w-16 text-sm font-bold text-gray-600">
+            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
               담당자명
             </label>
             <select
@@ -1045,10 +1047,10 @@ export default function ConsultingPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2">
-              <label className="w-16 text-sm font-bold text-gray-600">
+              <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
                 평수
               </label>
               <div className="flex items-center gap-2">
@@ -1064,7 +1066,7 @@ export default function ConsultingPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              <label className="w-16 text-sm font-bold text-gray-600">
+              <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
                 접수기간
               </label>
               <div className="flex items-center gap-1">
@@ -1134,14 +1136,14 @@ export default function ConsultingPage() {
             <button
               type="button"
               onClick={handleDownload}
-              className="rounded border border-green-500 bg-white px-4 py-2 text-sm font-bold text-green-600 hover:bg-green-50"
+              className="min-h-[44px] shrink-0 rounded border border-green-500 bg-white px-4 py-2 text-sm font-bold text-green-600 hover:bg-green-50 active:bg-green-100"
             >
               다운로드
             </button>
             <button
               type="button"
               onClick={handleSearch}
-              className="rounded bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700"
+              className="min-h-[44px] shrink-0 rounded bg-blue-600 px-6 py-2 text-sm font-bold text-white hover:bg-blue-700 active:bg-blue-800"
             >
               검색
             </button>
@@ -1149,11 +1151,11 @@ export default function ConsultingPage() {
         </div>
       </div>
 
-      <div className="mb-4 overflow-hidden rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-center text-sm">
+      <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
+        <table className="w-full min-w-[640px] text-center text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
             <tr>
-              <th className="w-10 p-3">
+              <th className="w-10 shrink-0 p-2 sm:p-3 whitespace-nowrap">
                 <input
                   type="checkbox"
                   checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
@@ -1161,19 +1163,19 @@ export default function ConsultingPage() {
                   className="cursor-pointer"
                 />
               </th>
-              <th className="w-16 p-3">No.</th>
-              <th className="p-3">진행상태</th>
-              <th className="p-3">진행날짜</th>
-              <th className="p-3">고객명</th>
-              <th className="p-3">연락처</th>
-              <th className="w-1/3 p-3">주소</th>
-              <th className="p-3">평수</th>
+              <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">No.</th>
+              <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행상태</th>
+              <th className="min-w-[100px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행날짜</th>
+              <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">고객명</th>
+              <th className="min-w-[90px] shrink-0 p-2 sm:p-3 whitespace-nowrap">연락처</th>
+              <th className="min-w-[120px] p-2 sm:p-3 text-left">주소</th>
+              <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">평수</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredConsultations.map((item, idx) => (
               <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
-                <td className="p-3">
+                <td className="p-2 sm:p-3 whitespace-nowrap">
                   <input
                     type="checkbox"
                     checked={selectedIds.has(item.id)}
@@ -1181,10 +1183,10 @@ export default function ConsultingPage() {
                     className="cursor-pointer"
                   />
                 </td>
-                <td className="p-3">{idx + 1}</td>
-                <td className="p-3">{item.status || "-"}</td>
-                <td className="p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
-                <td className="p-3 font-medium">
+                <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
+                <td className="p-2 sm:p-3 whitespace-nowrap">{item.status || "-"}</td>
+                <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
+                <td className="min-w-[72px] p-2 sm:p-3 font-medium whitespace-nowrap">
                   <button
                     type="button"
                     onClick={() => {
@@ -1196,16 +1198,16 @@ export default function ConsultingPage() {
                     {item.customerName}
                   </button>
                 </td>
-                <td className="p-3">{item.contact}</td>
-                <td className="p-3 truncate text-left">{item.address}</td>
-                <td className="p-3">{item.pyung}</td>
+                <td className="p-2 sm:p-3 whitespace-nowrap">{item.contact}</td>
+                <td className="min-w-[120px] max-w-[200px] sm:max-w-none p-2 sm:p-3 truncate text-left">{item.address}</td>
+                <td className="p-2 sm:p-3 whitespace-nowrap">{item.pyung}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="w-20">
           <input
             type="text"
@@ -1216,31 +1218,31 @@ export default function ConsultingPage() {
         </div>
 
         <div className="flex gap-1">
-          <button className="h-8 w-8 rounded border text-gray-500 hover:bg-gray-50">
+          <button type="button" className="h-9 w-9 min-w-[36px] rounded border text-gray-500 hover:bg-gray-50 active:bg-gray-100" aria-label="처음">
             «
           </button>
-          <button className="h-8 w-8 rounded border text-gray-500 hover:bg-gray-50">
+          <button type="button" className="h-9 w-9 min-w-[36px] rounded border text-gray-500 hover:bg-gray-50 active:bg-gray-100" aria-label="이전">
             ‹
           </button>
-          <button className="h-8 w-8 rounded border border-blue-200 bg-white font-bold text-blue-600">
+          <button type="button" className="h-9 w-9 min-w-[36px] rounded border border-blue-200 bg-white font-bold text-blue-600">
             01
           </button>
-          <button className="h-8 w-8 rounded border text-gray-500 hover:bg-gray-50">
+          <button type="button" className="h-9 w-9 min-w-[36px] rounded border text-gray-500 hover:bg-gray-50 active:bg-gray-100" aria-label="다음">
             ›
           </button>
-          <button className="h-8 w-8 rounded border text-gray-500 hover:bg-gray-50">
+          <button type="button" className="h-9 w-9 min-w-[36px] rounded border text-gray-500 hover:bg-gray-50 active:bg-gray-100" aria-label="마지막">
             »
           </button>
         </div>
 
-        <div className="flex gap-2">
-          <button className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="min-h-[44px] rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100">
             고객평가 전송
           </button>
           <button
             type="button"
             onClick={handleDeleteSelected}
-            className="rounded border border-red-400 bg-white px-4 py-2 text-sm text-red-500 hover:bg-red-50"
+            className="min-h-[44px] rounded border border-red-400 bg-white px-4 py-2 text-sm text-red-500 hover:bg-red-50 active:bg-red-100"
           >
             선택삭제
           </button>
@@ -1250,7 +1252,7 @@ export default function ConsultingPage() {
               setActive(emptyConsultation);
               setEditId(null);
             }}
-            className="rounded border border-blue-500 bg-white px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50"
+            className="min-h-[44px] rounded border border-blue-500 bg-white px-4 py-2 text-sm font-bold text-blue-600 hover:bg-blue-50 active:bg-blue-100"
           >
             신규등록
           </button>
