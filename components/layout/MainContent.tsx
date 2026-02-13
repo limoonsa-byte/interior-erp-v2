@@ -9,12 +9,12 @@ export function MainContent({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={clsx(
-        "transition-[margin] duration-200",
+        "min-w-0 flex-1 transition-[margin] duration-200",
         collapsed ? "md:pl-[72px]" : "md:pl-64"
       )}
     >
       <Header />
-      <main className="p-4 md:p-6">{children}</main>
+      <main className="min-w-0 p-3 sm:p-4 md:p-6">{children}</main>
     </div>
   );
 }

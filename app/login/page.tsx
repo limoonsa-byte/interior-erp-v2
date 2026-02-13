@@ -55,7 +55,7 @@ export default function LoginPage() {
       alert(`회사 생성 완료!\n코드: ${data.code}\n이 코드로 로그인하세요.`);
       setMode("login");
       setLogin({ code: signup.code, password: "" });
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -81,7 +81,7 @@ export default function LoginPage() {
       }
       // 쿠키는 서버에서 설정되므로 여기서는 메인 페이지로 이동만 수행
       window.location.href = "/dashboard";
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -107,7 +107,7 @@ export default function LoginPage() {
         return;
       }
       setFindResult({ companyName: data.companyName, code: data.code });
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -145,7 +145,7 @@ export default function LoginPage() {
       setResetEmail("");
       setResetPassword("");
       setLogin((l) => ({ ...l, code: resetCode.trim(), password: "" }));
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -162,8 +162,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col items-center justify-center bg-gray-50 px-4 py-6">
+      <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 sm:p-8 shadow-sm">
         <h1 className="mb-2 text-center text-2xl font-semibold text-gray-900">
           인테리어 ERP
         </h1>
@@ -175,7 +175,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setMode("login")}
-            className={`flex-1 rounded-lg py-2 ${
+            className={`min-h-[44px] flex-1 rounded-lg py-2.5 ${
               mode === "login" ? "bg-white shadow-sm" : "text-gray-500"
             }`}
           >
@@ -184,7 +184,7 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setMode("signup")}
-            className={`flex-1 rounded-lg py-2 ${
+            className={`min-h-[44px] flex-1 rounded-lg py-2.5 ${
               mode === "signup" ? "bg-white shadow-sm" : "text-gray-500"
             }`}
           >
@@ -254,7 +254,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleSignup}
               disabled={loading}
-              className="mt-2 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="mt-2 min-h-[48px] w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60"
             >
               {loading ? "처리 중..." : "회사 생성하기"}
             </button>
@@ -299,7 +299,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="mt-2 w-full rounded-lg bg-slate-800 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60"
+              className="mt-2 min-h-[48px] w-full rounded-lg bg-slate-800 py-3 text-sm font-semibold text-white hover:bg-slate-900 active:bg-slate-950 disabled:opacity-60"
             >
               {loading ? "로그인 중..." : "로그인"}
             </button>

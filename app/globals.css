@@ -19,10 +19,23 @@
   }
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+/* 터치 시 파란 하이라이트 제거, 스크롤 영역 부드럽게 */
+@media (hover: none) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 견적서 미리보기 인쇄: 세로 모드, 머리글·바닥글 끔(Chrome은 여백 0이면 표시 안 함) */

@@ -122,7 +122,8 @@ function amount(item: EstimateItem): number {
   return materialAmount(item) + laborAmount(item);
 }
 
-/** 스마트 현장관리 페이로드 → 견적 항목으로 변환 (치수/문 개수/방면적 등) */
+/** 스마트 현장관리 페이로드 → 견적 항목으로 변환 (치수/문 개수/방면적 등). 추후 도면 보관함 연동 시 사용 */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateItem[] {
   const result: EstimateItem[] = [];
   if (payload.items && payload.items.length > 0) {
@@ -853,7 +854,7 @@ function EstimateForm({
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">고객명</label>
@@ -916,41 +917,39 @@ function EstimateForm({
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
-        <p className="mb-2 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={openSmartFieldModal}
-              className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
-            >
-              도면 보관함에서 불러오기
-            </button>
-            <button
-              type="button"
-              onClick={openCustomTemplateModal}
-              className="rounded-lg border border-blue-600 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
-            >
-              템플릿 불러오기
-            </button>
-            <button
-              type="button"
-              onClick={openSaveTemplateModal}
-              className="rounded-lg border border-gray-500 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              템플릿으로 저장
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={exportToExcel} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              엑셀 저장
-            </button>
-            <button type="button" onClick={() => excelInputRef.current?.click()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-              엑셀 불러오기
-            </button>
-          </div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
+          <p className="mt-0.5 text-xs text-gray-500">공정명을 입력하면 섹션으로 묶이고, 프린트 시 &quot;가설철거 1. 항목 2. 항목 … 목공사 1. 항목&quot; 형태로 보입니다.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={openSmartFieldModal}
+            className="min-h-[44px] rounded-lg border border-emerald-600 bg-white px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 active:bg-emerald-100"
+          >
+            도면 보관함에서 불러오기
+          </button>
+          <button
+            type="button"
+            onClick={openCustomTemplateModal}
+            className="min-h-[44px] rounded-lg border border-blue-600 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 active:bg-blue-100"
+          >
+            커스텀 견적 불러오기
+          </button>
+          <button
+            type="button"
+            onClick={openSaveTemplateModal}
+            className="min-h-[44px] rounded-lg border border-gray-500 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100"
+          >
+            템플릿으로 저장
+          </button>
+          <button type="button" onClick={addNewSection} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+            + 공정 추가
+          </button>
+          <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
+            공정 순서 변경
+          </button>
         </div>
       </div>
       <p className="mb-2 text-xs text-gray-500">
@@ -1079,8 +1078,8 @@ function EstimateForm({
           </div>
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+      <div className="overflow-x-auto -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0">
+        <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-700">
               <th className="p-2 w-14">No</th>
@@ -1344,23 +1343,29 @@ function EstimateForm({
           </tbody>
         </table>
       </div>
-      <div className="mt-4 flex justify-end gap-4 border-t border-gray-200 pt-4">
-        <div className="text-sm text-gray-600">
+      <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-gray-200 pt-4">
+        <div className="w-full text-sm text-gray-600 sm:w-auto">
           소계: <strong>{formatNumber(subtotal)}</strong>원 · 부가세(10%): <strong>{formatNumber(vat)}</strong>원 · 합계: <strong>{formatNumber(total)}</strong>원
         </div>
       </div>
       <input ref={excelInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelFile} />
       <div className="mt-4 flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={() => setPreviewOpen(true)} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <button type="button" onClick={() => setPreviewOpen(true)} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           견적서 미리보기
         </button>
-        <button type="button" onClick={() => { setPreviewOpen(true); setTimeout(printEstimate, 400); }} className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <button type="button" onClick={() => { setPreviewOpen(true); setTimeout(printEstimate, 400); }} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           견적서 출력 / PDF 저장
         </button>
-        <button type="button" onClick={onCancel} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <button type="button" onClick={exportToExcel} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
+          엑셀 저장
+        </button>
+        <button type="button" onClick={() => excelInputRef.current?.click()} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
+          엑셀 불러오기
+        </button>
+        <button type="button" onClick={onCancel} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           취소
         </button>
-        <button type="submit" disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
+        <button type="submit" disabled={saving} className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60">
           {saving ? "저장 중..." : "저장"}
         </button>
       </div>
@@ -1368,15 +1373,15 @@ function EstimateForm({
 
     {/* 견적서 미리보기 모달 (인쇄 시 이 영역만 출력) */}
     {previewOpen && (
-      <div className="estimate-preview-modal fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-        <div className="estimate-preview-modal-inner flex max-h-[90vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl my-auto">
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+      <div className="estimate-preview-modal fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4" role="dialog" aria-modal="true">
+        <div className="estimate-preview-modal-inner flex max-h-[90vh] max-h-[90dvh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl my-auto">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-3 py-3 sm:px-4">
             <h3 className="text-sm font-semibold text-gray-800">견적서 미리보기</h3>
             <div className="flex flex-wrap items-center gap-2 no-print">
-              <button type="button" onClick={printEstimate} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <button type="button" onClick={printEstimate} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
                 인쇄 (PDF로 저장 가능)
               </button>
-              <button type="button" onClick={() => setPreviewOpen(false)} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <button type="button" onClick={() => setPreviewOpen(false)} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
                 닫기
               </button>
               <span className="text-xs text-gray-500">인쇄 대화상자에서 &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
@@ -1722,13 +1727,13 @@ export default function EstimatePage() {
   const showForm = formOpen !== null;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-bold text-gray-900">견적서 작성</h1>
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900">견적서 작성</h1>
         <button
           type="button"
           onClick={handleNewEstimateClick}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 active:bg-blue-800"
         >
           신규 견적
         </button>
@@ -1808,16 +1813,16 @@ export default function EstimatePage() {
       ) : (
         <>
           <p className="text-sm text-gray-500">저장된 견적 목록입니다. 수정·삭제하거나 신규 견적을 작성할 수 있습니다.</p>
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-            <table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="p-3">견적일자</th>
-                  <th className="p-3">고객명</th>
-                  <th className="p-3">연락처</th>
-                  <th className="p-3">제목</th>
-                  <th className="p-3 text-right">합계</th>
-                  <th className="w-24 p-3" />
+                  <th className="p-2 sm:p-3">견적일자</th>
+                  <th className="p-2 sm:p-3">고객명</th>
+                  <th className="p-2 sm:p-3">연락처</th>
+                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3 text-right">합계</th>
+                  <th className="w-28 sm:w-24 p-2 sm:p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -1839,17 +1844,17 @@ export default function EstimatePage() {
                     const total = subtotal + Math.floor(subtotal * 0.1);
                     return (
                       <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
-                        <td className="p-3">{formatDateYMD(est.estimateDate)}</td>
-                        <td className="p-3 font-medium">{est.customerName || "-"}</td>
-                        <td className="p-3">{est.contact || "-"}</td>
-                        <td className="p-3">{est.title || "-"}</td>
-                        <td className="p-3 text-right">{formatNumber(total)}원</td>
-                        <td className="p-3">
-                          <div className="flex gap-2">
+                        <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
+                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
+                        <td className="p-2 sm:p-3">{est.title || "-"}</td>
+                        <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
+                        <td className="p-2 sm:p-3">
+                          <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
                               onClick={() => setFormOpen(est.id)}
-                              className="text-blue-600 hover:underline"
+                              className="min-h-[40px] min-w-[44px] rounded px-2 text-blue-600 hover:underline active:bg-blue-50"
                             >
                               수정
                             </button>
@@ -1861,7 +1866,7 @@ export default function EstimatePage() {
                                   .then((res) => res.ok && load())
                                   .catch(() => alert("삭제 실패"));
                               }}
-                              className="text-red-500 hover:underline"
+                              className="min-h-[40px] min-w-[44px] rounded px-2 text-red-500 hover:underline active:bg-red-50"
                             >
                               삭제
                             </button>

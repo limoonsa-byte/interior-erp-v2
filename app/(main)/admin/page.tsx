@@ -104,7 +104,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (modal === "pics") loadPics();
     if (modal === "drawing-api") {
-      setDrawingApiLoading(true);
+      queueMicrotask(() => setDrawingApiLoading(true));
       fetch("/api/company")
         .then((res) => res.json())
         .then((data) => {
@@ -114,6 +114,10 @@ export default function AdminPage() {
         .finally(() => setDrawingApiLoading(false));
     }
     if (modal === "estimate-templates") {
+      queueMicrotask(() => {
+        setEstimateTemplateTitle("");
+        setEstimateTemplateError(null);
+      });
       fetch("/api/company/estimate-templates")
         .then((res) => res.json())
         .then((data) => {
@@ -121,8 +125,6 @@ export default function AdminPage() {
           else setEstimateTemplates([]);
         })
         .catch(() => setEstimateTemplates([]));
-      setEstimateTemplateTitle("");
-      setEstimateTemplateError(null);
     }
   }, [modal, loadPics]);
 
@@ -315,7 +317,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={handlePinSubmit}
-            className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+            className="min-h-[48px] w-full rounded-lg bg-blue-600 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
           >
             확인
           </button>
@@ -333,7 +335,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setModal("pics")}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             담당자 설정
           </button>
@@ -342,7 +344,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setModal("drawing-api")}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             도면 보관함 API 설정
           </button>
@@ -351,7 +353,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setModal("estimate-templates")}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             견적서 관리
           </button>
@@ -360,7 +362,7 @@ export default function AdminPage() {
           <button
             type="button"
             onClick={() => setModal("password-change")}
-            className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100"
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             관리 비밀번호 변경
           </button>

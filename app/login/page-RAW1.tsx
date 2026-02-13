@@ -45,7 +45,7 @@ export default function LoginPage() {
       alert(`회사 생성 완료!\n코드: ${data.code}\n이 코드로 로그인하세요.`);
       setMode("login");
       setLogin({ code: signup.code, password: "" });
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
@@ -71,7 +71,7 @@ export default function LoginPage() {
       }
       // 쿠키는 서버에서 설정되므로 여기서는 메인 페이지로 이동만 수행
       window.location.href = "/dashboard";
-    } catch (e) {
+    } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);

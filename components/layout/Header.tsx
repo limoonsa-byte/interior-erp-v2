@@ -46,11 +46,11 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6">
+    <header className="sticky top-0 z-20 flex min-h-[52px] sm:h-14 items-center justify-between border-b border-gray-200 bg-white px-3 sm:px-4 md:px-6">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 md:hidden"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 active:bg-gray-200 md:hidden"
         aria-label="메뉴 열기"
       >
         {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -58,7 +58,7 @@ export function Header() {
       <div className="flex flex-1 items-center justify-between md:ml-0">
         <h1 className="text-lg font-semibold text-gray-900">인테리어 ERP</h1>
       </div>
-      <div className="w-10 md:hidden" />
+      <div className="min-w-[44px] md:hidden" />
 
       {/* 모바일 메뉴 드로어 */}
       {open && (
@@ -68,7 +68,7 @@ export function Header() {
           aria-hidden
         >
           <nav
-            className="w-72 max-w-[85vw] border-r border-gray-200 bg-white shadow-lg"
+            className="w-72 max-w-[85vw] border-r border-gray-200 bg-white shadow-lg overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <ul className="py-2">
@@ -81,11 +81,11 @@ export function Header() {
                       rel="noopener noreferrer"
                       onClick={() => setOpen(false)}
                       className={clsx(
-                        "flex items-center gap-3 px-4 py-3 text-sm",
-                        "text-gray-600 hover:bg-gray-50"
+                        "flex items-center gap-3 px-4 min-h-[48px] text-sm",
+                        "text-gray-600 hover:bg-gray-50 active:bg-gray-100"
                       )}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-5 w-5 shrink-0" />
                       {label}
                     </a>
                   ) : (
@@ -93,13 +93,13 @@ export function Header() {
                       href={href}
                       onClick={() => setOpen(false)}
                       className={clsx(
-                        "flex items-center gap-3 px-4 py-3 text-sm",
+                        "flex items-center gap-3 px-4 min-h-[48px] text-sm",
                         pathname === href
                           ? "bg-gray-100 font-medium text-gray-900"
-                          : "text-gray-600 hover:bg-gray-50"
+                          : "text-gray-600 hover:bg-gray-50 active:bg-gray-100"
                       )}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-5 w-5 shrink-0" />
                       {label}
                     </Link>
                   )}
