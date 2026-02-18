@@ -31,6 +31,8 @@ type Consultation = {
   materialMeetingAt?: string;
   contractMeetingAt?: string;
   designMeetingAt?: string;
+  constructionStartAt?: string;
+  moveInAt?: string;
   scope?: string[];
   budget?: string;
   completionYear?: string;
@@ -199,6 +201,8 @@ function DetailModal({
       materialMeetingAt: materialMeetingDone ? (data.materialMeetingAt ?? undefined) : ((fd.get("materialMeetingAt") as string)?.trim() || undefined),
       contractMeetingAt: contractMeetingDone ? (data.contractMeetingAt ?? undefined) : ((fd.get("contractMeetingAt") as string)?.trim() || undefined),
       designMeetingAt: designMeetingDone ? (data.designMeetingAt ?? undefined) : ((fd.get("designMeetingAt") as string)?.trim() || undefined),
+      constructionStartAt: (fd.get("constructionStartAt") as string)?.trim() || undefined,
+      moveInAt: (fd.get("moveInAt") as string)?.trim() || undefined,
       scope,
       budget: budget || undefined,
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
@@ -547,8 +551,9 @@ function DetailModal({
               </label>
               <input
                 type="date"
+                name="constructionStartAt"
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={getTodayDateLocal()}
+                defaultValue={data.constructionStartAt?.slice(0, 10) || getTodayDateLocal()}
               />
             </div>
           </div>
@@ -576,8 +581,9 @@ function DetailModal({
               </label>
               <input
                 type="date"
+                name="moveInAt"
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={getTodayDateLocal()}
+                defaultValue={data.moveInAt?.slice(0, 10) || getTodayDateLocal()}
               />
             </div>
           </div>

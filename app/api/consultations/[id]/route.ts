@@ -50,6 +50,8 @@ export async function PATCH(
       materialMeetingAt,
       contractMeetingAt,
       designMeetingAt,
+      constructionStartAt,
+      moveInAt,
       consultedDone,
       siteMeasurementDone,
       estimateMeetingDone,
@@ -66,6 +68,8 @@ export async function PATCH(
     const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
     const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
     const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
+    const constructionStartAtStr = constructionStartAt != null ? String(constructionStartAt) : null;
+    const moveInAtStr = moveInAt != null ? String(moveInAt) : null;
 
     const result = await sql`
       UPDATE consultations
@@ -86,6 +90,8 @@ export async function PATCH(
         material_meeting_at = ${materialMeetingAtStr},
         contract_meeting_at = ${contractMeetingAtStr},
         design_meeting_at = ${designMeetingAtStr},
+        construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
+        move_in_at = COALESCE(${moveInAtStr}, move_in_at),
         consulted_done = ${consultedDone === true},
         site_measurement_done = ${siteMeasurementDone === true},
         estimate_meeting_done = ${estimateMeetingDone === true},

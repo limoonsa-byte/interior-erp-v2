@@ -89,6 +89,9 @@ async function migrate() {
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_done BOOLEAN DEFAULT false`;
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_done BOOLEAN DEFAULT false`;
     console.log("[migrate] date_done flags OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS construction_start_at TEXT`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS move_in_at TEXT`;
+    console.log("[migrate] construction_start_at, move_in_at OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`

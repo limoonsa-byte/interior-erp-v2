@@ -65,11 +65,11 @@ type EstimateItem = {
   category: string;
   spec: string;
   unit: string;
-  qty: number;
+  qty: number | string;
   /** 재료비 단가 (기존 unitPrice 호환: 없으면 unitPrice 사용) */
-  materialUnitPrice?: number;
+  materialUnitPrice?: number | string;
   /** 노무비 단가 */
-  laborUnitPrice?: number;
+  laborUnitPrice?: number | string;
   unitPrice?: number;
   note: string;
 };
@@ -816,9 +816,11 @@ function EstimateForm({
       const next = [...prev];
       (next[idx] as Record<string, unknown>)[field] = value;
       if (field === "qty" || field === "materialUnitPrice" || field === "laborUnitPrice") {
-        next[idx].qty = Number(next[idx].qty) || 0;
-        next[idx].materialUnitPrice = Number(next[idx].materialUnitPrice ?? 0) || 0;
-        next[idx].laborUnitPrice = Number(next[idx].laborUnitPrice ?? 0) || 0;
+        const v = (next[idx] as Record<string, unknown>)[field];
+        const keepAsString = typeof v === "string" && v.endsWith(".");
+        next[idx].qty = field === "qty" && keepAsString ? (v as string) : (Number(next[idx].qty) || 0);
+        next[idx].materialUnitPrice = field === "materialUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].materialUnitPrice ?? 0) || 0);
+        next[idx].laborUnitPrice = field === "laborUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].laborUnitPrice ?? 0) || 0);
       }
       return next;
     });
@@ -1289,13 +1291,13 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.qty === 0 || item.qty === undefined ? "" : String(item.qty)}
+                          value={item.qty === 0 || item.qty === undefined ? "" : (typeof item.qty === "string" && item.qty.endsWith(".") ? item.qty : String(item.qty))}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/\D/g, "");
+                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "qty", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, "");
+                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "qty", raw === "" ? 0 : raw);
                           }}
                           placeholder="숫자만"
@@ -1308,13 +1310,13 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.materialUnitPrice === 0 || item.materialUnitPrice === undefined ? "" : String(item.materialUnitPrice)}
+                          value={item.materialUnitPrice === 0 || item.materialUnitPrice === undefined ? "" : (typeof item.materialUnitPrice === "string" && item.materialUnitPrice.endsWith(".") ? item.materialUnitPrice : String(item.materialUnitPrice))}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/\D/g, "");
+                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, "");
+                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
                           }}
                           placeholder="숫자만"
@@ -1328,13 +1330,13 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.laborUnitPrice === 0 || item.laborUnitPrice === undefined ? "" : String(item.laborUnitPrice)}
+                          value={item.laborUnitPrice === 0 || item.laborUnitPrice === undefined ? "" : (typeof item.laborUnitPrice === "string" && item.laborUnitPrice.endsWith(".") ? item.laborUnitPrice : String(item.laborUnitPrice))}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/\D/g, "");
+                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/\D/g, "");
+                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
                             updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
                           }}
                           placeholder="숫자만"

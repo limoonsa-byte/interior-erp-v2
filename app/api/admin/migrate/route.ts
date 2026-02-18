@@ -53,6 +53,10 @@ export async function POST(request: Request) {
     results.push("contract_meeting_at 컬럼 확인");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT`;
     results.push("design_meeting_at 컬럼 확인");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS construction_start_at TEXT`;
+    results.push("construction_start_at 컬럼 확인");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS move_in_at TEXT`;
+    results.push("move_in_at 컬럼 확인");
 
     await sql`
       CREATE TABLE IF NOT EXISTS env_backup (

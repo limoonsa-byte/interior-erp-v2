@@ -51,6 +51,8 @@ export async function GET() {
         materialMeetingAt: row.material_meeting_at != null ? String(row.material_meeting_at) : undefined,
         contractMeetingAt: row.contract_meeting_at != null ? String(row.contract_meeting_at) : undefined,
         designMeetingAt: row.design_meeting_at != null ? String(row.design_meeting_at) : undefined,
+        constructionStartAt: (row as { construction_start_at?: string }).construction_start_at != null ? String((row as { construction_start_at?: string }).construction_start_at) : undefined,
+        moveInAt: (row as { move_in_at?: string }).move_in_at != null ? String((row as { move_in_at?: string }).move_in_at) : undefined,
         consultedDone: Boolean((row as { consulted_done?: boolean }).consulted_done),
         siteMeasurementDone: Boolean((row as { site_measurement_done?: boolean }).site_measurement_done),
         estimateMeetingDone: Boolean((row as { estimate_meeting_done?: boolean }).estimate_meeting_done),
@@ -93,6 +95,8 @@ export async function POST(request: Request) {
       materialMeetingAt,
       contractMeetingAt,
       designMeetingAt,
+      constructionStartAt,
+      moveInAt,
     } = body;
 
     const scopeJson = Array.isArray(scope) ? JSON.stringify(scope) : null;
@@ -103,10 +107,12 @@ export async function POST(request: Request) {
     const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
     const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
     const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
+    const constructionStartAtStr = constructionStartAt != null ? String(constructionStartAt) : null;
+    const moveInAtStr = moveInAt != null ? String(moveInAt) : null;
 
     await sql`
-      INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at)
-      VALUES (${company.id}, ${customerName}, ${contact}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr}, ${contractMeetingAtStr}, ${designMeetingAtStr})
+      INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at, construction_start_at, move_in_at)
+      VALUES (${company.id}, ${customerName}, ${contact}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr}, ${contractMeetingAtStr}, ${designMeetingAtStr}, ${constructionStartAtStr}, ${moveInAtStr})
     `;
 
     return NextResponse.json({ message: "Success" }, { status: 200 });
