@@ -23,34 +23,98 @@ type AddedOrderRow = {
   note: string;
 };
 
+const ORDER_LABELS_FOR_PARSE = [
+  "목재발주",
+  "중문발주",
+  "조명",
+  "전기부자재 발주",
+  "타일(화장실용품)발주",
+  "목공방재발주",
+  "도배발주",
+  "바닥재발주",
+  "필름발주",
+  "싱크가구발주",
+  "기타",
+];
+
 function parseOrderDefaultExcel(rows: (string | number)[][]): Record<string, AddedOrderRow[]> | null {
   if (!rows.length) return null;
+  const byLabel: Record<string, AddedOrderRow[]> = {};
   const headerRow = rows[0].map((c) => String(c ?? "").trim());
   const labelIdx = headerRow.findIndex((h) => h === "발주 유형");
   const categoryIdx = headerRow.findIndex((h) => h === "품목");
-  if (labelIdx < 0 || categoryIdx < 0) return null;
-  const specIdx = headerRow.findIndex((h) => h === "규격");
-  const unitIdx = headerRow.findIndex((h) => h === "단위");
-  const qtyIdx = headerRow.findIndex((h) => h === "수량");
-  const priceIdx = headerRow.findIndex((h) => h === "자재 단가");
-  const noteIdx = headerRow.findIndex((h) => h === "비고");
-  const byLabel: Record<string, AddedOrderRow[]> = {};
-  for (let i = 1; i < rows.length; i++) {
+
+  // 형식 1: 1행에 발주 유형 | 품목 | 규격 | ... (한 행 헤더)
+  if (labelIdx >= 0 && categoryIdx >= 0) {
+    const specIdx = headerRow.findIndex((h) => h === "규격");
+    const unitIdx = headerRow.findIndex((h) => h === "단위");
+    const qtyIdx = headerRow.findIndex((h) => h === "수량");
+    const priceIdx = headerRow.findIndex((h) => h === "자재 단가");
+    const noteIdx = headerRow.findIndex((h) => h === "비고");
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i] as (string | number)[];
+      const label = String(r[labelIdx] ?? "").trim();
+      if (!label) continue;
+      byLabel[label] = byLabel[label] ?? [];
+      byLabel[label].push({
+        id: `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+        processGroup: "",
+        category: String(r[categoryIdx] ?? "").trim(),
+        spec: specIdx >= 0 ? String(r[specIdx] ?? "").trim() : "",
+        unit: unitIdx >= 0 ? String(r[unitIdx] ?? "").trim() : "",
+        qty: qtyIdx >= 0 ? String(r[qtyIdx] ?? "").trim() : "",
+        materialUnitPrice: priceIdx >= 0 ? String(r[priceIdx] ?? "").trim() : "",
+        note: noteIdx >= 0 ? String(r[noteIdx] ?? "").trim() : "",
+      });
+    }
+    if (Object.keys(byLabel).length > 0) return byLabel;
+  }
+
+  // 형식 2: 블록 양식 — 발주 유형 제목 행 → 품목/규격/... 헤더 → 데이터 행
+  let i = 0;
+  while (i < rows.length) {
     const r = rows[i] as (string | number)[];
-    const label = String(r[labelIdx] ?? "").trim();
-    if (!label) continue;
-    const row: AddedOrderRow = {
-      id: `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
-      processGroup: "",
-      category: String(r[categoryIdx] ?? "").trim(),
-      spec: specIdx >= 0 ? String(r[specIdx] ?? "").trim() : "",
-      unit: unitIdx >= 0 ? String(r[unitIdx] ?? "").trim() : "",
-      qty: qtyIdx >= 0 ? String(r[qtyIdx] ?? "").trim() : "",
-      materialUnitPrice: priceIdx >= 0 ? String(r[priceIdx] ?? "").trim() : "",
-      note: noteIdx >= 0 ? String(r[noteIdx] ?? "").trim() : "",
-    };
-    if (!byLabel[label]) byLabel[label] = [];
-    byLabel[label].push(row);
+    const first = String(r[0] ?? "").trim();
+    const label = ORDER_LABELS_FOR_PARSE.find((l) => first === l);
+    if (!label) {
+      i++;
+      continue;
+    }
+    i++;
+    if (i >= rows.length) break;
+    const headerRow2 = (rows[i] as (string | number)[]).map((c) => String(c ?? "").trim());
+    const catIdx = headerRow2.findIndex((h) => h === "품목");
+    if (catIdx < 0) {
+      i++;
+      continue;
+    }
+    const specIdx = headerRow2.findIndex((h) => h === "규격");
+    const unitIdx = headerRow2.findIndex((h) => h === "단위");
+    const qtyIdx = headerRow2.findIndex((h) => h === "수량");
+    const priceIdx = headerRow2.findIndex((h) => h === "자재 단가");
+    const noteIdx = headerRow2.findIndex((h) => h === "비고");
+    i++;
+    byLabel[label] = byLabel[label] ?? [];
+    while (i < rows.length) {
+      const dataRow = rows[i] as (string | number)[];
+      const nextFirst = String(dataRow[0] ?? "").trim();
+      if (ORDER_LABELS_FOR_PARSE.includes(nextFirst)) break;
+      const category = String(dataRow[catIdx] ?? "").trim();
+      const hasAny = category || (specIdx >= 0 && String(dataRow[specIdx] ?? "").trim()) || (qtyIdx >= 0 && String(dataRow[qtyIdx] ?? "").trim()) || (priceIdx >= 0 && String(dataRow[priceIdx] ?? "").trim());
+      if (hasAny) {
+        byLabel[label].push({
+          id: `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+          processGroup: "",
+          category,
+          spec: specIdx >= 0 ? String(dataRow[specIdx] ?? "").trim() : "",
+          unit: unitIdx >= 0 ? String(dataRow[unitIdx] ?? "").trim() : "",
+          qty: qtyIdx >= 0 ? String(dataRow[qtyIdx] ?? "").trim() : "",
+          materialUnitPrice: priceIdx >= 0 ? String(dataRow[priceIdx] ?? "").trim() : "",
+          note: noteIdx >= 0 ? String(dataRow[noteIdx] ?? "").trim() : "",
+        });
+      }
+      i++;
+    }
   }
   return Object.keys(byLabel).length > 0 ? byLabel : null;
 }

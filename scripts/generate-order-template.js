@@ -21,13 +21,19 @@ const ORDER_LABELS = [
   "기타",
 ];
 
+const ITEM_HEADERS = ["품목", "규격", "단위", "수량", "자재 단가", "비고"];
+const BLANK_DATA_ROWS = 5; // 발주 유형별 입력 빈 행 개수
+
 async function main() {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("발주 기본 품목", { views: [{ rightToLeft: false }] });
-  const headers = ["발주 유형", "품목", "규격", "단위", "수량", "자재 단가", "비고"];
-  ws.addRow(headers);
+  // 사용자 양식: 발주 유형 제목 → 품목/규격/단위/수량/자재 단가/비고 헤더 → 빈 행 (커스텀 입력)
   ORDER_LABELS.forEach((label) => {
-    ws.addRow([label, "", "", "", "", "", ""]);
+    ws.addRow([label]);
+    ws.addRow(ITEM_HEADERS);
+    for (let i = 0; i < BLANK_DATA_ROWS; i++) {
+      ws.addRow(["", "", "", "", "", ""]);
+    }
   });
   const buf = await wb.xlsx.writeBuffer();
   const outPath = path.join(process.cwd(), "public", "발주_기본품목_템플릿.xlsx");

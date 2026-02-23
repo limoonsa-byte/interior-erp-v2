@@ -194,18 +194,41 @@ export default function MaterialOrderPage() {
       fetch("/api/company/pics").then((r) => r.json()),
       fetch("/api/company/me").then((r) => r.json()),
       fetch("/api/company/order-item-names").then((r) => r.json()),
-    ]).then(([estRes, consRes, picsRes, meRes, namesRes]) => {
+      fetch("/api/company/order-default-items").then((r) => r.json()),
+    ]).then(([estRes, consRes, picsRes, meRes, namesRes, defaultRes]) => {
       const est = estRes.status === "fulfilled" ? estRes.value : [];
       const cons = consRes.status === "fulfilled" ? consRes.value : [];
       const pics = picsRes.status === "fulfilled" ? picsRes.value : [];
       const me = meRes.status === "fulfilled" ? meRes.value : null;
       const namesData = namesRes.status === "fulfilled" ? namesRes.value : { itemNames: [] };
+      const defaultData = defaultRes.status === "fulfilled" ? defaultRes.value : { itemsByLabel: {} };
       setEstimates(Array.isArray(est) ? est : []);
       setConsultations(Array.isArray(cons) ? cons : []);
       setPicList(Array.isArray(pics) ? pics : []);
       const company = (me as { company?: { name?: string; code?: string } } | null)?.company;
       setCompanyName(company?.name ?? company?.code ?? "");
       setOrderItemNames(Array.isArray(namesData?.itemNames) ? namesData.itemNames : []);
+      if (defaultData?.itemsByLabel && typeof defaultData.itemsByLabel === "object" && Object.keys(defaultData.itemsByLabel).length > 0) {
+        const byLabel = defaultData.itemsByLabel as Record<string, AddedOrderRow[]>;
+        setAddedRowsByLabel((prev) => {
+          const next = { ...prev };
+          Object.entries(byLabel).forEach(([label, rows]) => {
+            if (Array.isArray(rows) && rows.length > 0) {
+              next[label] = rows.map((r, i) => ({
+                id: r.id && String(r.id).trim() ? r.id : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                processGroup: String(r.processGroup ?? "").trim(),
+                category: String(r.category ?? "").trim(),
+                spec: String(r.spec ?? "").trim(),
+                unit: String(r.unit ?? "").trim(),
+                qty: String(r.qty ?? "").trim(),
+                materialUnitPrice: String(r.materialUnitPrice ?? "").trim(),
+                note: String(r.note ?? "").trim(),
+              }));
+            }
+          });
+          return next;
+        });
+      }
       if (Array.isArray(est) && est.length > 0 && !selectedEstimateId) {
         setSelectedEstimateId((est as Estimate[])[0].id);
       }
