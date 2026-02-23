@@ -86,12 +86,16 @@ async function migrate() {
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS site_measurement_done BOOLEAN DEFAULT false`;
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS estimate_meeting_done BOOLEAN DEFAULT false`;
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_meeting_done BOOLEAN DEFAULT false`;
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS material_ordered_at TEXT`;
+    console.log("[migrate] material_ordered_at OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_done BOOLEAN DEFAULT false`;
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_done BOOLEAN DEFAULT false`;
     console.log("[migrate] date_done flags OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS construction_start_at TEXT`;
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS move_in_at TEXT`;
     console.log("[migrate] construction_start_at, move_in_at OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_phases TEXT`;
+    console.log("[migrate] schedule_phases OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`
@@ -146,6 +150,12 @@ async function migrate() {
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS is_master BOOLEAN NOT NULL DEFAULT false`;
     console.log("[migrate] companies.is_master OK");
     await sql`
+      UPDATE companies SET is_master = true
+      WHERE id = (SELECT id FROM companies ORDER BY id ASC LIMIT 1)
+      AND NOT EXISTS (SELECT 1 FROM companies WHERE is_master = true)
+    `;
+    console.log("[migrate] 마스터 미지정 시 첫 회사 마스터 지정 OK");
+    await sql`
       CREATE TABLE IF NOT EXISTS master_default_estimate_templates (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -157,6 +167,41 @@ async function migrate() {
     `;
     console.log("[migrate] master_default_estimate_templates OK");
     await sql`ALTER TABLE master_default_estimate_templates ADD COLUMN IF NOT EXISTS note TEXT`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_workers (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        phone TEXT,
+        role TEXT,
+        memo TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    console.log("[migrate] company_workers OK");
+    await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS rating SMALLINT`;
+    console.log("[migrate] company_workers.rating OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS master_default_order_items (
+        id INT PRIMARY KEY DEFAULT 1,
+        items_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT single_row CHECK (id = 1)
+      )
+    `;
+    await sql`INSERT INTO master_default_order_items (id, items_json) VALUES (1, '{}') ON CONFLICT (id) DO NOTHING`;
+    await sql`ALTER TABLE master_default_order_items ADD COLUMN IF NOT EXISTS item_names_json TEXT NOT NULL DEFAULT '[]'`;
+    console.log("[migrate] master_default_order_items OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS master_order_template (
+        id INT PRIMARY KEY DEFAULT 1,
+        file_content_base64 TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT single_row_template CHECK (id = 1)
+      )
+    `;
+    await sql`ALTER TABLE master_order_template ADD COLUMN IF NOT EXISTS file_content_base64 TEXT`;
+    console.log("[migrate] master_order_template OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);
