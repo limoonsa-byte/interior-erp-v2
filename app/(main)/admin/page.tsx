@@ -392,9 +392,9 @@ export default function AdminPage() {
         const padded = row.length >= 8 ? row : [...row, ...Array(8 - row.length).fill("")];
         ws.addRow(padded);
       });
-      const thinBorder = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-      const grayFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" }, bgColor: { argb: "FFD9D9D9" } };
-      const lightSkyBlueFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6EAF8" }, bgColor: { argb: "FFD6EAF8" } };
+      const thinBorder = { top: { style: "thin" as const }, left: { style: "thin" as const }, bottom: { style: "thin" as const }, right: { style: "thin" as const } };
+      const grayFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFD9D9D9" }, bgColor: { argb: "FFD9D9D9" } };
+      const lightSkyBlueFill = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFD6EAF8" }, bgColor: { argb: "FFD6EAF8" } };
       ws.eachRow((row, rowNumber) => {
         const rowIndex = rowNumber - 1;
         const isHeaderRow = rowNumber === 8;
