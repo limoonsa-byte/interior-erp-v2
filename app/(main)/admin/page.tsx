@@ -1,10 +1,19 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
 
 type PicItem = { id: number; name: string; phone?: string };
 
 type EstimateTemplateItem = { id: number; title: string; createdAt?: string };
+
+type DefaultEstimateTemplate = {
+  id: number;
+  title: string;
+  items: unknown[];
+  processOrder?: string[];
+  note?: string;
+};
 
 type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates";
 
@@ -31,9 +40,13 @@ export default function AdminPage() {
   const [drawingApiMessage, setDrawingApiMessage] = useState("");
 
   const [estimateTemplates, setEstimateTemplates] = useState<EstimateTemplateItem[]>([]);
+  const [defaultEstimateTemplates, setDefaultEstimateTemplates] = useState<DefaultEstimateTemplate[]>([]);
   const [estimateTemplateTitle, setEstimateTemplateTitle] = useState("");
+  const [estimateTemplateFile, setEstimateTemplateFile] = useState<File | null>(null);
   const [estimateTemplateLoading, setEstimateTemplateLoading] = useState(false);
   const [estimateTemplateError, setEstimateTemplateError] = useState<string | null>(null);
+  const [downloadDefaultLoadingId, setDownloadDefaultLoadingId] = useState<number | null>(null);
+  const estimateTemplateFileInputRef = useRef<HTMLInputElement>(null);
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -116,6 +129,7 @@ export default function AdminPage() {
     if (modal === "estimate-templates") {
       queueMicrotask(() => {
         setEstimateTemplateTitle("");
+        setEstimateTemplateFile(null);
         setEstimateTemplateError(null);
       });
       fetch("/api/company/estimate-templates")
@@ -125,6 +139,13 @@ export default function AdminPage() {
           else setEstimateTemplates([]);
         })
         .catch(() => setEstimateTemplates([]));
+      fetch("/api/company/default-estimate-templates")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) setDefaultEstimateTemplates(data);
+          else setDefaultEstimateTemplates([]);
+        })
+        .catch(() => setDefaultEstimateTemplates([]));
     }
   }, [modal, loadPics]);
 
@@ -223,28 +244,190 @@ export default function AdminPage() {
     }
     setEstimateTemplateError(null);
     setEstimateTemplateLoading(true);
-    fetch("/api/company/estimate-templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, items: [], processOrder: [] }),
-    })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (res.ok) {
-          setEstimateTemplateTitle("");
-          fetch("/api/company/estimate-templates")
-            .then((r) => r.json())
-            .then((arr) => {
-              if (Array.isArray(arr)) {
-                setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
-              }
-            });
-        } else {
-          setEstimateTemplateError((data as { error?: string }).error || "저장 실패");
-        }
+
+    const doPost = (items: unknown[], processOrder: string[], note?: string) => {
+      fetch("/api/company/estimate-templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, items, processOrder, note: note ?? null }),
       })
-      .catch(() => setEstimateTemplateError("저장 중 오류가 발생했습니다."))
-      .finally(() => setEstimateTemplateLoading(false));
+        .then(async (res) => {
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            setEstimateTemplateTitle("");
+            setEstimateTemplateFile(null);
+            if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+            fetch("/api/company/estimate-templates")
+              .then((r) => r.json())
+              .then((arr) => {
+                if (Array.isArray(arr)) {
+                  setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
+                }
+              });
+          } else {
+            setEstimateTemplateError((data as { error?: string }).error || "저장 실패");
+          }
+        })
+        .catch(() => setEstimateTemplateError("저장 중 오류가 발생했습니다."))
+        .finally(() => setEstimateTemplateLoading(false));
+    };
+
+    if (estimateTemplateFile) {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const XLSX = await import("xlsx");
+          const data = ev.target?.result;
+          if (!data) {
+            setEstimateTemplateError("파일을 읽을 수 없습니다.");
+            setEstimateTemplateLoading(false);
+            return;
+          }
+          const wb = XLSX.read(data, { type: "binary" });
+          if (!wb.SheetNames?.length) {
+            setEstimateTemplateError("엑셀에 시트가 없습니다.");
+            setEstimateTemplateLoading(false);
+            return;
+          }
+          let ws = wb.Sheets[wb.SheetNames[0]];
+          sheetLoop: for (const name of wb.SheetNames) {
+            const s = wb.Sheets[name];
+            const preview = XLSX.utils.sheet_to_json(s, { header: 1, defval: "", range: 0 }) as (string | number)[][];
+            for (let r = 0; r < Math.min(15, preview.length); r++) {
+              const a = String(preview[r]?.[0] ?? "").trim().toLowerCase();
+              const b = String(preview[r]?.[1] ?? "").trim();
+              const c = String(preview[r]?.[2] ?? "").trim();
+              if (a === "no" || (b === "품목" && c === "규격")) {
+                ws = s;
+                break sheetLoop;
+              }
+            }
+          }
+          const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as (string | number)[][];
+          const rows = rawRows.map((row) => {
+            const arr = Array.isArray(row) ? [...row] : [];
+            while (arr.length < 9) arr.push("");
+            return arr;
+          });
+          const parsed = parseEstimateExcelRows(rows);
+          if (parsed && parsed.items.length > 0) {
+            doPost(parsed.items, parsed.processOrder);
+          } else {
+            setEstimateTemplateError("엑셀에서 견적 항목을 찾지 못했습니다. 견적서 엑셀 저장 형식으로 올려 주세요.");
+            setEstimateTemplateLoading(false);
+          }
+        } catch (err) {
+          setEstimateTemplateError("엑셀 파싱 중 오류가 발생했습니다.");
+          setEstimateTemplateLoading(false);
+        }
+      };
+      reader.readAsBinaryString(estimateTemplateFile);
+    } else {
+      doPost([], []);
+    }
+  };
+
+  const handleDownloadDefaultAsExcel = async (t: DefaultEstimateTemplate) => {
+    setEstimateTemplateError(null);
+    setDownloadDefaultLoadingId(t.id);
+    try {
+      const ExcelJS = await import("exceljs");
+      const items = (t.items ?? []) as { processGroup?: string; category?: string; spec?: string; unit?: string; materialUnitPrice?: number; laborUnitPrice?: number; note?: string }[];
+      const processOrder = t.processOrder ?? [];
+      const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
+      const sorted = [...items].sort((a, b) => {
+        const pa = a.processGroup ?? "";
+        const pb = b.processGroup ?? "";
+        const ia = orderMap.get(pa) ?? processOrder.length;
+        const ib = orderMap.get(pb) ?? processOrder.length;
+        if (ia !== ib) return ia - ib;
+        return 0;
+      });
+      const groups: { name: string; items: typeof sorted }[] = [];
+      let currentName = "";
+      let currentItems: typeof sorted = [];
+      sorted.forEach((it) => {
+        const name = it.processGroup ?? "";
+        if (name !== currentName) {
+          if (currentItems.length > 0) groups.push({ name: currentName, items: currentItems });
+          currentName = name;
+          currentItems = [it];
+        } else {
+          currentItems.push(it);
+        }
+      });
+      if (currentItems.length > 0) groups.push({ name: currentName, items: currentItems });
+
+      const ROW_TYPE_COL = 7;
+      const data: (string | number)[][] = [
+        ["고객명", "", "", "", "", "", "", ""],
+        ["연락처", "", "", "", "", "", "", ""],
+        ["주소", "", "", "", "", "", "", ""],
+        ["제목", "", "", "", "", "", "", ""],
+        ["견적일자", "", "", "", "", "", "", ""],
+        ["특이사항", (t.note as string) ?? "", "", "", "", "", "", ""],
+        ["", "", "", "", "", "", "", ""],
+        ["no", "품목", "규격", "단위", "재료비단가", "노무비단가", "비고", "행구분"],
+      ];
+      groups.forEach((grp) => {
+        const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
+        data.push([displayName, "#", "", "", "", "", "", "공정"]);
+        grp.items.forEach((it, subNo) => {
+          data.push([
+            subNo + 1,
+            it.category ?? "",
+            it.spec ?? "",
+            it.unit ?? "",
+            Number(it.materialUnitPrice ?? 0) || 0,
+            Number(it.laborUnitPrice ?? 0) || 0,
+            it.note ?? "",
+            "",
+          ]);
+        });
+      });
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("견적서", { views: [{ rightToLeft: false }] });
+      data.forEach((row) => {
+        const padded = row.length >= 8 ? row : [...row, ...Array(8 - row.length).fill("")];
+        ws.addRow(padded);
+      });
+      const thinBorder = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      const grayFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9D9D9" }, bgColor: { argb: "FFD9D9D9" } };
+      const lightSkyBlueFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6EAF8" }, bgColor: { argb: "FFD6EAF8" } };
+      ws.eachRow((row, rowNumber) => {
+        const rowIndex = rowNumber - 1;
+        const isHeaderRow = rowNumber === 8;
+        const isProcessNameRow =
+          rowNumber > 8 &&
+          rowIndex < data.length &&
+          data[rowIndex] &&
+          (String(data[rowIndex][ROW_TYPE_COL] ?? "").trim() === "공정");
+        const hasBorder = rowNumber >= 8 && !isProcessNameRow;
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          if (colNumber <= 8) {
+            if (hasBorder) cell.border = thinBorder;
+            if (isHeaderRow) cell.fill = grayFill;
+            else if (isProcessNameRow) cell.fill = lightSkyBlueFill;
+            if (isProcessNameRow && colNumber === 1) cell.font = { bold: true };
+          }
+        });
+      });
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `견적서_${(t.title || "기본서식").replace(/[/\\?*:[\]]/g, "_")}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      setEstimateTemplateError("엑셀 다운로드 중 오류가 발생했습니다.");
+    } finally {
+      setDownloadDefaultLoadingId(null);
+    }
   };
 
   const handleDeleteEstimateTemplate = (id: number) => {
@@ -520,9 +703,29 @@ export default function AdminPage() {
               </button>
             </div>
             <p className="mb-4 text-sm text-gray-600">
-              커스텀 견적 제목을 정해서 저장해 두면, 견적서 작성 화면에서 &quot;템플릿 불러오기&quot;로 불러올 수 있습니다. 여기서는 제목만 등록하고, 견적서 작성에서 항목을 채운 뒤 &quot;템플릿으로 저장&quot;하면 해당 제목의 템플릿에 내용이 저장됩니다.
+              기본 템플릿을 엑셀로 다운받아 수정한 뒤, 제목을 넣고 파일을 선택해 저장하면 우리 회사 템플릿이 됩니다. 견적서 작성 → 템플릿 불러오기 → 우리 회사 템플릿에서 불러올 수 있습니다.
             </p>
-            <div className="mb-4 flex gap-2">
+            {defaultEstimateTemplates.length > 0 && (
+              <div className="mb-4">
+                <p className="mb-2 text-xs font-medium text-gray-500">기본 템플릿 엑셀 다운로드 (수정 후 위에서 파일로 등록)</p>
+                <ul className="space-y-2">
+                  {defaultEstimateTemplates.map((t) => (
+                    <li key={t.id} className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm">
+                      <span className="font-medium text-gray-800">{t.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadDefaultAsExcel(t)}
+                        disabled={downloadDefaultLoadingId === t.id}
+                        className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        {downloadDefaultLoadingId === t.id ? "다운로드 중..." : "엑셀 다운"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="mb-3 flex gap-2">
               <input
                 type="text"
                 value={estimateTemplateTitle}
@@ -540,13 +743,38 @@ export default function AdminPage() {
                 저장
               </button>
             </div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <input
+                ref={estimateTemplateFileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                className="hidden"
+                onChange={(e) => setEstimateTemplateFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                type="button"
+                onClick={() => estimateTemplateFileInputRef.current?.click()}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                {estimateTemplateFile ? `선택됨: ${estimateTemplateFile.name}` : "엑셀으로 내용 채우기 (선택)"}
+              </button>
+              {estimateTemplateFile && (
+                <button
+                  type="button"
+                  onClick={() => { setEstimateTemplateFile(null); if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = ""; }}
+                  className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  취소
+                </button>
+              )}
+            </div>
             {estimateTemplateError && (
               <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {estimateTemplateError}
               </div>
             )}
             {estimateTemplates.length === 0 ? (
-              <p className="text-sm text-gray-500">등록된 견적 템플릿이 없습니다. 위에서 커스텀 제목을 입력 후 저장해 주세요.</p>
+              <p className="text-sm text-gray-500">등록된 견적 템플릿이 없습니다. 위에서 기본 템플릿 엑셀 다운 후 수정하거나, 제목 입력 + 파일 선택 후 저장하세요.</p>
             ) : (
               <ul className="space-y-2">
                 {estimateTemplates.map((t) => (

@@ -136,9 +136,11 @@ export default function MaterialOrderPage() {
   const [companyName, setCompanyName] = useState("");
   /** 발주서 미리보기 모달에 표시할 발주 유형 (null이면 모달 숨김) */
   const [previewLabel, setPreviewLabel] = useState<string | null>(null);
-  /** 품목 드롭다운용 기본 품목명 목록 (마스터에서 설정) */
-  const [orderItemNames, setOrderItemNames] = useState<string[]>([]);
-
+  /** 화면에 표시할 발주 유형 목록 (추가/삭제 가능) */
+  const [visibleOrderLabels, setVisibleOrderLabels] = useState<string[]>(() => [
+    ...ORDER_CATEGORIES.map((c) => c.label),
+    "기타",
+  ]);
   /** 방향키로 발주 테이블 셀 이동 (견적서와 동일). 같은 열에서 위/아래, 같은 행에서 좌/우 */
   const handleOrderTableKeyDown = useCallback((e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -193,21 +195,18 @@ export default function MaterialOrderPage() {
       fetch("/api/consultations").then((r) => r.json()),
       fetch("/api/company/pics").then((r) => r.json()),
       fetch("/api/company/me").then((r) => r.json()),
-      fetch("/api/company/order-item-names").then((r) => r.json()),
       fetch("/api/company/order-default-items").then((r) => r.json()),
-    ]).then(([estRes, consRes, picsRes, meRes, namesRes, defaultRes]) => {
+    ]).then(([estRes, consRes, picsRes, meRes, defaultRes]) => {
       const est = estRes.status === "fulfilled" ? estRes.value : [];
       const cons = consRes.status === "fulfilled" ? consRes.value : [];
       const pics = picsRes.status === "fulfilled" ? picsRes.value : [];
       const me = meRes.status === "fulfilled" ? meRes.value : null;
-      const namesData = namesRes.status === "fulfilled" ? namesRes.value : { itemNames: [] };
       const defaultData = defaultRes.status === "fulfilled" ? defaultRes.value : { itemsByLabel: {} };
       setEstimates(Array.isArray(est) ? est : []);
       setConsultations(Array.isArray(cons) ? cons : []);
       setPicList(Array.isArray(pics) ? pics : []);
       const company = (me as { company?: { name?: string; code?: string } } | null)?.company;
       setCompanyName(company?.name ?? company?.code ?? "");
-      setOrderItemNames(Array.isArray(namesData?.itemNames) ? namesData.itemNames : []);
       if (defaultData?.itemsByLabel && typeof defaultData.itemsByLabel === "object" && Object.keys(defaultData.itemsByLabel).length > 0) {
         const byLabel = defaultData.itemsByLabel as Record<string, AddedOrderRow[]>;
         setAddedRowsByLabel((prev) => {
@@ -252,16 +251,10 @@ export default function MaterialOrderPage() {
     setRequiredDeliveryAddress((prev) => (prev === "" ? selectedEstimate.address ?? "" : prev));
   }, [selectedEstimate?.id]);
 
-  /** 발주 기본 폼: 목재발주와 동일한 구조. 견적서에서 읽어오는 건 추후 적용 */
-  const ORDER_LABELS = useMemo(
-    () => [...ORDER_CATEGORIES.map((c) => c.label), "기타"],
-    []
-  );
-
-  /** 발주 유형별로 그룹 (순서: 10개 + 기타). 현재는 견적 항목 없이 빈 목록만 사용 */
+  /** 발주 유형별로 그룹. 현재는 견적 항목 없이 빈 목록만 사용 */
   const itemsByCategory = useMemo(
-    () => ORDER_LABELS.map((label) => ({ label, items: [] as EstimateItem[] })),
-    [ORDER_LABELS]
+    () => visibleOrderLabels.map((label) => ({ label, items: [] as EstimateItem[] })),
+    [visibleOrderLabels]
   );
 
   /** 모든 발주 유형에 기본 행 1개씩 추가 (목재발주 폼과 동일) */
@@ -269,7 +262,7 @@ export default function MaterialOrderPage() {
     if (!selectedEstimateId) return;
     const next: Record<string, AddedOrderRow[]> = {};
     let changed = false;
-    ORDER_LABELS.forEach((label) => {
+    visibleOrderLabels.forEach((label) => {
       const current = addedRowsByLabel[label] ?? [];
       if (current.length === 0) {
         next[label] = [createEmptyAddedRow()];
@@ -279,7 +272,47 @@ export default function MaterialOrderPage() {
     if (changed) {
       setAddedRowsByLabel((prev) => ({ ...prev, ...next }));
     }
-  }, [selectedEstimateId, ORDER_LABELS, addedRowsByLabel]);
+  }, [selectedEstimateId, visibleOrderLabels, addedRowsByLabel]);
+
+  /** 발주 유형 추가 */
+  const handleAddOrderType = () => {
+    const name = window.prompt("발주 유형 이름을 입력하세요 (예: 소방발주)", "새 발주");
+    const trimmed = name?.trim();
+    if (!trimmed) return;
+    if (visibleOrderLabels.includes(trimmed)) {
+      alert("이미 있는 유형명입니다.");
+      return;
+    }
+    setVisibleOrderLabels((prev) => [...prev, trimmed]);
+    setAddedRowsByLabel((prev) => ({ ...prev, [trimmed]: [createEmptyAddedRow()] }));
+    setDeliveryDateByLabel((prev) => ({ ...prev, [trimmed]: "" }));
+  };
+
+  /** 발주 유형 삭제 */
+  const handleRemoveOrderType = (label: string) => {
+    if (visibleOrderLabels.length <= 1) {
+      alert("최소 하나의 발주 유형은 필요합니다.");
+      return;
+    }
+    if (!window.confirm(`"${label}" 발주를 삭제할까요? 해당 유형의 항목도 모두 삭제됩니다.`)) return;
+    setVisibleOrderLabels((prev) => prev.filter((l) => l !== label));
+    setAddedRowsByLabel((prev) => {
+      const next = { ...prev };
+      delete next[label];
+      return next;
+    });
+    setDeliveryDateByLabel((prev) => {
+      const next = { ...prev };
+      delete next[label];
+      return next;
+    });
+    setCollapsedByLabel((prev) => {
+      const next = { ...prev };
+      delete next[label];
+      return next;
+    });
+    if (previewLabel === label) setPreviewLabel(null);
+  };
 
   const totalMaterialAmount = useMemo(() => {
     return itemsByCategory.reduce((sum, { label }) => {
@@ -603,56 +636,70 @@ export default function MaterialOrderPage() {
               )}
             </div>
 
-            {/* 품목 드롭다운용 목록 (마스터에서 설정한 기본 품목, 선택 또는 직접 입력 가능) */}
-            <datalist id="order-item-names-datalist">
-              {orderItemNames.map((name) => (
-                <option key={name} value={name} />
-              ))}
-            </datalist>
-            <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setCollapsedByLabel(
-                        Object.fromEntries(itemsByCategory.map(({ label }) => [label, true]))
-                      )
-                    }
-                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                  >
-                    전체 접기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCollapsedByLabel({})}
-                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
-                  >
-                    전체 펼치기
-                  </button>
+            <div className="mt-4 space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAddOrderType}
+                      className="rounded-lg border-2 border-blue-400 bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
+                    >
+                      + 발주 유형 추가
+                    </button>
+                    <span className="text-gray-400">|</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCollapsedByLabel(
+                          Object.fromEntries(itemsByCategory.map(({ label }) => [label, true]))
+                        )
+                      }
+                      className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    >
+                      전체 접기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCollapsedByLabel({})}
+                      className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                    >
+                      전체 펼치기
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-4 space-y-6">
                   {itemsByCategory.map(({ label, items: catItems }) => {
                     const isCollapsed = collapsedByLabel[label] ?? false;
                     return (
                       <div key={label} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCollapsedByLabel((prev) => ({ ...prev, [label]: !(prev[label] ?? false) }))
-                          }
-                          className="flex w-full items-center justify-between border-b border-gray-200 bg-gray-100 px-4 py-2.5 text-left font-medium text-gray-800 hover:bg-gray-200"
-                        >
-                          <span>{label}</span>
-                          <span className="text-gray-500">
-                            {(() => {
-                              const added = addedRowsByLabel[label] ?? [];
-                              const total = catItems.length + added.length;
-                              return total > 0 ? `${total}개 항목` : "해당 항목 없음";
-                            })()}
-                          </span>
-                          <span className="text-gray-500" aria-hidden>
-                            {isCollapsed ? "▶" : "▼"}
-                          </span>
-                        </button>
+                        <div className="flex w-full items-center gap-2 border-b border-gray-200 bg-gray-100 px-4 py-2.5">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCollapsedByLabel((prev) => ({ ...prev, [label]: !(prev[label] ?? false) }))
+                            }
+                            className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left font-medium text-gray-800 hover:bg-gray-200 rounded -m-2 p-2"
+                          >
+                            <span className="truncate">{label}</span>
+                            <span className="text-gray-500 shrink-0">
+                              {(() => {
+                                const added = addedRowsByLabel[label] ?? [];
+                                const total = catItems.length + added.length;
+                                return total > 0 ? `${total}개 항목` : "해당 항목 없음";
+                              })()}
+                            </span>
+                            <span className="text-gray-500 shrink-0" aria-hidden>
+                              {isCollapsed ? "▶" : "▼"}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleRemoveOrderType(label); }}
+                            className="shrink-0 rounded border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+                            title="이 발주 유형 삭제"
+                          >
+                            발주 삭제
+                          </button>
+                        </div>
                         {!isCollapsed && (
                             <>
                               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-4 py-2">
@@ -754,7 +801,6 @@ export default function MaterialOrderPage() {
                                     <td className="border border-gray-300 p-0">
                                       <input
                                         type="text"
-                                        list="order-item-names-datalist"
                                         value={row.category}
                                         onChange={(e) =>
                                           setAddedRowsByLabel((prev) => {
@@ -914,8 +960,10 @@ export default function MaterialOrderPage() {
                 </div>
                 {/* 발주서 미리보기 모달 — 저장 시 나갈 2번 양식 그대로 표시 */}
                 {previewLabel && (() => {
-                  const catItems = itemsByCategory.find((c) => c.label === previewLabel)?.items ?? [];
-                  const addedRows = addedRowsByLabel[previewLabel] ?? [];
+                  const allCatItems = itemsByCategory.find((c) => c.label === previewLabel)?.items ?? [];
+                  const allAddedRows = addedRowsByLabel[previewLabel] ?? [];
+                  const catItems = allCatItems.filter((it) => (Number(it.qty) || 0) > 0);
+                  const addedRows = allAddedRows.filter((row) => (Number(row.qty) || 0) > 0);
                   const hasItems = catItems.length > 0 || addedRows.length > 0;
                   const borderStyle = { border: "1px solid #374151" } as const;
                   return (
@@ -978,8 +1026,6 @@ export default function MaterialOrderPage() {
                                   <th className="border border-gray-500 px-2 py-1.5 font-medium" style={borderStyle}>규격</th>
                                   <th className="border border-gray-500 px-2 py-1.5 font-medium w-12" style={borderStyle}>단위</th>
                                   <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-16" style={borderStyle}>수량</th>
-                                  <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={borderStyle}>단가</th>
-                                  <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={borderStyle}>자재 금액</th>
                                   <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[100px]" style={borderStyle}>비고</th>
                                 </tr>
                               </thead>
@@ -992,8 +1038,6 @@ export default function MaterialOrderPage() {
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{it.spec ?? ""}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{it.unit ?? ""}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(Number(it.qty) || 0)}</td>
-                                      <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(Number(it.materialUnitPrice ?? it.unitPrice ?? 0) || 0)}</td>
-                                      <td className="border border-gray-500 px-2 py-1 text-right font-medium text-gray-900" style={borderStyle}>{formatNum(materialAmount(it))}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{memoByKey[rowKey] ?? it.note ?? ""}</td>
                                     </tr>
                                   );
@@ -1001,16 +1045,12 @@ export default function MaterialOrderPage() {
                                 {addedRows.map((row, idx) => {
                                   const rowKey = `added-${previewLabel}-${row.id}`;
                                   const qtyNum = Number(row.qty) || 0;
-                                  const unitNum = Number(row.materialUnitPrice) || 0;
-                                  const amount = qtyNum * unitNum;
                                   return (
                                     <tr key={`pv-added-${idx}`} className="bg-white">
                                       <td className="border border-gray-500 px-2 py-1 text-gray-800" style={borderStyle}>{row.category || ""}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{row.spec || ""}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{row.unit || ""}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(qtyNum)}</td>
-                                      <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(unitNum)}</td>
-                                      <td className="border border-gray-500 px-2 py-1 text-right font-medium text-gray-900" style={borderStyle}>{formatNum(amount)}</td>
                                       <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{memoByKey[rowKey] ?? row.note ?? ""}</td>
                                     </tr>
                                   );
@@ -1025,8 +1065,10 @@ export default function MaterialOrderPage() {
                 })()}
                 {/* 발주서 저장 시 캡처용 — 사용자가 준 표 그대로(삭제 열 없음, 7열만). 화면 밖에 렌더 */}
                 <div className="fixed left-[-9999px] top-0 z-[-1] w-[600px]" aria-hidden>
-                  {itemsByCategory.map(({ label, items: catItems }) => {
-                    const addedRows = addedRowsByLabel[label] ?? [];
+                  {itemsByCategory.map(({ label, items: allCatItems }) => {
+                    const allAddedRows = addedRowsByLabel[label] ?? [];
+                    const catItems = allCatItems.filter((it) => (Number(it.qty) || 0) > 0);
+                    const addedRows = allAddedRows.filter((row) => (Number(row.qty) || 0) > 0);
                     const hasItems = catItems.length > 0 || addedRows.length > 0;
                     const borderStyle = { border: "1px solid #374151" } as const;
                     return (
@@ -1073,8 +1115,6 @@ export default function MaterialOrderPage() {
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium" style={borderStyle}>규격</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium w-12" style={borderStyle}>단위</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-16" style={borderStyle}>수량</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={borderStyle}>단가</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={borderStyle}>자재 금액</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[100px]" style={borderStyle}>비고</th>
                               </tr>
                             </thead>
@@ -1087,8 +1127,6 @@ export default function MaterialOrderPage() {
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{it.spec ?? ""}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{it.unit ?? ""}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(Number(it.qty) || 0)}</td>
-                                    <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(Number(it.materialUnitPrice ?? it.unitPrice ?? 0) || 0)}</td>
-                                    <td className="border border-gray-500 px-2 py-1 text-right font-medium text-gray-900" style={borderStyle}>{formatNum(materialAmount(it))}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{memoByKey[rowKey] ?? it.note ?? ""}</td>
                                   </tr>
                                 );
@@ -1096,16 +1134,12 @@ export default function MaterialOrderPage() {
                               {addedRows.map((row, idx) => {
                                 const rowKey = `added-${label}-${row.id}`;
                                 const qtyNum = Number(row.qty) || 0;
-                                const unitNum = Number(row.materialUnitPrice) || 0;
-                                const amount = qtyNum * unitNum;
                                 return (
                                   <tr key={`p-added-${idx}`} className="bg-white">
                                     <td className="border border-gray-500 px-2 py-1 text-gray-800" style={borderStyle}>{row.category || ""}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{row.spec || ""}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{row.unit || ""}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(qtyNum)}</td>
-                                    <td className="border border-gray-500 px-2 py-1 text-right text-gray-800" style={borderStyle}>{formatNum(unitNum)}</td>
-                                    <td className="border border-gray-500 px-2 py-1 text-right font-medium text-gray-900" style={borderStyle}>{formatNum(amount)}</td>
                                     <td className="border border-gray-500 px-2 py-1 text-gray-700" style={borderStyle}>{memoByKey[rowKey] ?? row.note ?? ""}</td>
                                   </tr>
                                 );

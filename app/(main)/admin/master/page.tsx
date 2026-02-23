@@ -135,13 +135,6 @@ export default function MasterAdminPage() {
   const [orderSelectedFileName, setOrderSelectedFileName] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderSubmitLoading, setOrderSubmitLoading] = useState(false);
-  /** 품목 드롭다운용 기본 품목명 목록 */
-  const [itemNamesList, setItemNamesList] = useState<string[]>([]);
-  const [itemNamesLoading, setItemNamesLoading] = useState(false);
-  const [itemNamesSaveLoading, setItemNamesSaveLoading] = useState(false);
-  const [itemNamesError, setItemNamesError] = useState("");
-  const itemNamesExcelRef = useRef<HTMLInputElement>(null);
-
   useEffect(() => {
     fetch("/api/company/me")
       .then((res) => res.json())
@@ -173,24 +166,6 @@ export default function MasterAdminPage() {
 
   useEffect(() => {
     if (allowed) loadTemplates();
-  }, [allowed]);
-
-  const loadOrderDefaults = () => {
-    setItemNamesLoading(true);
-    fetch("/api/admin/master/order-default")
-      .then((res) => {
-        if (!res.ok) throw new Error("조회 실패");
-        return res.json();
-      })
-      .then((data) => {
-        setItemNamesList(Array.isArray(data.itemNames) ? data.itemNames : []);
-      })
-      .catch(() => setItemNamesList([]))
-      .finally(() => setItemNamesLoading(false));
-  };
-
-  useEffect(() => {
-    if (allowed) loadOrderDefaults();
   }, [allowed]);
 
   const handleExcelFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -277,67 +252,6 @@ export default function MasterAdminPage() {
         loadTemplates();
       })
       .catch(() => alert("삭제 중 오류가 발생했습니다."));
-  };
-
-  const handleItemNamesExcelFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setItemNamesError("");
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const XLSX = await import("xlsx");
-        const data = ev.target?.result;
-        if (!data) return;
-        const wb = XLSX.read(data, { type: "binary" });
-        if (!wb.SheetNames?.length) {
-          setItemNamesError("엑셀에 시트가 없습니다.");
-          return;
-        }
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as (string | number)[][];
-        const names: string[] = [];
-        const header = rows[0]?.map((c) => String(c ?? "").trim()) ?? [];
-        const colIdx = header.findIndex((h) => h === "품목" || h === "품목명");
-        for (let i = 1; i < rows.length; i++) {
-          const r = rows[i] as (string | number)[];
-          const val = colIdx >= 0 ? String(r[colIdx] ?? "").trim() : String(r[0] ?? "").trim();
-          if (val) names.push(val);
-        }
-        setItemNamesList(names);
-      } catch (err) {
-        console.error(err);
-        setItemNamesError("엑셀 파일을 읽는 중 오류가 발생했습니다.");
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  const handleItemNamesExcelDownload = async () => {
-    setItemNamesError("");
-    const XLSX = await import("xlsx");
-    const wsData = [["품목"], ...itemNamesList.map((n) => [n])];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "품목목록");
-    XLSX.writeFile(wb, "품목_드롭다운_목록.xlsx");
-  };
-
-  const handleItemNamesSave = () => {
-    setItemNamesError("");
-    setItemNamesSaveLoading(true);
-    fetch("/api/admin/master/order-default", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemNames: itemNamesList }),
-    })
-      .then((res) => {
-        if (!res.ok) return res.json().then((d) => { throw new Error((d as { error?: string }).error || "저장 실패"); });
-        alert("기본 품목(드롭다운)이 저장되었습니다.");
-      })
-      .catch((e) => setItemNamesError(e.message || "저장 실패"))
-      .finally(() => setItemNamesSaveLoading(false));
   };
 
   const handleOrderTemplateDownload = () => {
@@ -446,69 +360,11 @@ export default function MasterAdminPage() {
         </p>
       </div>
 
-      {/* 1. 기본 품목(드롭다운) - 맨 위에 배치 */}
+      {/* 1. 자재 발주 기본 품목 (발주 유형별) */}
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-800">기본 품목(드롭다운)</h2>
+        <h2 className="mb-2 text-base font-semibold text-gray-800">자재 발주 기본 품목(발주 유형별)</h2>
         <p className="mb-4 text-sm text-gray-600">
-          자재 발주 페이지에서 품목 칸에 표시할 드롭다운 목록입니다. 엑셀로 불러오기·저장 후 저장하면 모든 회사 발주서에서 품목을 드롭다운으로 선택할 수 있습니다.
-        </p>
-        {itemNamesLoading ? (
-          <p className="text-sm text-gray-500">불러오는 중...</p>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600">현재 품목 {itemNamesList.length}개</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={itemNamesExcelRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                className="hidden"
-                onChange={handleItemNamesExcelFile}
-              />
-              <button
-                type="button"
-                onClick={() => itemNamesExcelRef.current?.click()}
-                className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                품목 엑셀 불러오기
-              </button>
-              <button
-                type="button"
-                onClick={handleItemNamesExcelDownload}
-                disabled={itemNamesList.length === 0}
-                className="rounded-lg border border-gray-400 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                품목 엑셀 저장
-              </button>
-              <button
-                type="button"
-                onClick={handleItemNamesSave}
-                disabled={itemNamesSaveLoading}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {itemNamesSaveLoading ? "저장 중…" : "기본 품목 저장"}
-              </button>
-            </div>
-            {itemNamesError && (
-              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{itemNamesError}</p>
-            )}
-            {itemNamesList.length > 0 && (
-              <ul className="max-h-40 overflow-y-auto rounded border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700">
-                {itemNamesList.slice(0, 50).map((name, i) => (
-                  <li key={i}>{name}</li>
-                ))}
-                {itemNamesList.length > 50 && <li className="text-gray-500">… 외 {itemNamesList.length - 50}개</li>}
-              </ul>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* 2. 자재 발주 기본 품목 */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-800">자재 발주 기본 품목(발주 유형별)</h2>
-        <p className="mb-4 text-sm text-gray-600">
-          발주 유형별 기본 품목을 엑셀로 관리합니다. 아래에서 <strong>기본 품목 엑셀을 다운로드</strong>한 뒤, 품목을 채워 넣고 <strong>엑셀 파일을 넣어</strong> 등록하면 자재 발주 페이지에서 기본으로 불러올 수 있습니다.
+          목재발주·중문발주·조명 등 유형마다 미리 채워 넣을 품목을 엑셀로 관리합니다. 기본 품목 엑셀을 다운로드해 채운 뒤 엑셀 파일을 넣어 등록하면 자재 발주 페이지 로드 시 해당 행들이 기본으로 들어갑니다.
         </p>
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
