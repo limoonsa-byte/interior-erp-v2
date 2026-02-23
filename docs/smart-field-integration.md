@@ -1,6 +1,6 @@
 # 스마트 현장관리 ↔ 견적서 작성 연동
 
-인테리어 ERP의 **견적서 작성** 페이지에서 [스마트 현장관리](https://limoonsa-byte.github.io/Smart-Field_project/pwa_index.html) PWA를 열고, 도면에서 읽은 **문 개수·방 면적·치수** 등을 견적 항목으로 받아오기 위한 규격입니다.
+인테리어 올인원 ERP시스템의 **견적서 작성** 페이지에서 [스마트 현장관리](https://limoonsa-byte.github.io/Smart-Field_project/pwa_index.html) PWA를 열고, 도면에서 읽은 **문 개수·방 면적·치수** 등을 견적 항목으로 받아오기 위한 규격입니다.
 
 ## 1. ERP 쪽 동작
 

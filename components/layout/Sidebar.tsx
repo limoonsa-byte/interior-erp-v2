@@ -9,6 +9,8 @@ import {
   MessageSquare,
   FileText,
   FolderKanban,
+  Users,
+  Package,
   Wallet,
   Calendar,
   ClipboardList,
@@ -27,8 +29,10 @@ const baseMenuItems = [
   { href: "/estimate", label: "견적서 작성", icon: FileText },
   { href: "/schedule", label: "일정", icon: Calendar },
   { href: "/projects", label: "프로젝트", icon: FolderKanban },
-  { href: "/settlement", label: "정산", icon: Wallet },
+  { href: "/workers", label: "현장 인부 DB", icon: Users },
+  { href: "/material-order", label: "자재 발주", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
+  { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/reception", label: "접수", icon: UserPlus },
   { href: "/admin", label: "관리", icon: Settings },
@@ -82,7 +86,7 @@ export function Sidebar() {
             className="flex flex-col items-start text-left"
           >
             <span className="truncate text-lg font-semibold">
-              인테리어 ERP
+              인테리어 올인원 ERP시스템
             </span>
             <span className="mt-0.5 truncate text-[11px] text-slate-300 underline-offset-2 hover:underline">
               {companyLabel} 님, 환영합니다. (클릭 시 로그아웃)

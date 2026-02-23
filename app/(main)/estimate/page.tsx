@@ -296,6 +296,7 @@ function EstimateForm({
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewPrintRef = React.useRef<HTMLDivElement>(null);
+  const estimateFormRef = React.useRef<HTMLFormElement>(null);
   const [companyName, setCompanyName] = useState("");
   /** 상담에서 선택한 담당자명 → 미리보기 '담 당 자'에 표시 */
   const [consultationPic, setConsultationPic] = useState("");
@@ -842,6 +843,72 @@ function EstimateForm({
   const vat = Math.floor(subtotal * 0.1);
   const total = subtotal + vat;
 
+  /** 방향키로 입력 칸 이동 (견적서 작성 시 적기 편하게). 테이블 안에서는 위/아래는 같은 열 다음·이전 행으로 이동 */
+  const handleEstimateFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") return;
+    const form = estimateFormRef.current;
+    if (!form) return;
+
+    const row = target.getAttribute("data-estimate-row");
+    const col = target.getAttribute("data-estimate-col");
+    if (row != null && col != null) {
+      const gridRows = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("[data-estimate-row][data-estimate-col]");
+      const byRow = new Map<number, Map<number, HTMLInputElement | HTMLTextAreaElement>>();
+      gridRows.forEach((el) => {
+        if (el.offsetParent == null || (el as HTMLInputElement).disabled) return;
+        const r = parseInt(el.getAttribute("data-estimate-row") ?? "", 10);
+        const c = parseInt(el.getAttribute("data-estimate-col") ?? "", 10);
+        if (Number.isNaN(r) || Number.isNaN(c)) return;
+        if (!byRow.has(r)) byRow.set(r, new Map());
+        byRow.get(r)!.set(c, el);
+      });
+      const sortedRows = Array.from(byRow.keys()).sort((a, b) => a - b);
+      const ri = sortedRows.indexOf(parseInt(row, 10));
+      const ci = parseInt(col, 10);
+      if (ri !== -1 && e.key === "ArrowDown") {
+        e.preventDefault();
+        const nextRow = sortedRows[ri + 1];
+        if (nextRow != null) byRow.get(nextRow)?.get(ci)?.focus();
+      } else if (ri !== -1 && e.key === "ArrowUp") {
+        e.preventDefault();
+        const prevRow = sortedRows[ri - 1];
+        if (prevRow != null) byRow.get(prevRow)?.get(ci)?.focus();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const rowMap = byRow.get(parseInt(row, 10));
+        if (rowMap) {
+          const nextCol = Array.from(rowMap.keys()).sort((a, b) => a - b).find((k) => k > ci);
+          if (nextCol != null) rowMap.get(nextCol)?.focus();
+        }
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const rowMap = byRow.get(parseInt(row, 10));
+        if (rowMap) {
+          const prevCol = Array.from(rowMap.keys()).sort((a, b) => b - a).find((k) => k < ci);
+          if (prevCol != null) rowMap.get(prevCol)?.focus();
+        }
+      }
+      return;
+    }
+
+    const focusables = form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+      'input:not([type="hidden"]):not([type="file"]), textarea'
+    );
+    const visible = Array.from(focusables).filter(
+      (el) => el.offsetParent != null && !(el as HTMLInputElement).disabled
+    );
+    const idx = visible.indexOf(document.activeElement as HTMLInputElement);
+    if (idx === -1) return;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+      e.preventDefault();
+      visible[idx + 1]?.focus();
+    } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+      e.preventDefault();
+      visible[idx - 1]?.focus();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -885,7 +952,12 @@ function EstimateForm({
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
+    <form
+      ref={estimateFormRef}
+      onSubmit={handleSubmit}
+      onKeyDown={handleEstimateFormKeyDown}
+      className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm"
+    >
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">고객명</label>
@@ -1158,6 +1230,7 @@ function EstimateForm({
               const toggleSection = (name: string) => {
                 setCollapsedSections((prev) => ({ ...prev, [name]: !prev[name] }));
               };
+              let dataRowIndex = 0;
               groups.forEach((grp) => {
                 const visibleIndices = grp.indices;
                 if (visibleIndices.length === 0) return;
@@ -1215,12 +1288,15 @@ function EstimateForm({
                 visibleIndices.forEach((origIdx, subNo) => {
                   const item = items[origIdx];
                   const noLabel = `${subNo + 1}.`;
+                  const currentDataRow = dataRowIndex++;
                   rows.push(
                     <tr key={origIdx} className="border-b border-gray-100">
                       <td className="p-2 font-mono text-gray-600">{noLabel}</td>
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={0}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           value={composition?.key === `item-${origIdx}-category` ? composition.value : (item.category ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-category`, value: item.category ?? "" })}
@@ -1243,6 +1319,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={1}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           value={composition?.key === `item-${origIdx}-spec` ? composition.value : (item.spec ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-spec`, value: item.spec ?? "" })}
@@ -1265,6 +1343,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={2}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           value={composition?.key === `item-${origIdx}-unit` ? composition.value : (item.unit ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-unit`, value: item.unit ?? "" })}
@@ -1287,6 +1367,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={3}
                           inputMode="numeric"
                           autoComplete="off"
                           lang="en"
@@ -1306,6 +1388,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={4}
                           inputMode="numeric"
                           autoComplete="off"
                           lang="en"
@@ -1326,6 +1410,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={5}
                           inputMode="numeric"
                           autoComplete="off"
                           lang="en"
@@ -1347,6 +1433,8 @@ function EstimateForm({
                       <td className="p-2">
                         <input
                           type="text"
+                          data-estimate-row={currentDataRow}
+                          data-estimate-col={6}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           value={composition?.key === `item-${origIdx}-note` ? composition.value : (item.note ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-note`, value: item.note ?? "" })}

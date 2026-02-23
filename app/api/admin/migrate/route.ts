@@ -49,6 +49,22 @@ export async function POST(request: Request) {
     `;
     results.push("company_pics 테이블 확인");
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_workers (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        phone TEXT,
+        role TEXT,
+        memo TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    results.push("company_workers 테이블 확인");
+
+    await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS rating SMALLINT`;
+    results.push("company_workers.rating 컬럼 확인");
+
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_at TEXT`;
     results.push("contract_meeting_at 컬럼 확인");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS design_meeting_at TEXT`;
@@ -57,6 +73,8 @@ export async function POST(request: Request) {
     results.push("construction_start_at 컬럼 확인");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS move_in_at TEXT`;
     results.push("move_in_at 컬럼 확인");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_phases TEXT`;
+    results.push("schedule_phases 컬럼 확인");
 
     await sql`
       CREATE TABLE IF NOT EXISTS env_backup (

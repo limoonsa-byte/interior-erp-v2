@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "인테리어 ERP",
-  description: "인테리어 업체용 SaaS ERP",
+  title: "인테리어 올인원 ERP시스템",
+  description: "인테리어 업체 올인원 ERP 시스템",
   manifest: "/manifest.json",
 };
 

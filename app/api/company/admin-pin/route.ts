@@ -2,6 +2,8 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+const MASTER_ADMIN_PIN = "1322";
+
 async function getCompany() {
   const cookieStore = await cookies();
   const cookie = cookieStore.get("company");
@@ -11,6 +13,13 @@ async function getCompany() {
   } catch {
     return null;
   }
+}
+
+async function isMasterCompany(companyId: number): Promise<boolean> {
+  const r = await sql`
+    SELECT is_master FROM companies WHERE id = ${companyId} LIMIT 1
+  `;
+  return (r.rows[0] as { is_master: boolean } | undefined)?.is_master === true;
 }
 
 /** 관리 비밀번호 설정 여부 조회 */
@@ -47,6 +56,20 @@ export async function POST(request: Request) {
     const pin = typeof body.pin === "string" ? body.pin.replace(/\D/g, "").slice(0, 4) : "";
     if (pin.length !== 4) {
       return NextResponse.json({ error: "숫자 4자리를 입력해 주세요." }, { status: 400 });
+    }
+
+    const master = await isMasterCompany(company.id);
+    if (master && pin === MASTER_ADMIN_PIN) {
+      const existing = await sql`
+        SELECT 1 FROM company_admin_pin WHERE company_id = ${company.id} LIMIT 1
+      `;
+      if (existing.rows.length === 0) {
+        await sql`
+          INSERT INTO company_admin_pin (company_id, pin) VALUES (${company.id}, ${MASTER_ADMIN_PIN})
+        `;
+        return NextResponse.json({ set: true });
+      }
+      return NextResponse.json({ ok: true });
     }
 
     const existing = await sql`

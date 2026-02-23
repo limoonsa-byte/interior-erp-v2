@@ -54,8 +54,8 @@ git push origin main
 ## 2.5단계: DB 마이그레이션 (자동)
 
 **배포(빌드)할 때마다** `scripts/migrate.js` 가 자동 실행됩니다.  
-`consulted_at`, `scope` 컬럼과 `company_pics` 테이블이 없으면 추가하고, 있으면 건너뜁니다.  
-**별도로 SQL Editor나 curl 호출할 필요 없습니다.**
+`consulted_at`, `scope` 컬럼, `company_pics`, `company_workers`(현장 인부 DB) 테이블 등이 없으면 추가하고, 있으면 건너뜁니다.  
+**별도로 SQL Editor나 curl 호출할 필요 없습니다.** (배포만 하면 `company_workers` 테이블도 자동 생성됩니다.)
 
 (수동으로 돌리고 싶을 때만: `MIGRATE_SECRET` 환경변수 설정 후  
 `curl -X POST "https://배포주소/api/admin/migrate" -H "x-migrate-secret: 비밀값"` 사용)
@@ -102,3 +102,24 @@ git push origin main
 |--------|--------|
 | `NEXTAUTH_URL` = `https://나온주소.vercel.app` | Vercel → 프로젝트 → Settings → Environment Variables → 저장 후 **Redeploy** |
 | 리디렉션 URI `https://나온주소.vercel.app/api/auth/callback/google` 추가 | Google Cloud Console → 사용자 인증 정보 → OAuth 클라이언트 → **저장** |
+
+---
+
+### 🔧 배포 후 화면이 안 뜰 때
+
+1. **NEXTAUTH_URL 확인 (가장 흔한 원인)**  
+   Vercel → 프로젝트 → **Settings** → **Environment Variables**  
+   - `NEXTAUTH_URL` 이 **실제 배포 주소**와 정확히 같아야 합니다.  
+   - 예: `https://interior-erp-v2.vercel.app` (끝에 `/` 없음)  
+   - 없거나 잘못되어 있으면 추가/수정 후 **Redeploy** 한 번 꼭 하기.
+
+2. **환경 변수 적용**  
+   환경 변수를 바꾼 뒤에는 **Redeploy**를 해야 적용됩니다.  
+   Vercel 대시보드 → **Deployments** → 최신 배포 옆 ⋮ → **Redeploy**.
+
+3. **빌드 로그 확인**  
+   Vercel → **Deployments** → 해당 배포 클릭 → **Building** 로그에서 `[migrate]` 또는 에러 메시지 확인.  
+   `POSTGRES_URL` 이 없으면 마이그레이션은 건너뛰고 빌드는 계속됩니다. DB 주소가 있으면 연결 실패 시 빌드가 실패할 수 있으니, Vercel Postgres를 쓰는 경우 해당 프로젝트에 연결되어 있는지 확인하세요.
+
+4. **브라우저**  
+   시크릿/프라이빗 창에서 한 번 열어보고, 다른 브라우저나 휴대폰에서도 테스트해 보세요.

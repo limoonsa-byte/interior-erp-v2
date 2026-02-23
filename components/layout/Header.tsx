@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Shield, Link2 } from "lucide-react";
+import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Users, Package, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Shield, Link2 } from "lucide-react";
 import { clsx } from "clsx";
 
 /** 기본 메뉴는 메인(앱)에서 제공 */
@@ -13,8 +13,10 @@ const defaultMenuItems = [
   { href: "/estimate", label: "견적서 작성", icon: FileText },
   { href: "/schedule", label: "일정", icon: Calendar },
   { href: "/projects", label: "프로젝트", icon: FolderKanban },
-  { href: "/settlement", label: "정산", icon: Wallet },
+  { href: "/workers", label: "현장 인부 DB", icon: Users },
+  { href: "/material-order", label: "자재발주페이지", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
+  { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/reception", label: "접수", icon: UserPlus },
   { href: "/admin", label: "관리", icon: Settings },
@@ -67,7 +69,7 @@ export function Header() {
         {open ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
       </button>
       <div className="flex flex-1 items-center justify-between md:ml-0">
-        <h1 className="text-lg font-semibold text-gray-900">인테리어 ERP</h1>
+        <h1 className="text-lg font-semibold text-gray-900">인테리어 올인원 ERP시스템</h1>
       </div>
       <div className="min-w-[44px] md:hidden" />
 

@@ -82,7 +82,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <h1 className="mb-2 text-center text-2xl font-semibold text-gray-900">
-          인테리어 ERP
+          인테리어 올인원 ERP시스템
         </h1>
         <p className="mb-6 text-center text-xs text-gray-500">
           회사코드로 로그인해서 회사별 ERP를 사용합니다.

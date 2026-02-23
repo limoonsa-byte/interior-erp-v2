@@ -130,7 +130,7 @@ function jsonResponse(body, statusCode) {
 
 ## 5. ERP에서 사용하기
 
-1. 인테리어 ERP **견적서 작성** 화면으로 간다.
+1. 인테리어 올인원 ERP시스템 **견적서 작성** 화면으로 간다.
 2. **「도면 보관함에서 불러오기」** 를 누른다.
 3. 모달이 뜨면 **도면 목록 API URL** 입력란에  
    방금 복사한 **웹 앱 URL** (`https://script.google.com/macros/s/.../exec`) 을 붙여넣는다.

@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -48,10 +49,12 @@ export async function PATCH(
       siteMeasurementAt,
       estimateMeetingAt,
       materialMeetingAt,
+      materialOrderedAt,
       contractMeetingAt,
       designMeetingAt,
       constructionStartAt,
       moveInAt,
+      schedulePhases,
       consultedDone,
       siteMeasurementDone,
       estimateMeetingDone,
@@ -66,43 +69,81 @@ export async function PATCH(
     const siteMeasurementAtStr = siteMeasurementAt != null ? String(siteMeasurementAt) : null;
     const estimateMeetingAtStr = estimateMeetingAt != null ? String(estimateMeetingAt) : null;
     const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
+    const materialOrderedAtStr = materialOrderedAt != null ? String(materialOrderedAt).slice(0, 10) : null;
     const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
     const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
     const constructionStartAtStr = constructionStartAt != null ? String(constructionStartAt) : null;
     const moveInAtStr = moveInAt != null ? String(moveInAt) : null;
+    const schedulePhasesJson = Array.isArray(schedulePhases)
+      ? JSON.stringify(schedulePhases.map((p: { name?: string; start?: string; end?: string; color?: string }) => ({ name: String(p?.name ?? "").trim() || "공정", start: String(p?.start ?? "").slice(0, 10) || null, end: String(p?.end ?? "").slice(0, 10) || null, color: typeof p?.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : null })))
+      : null;
 
-    const result = await sql`
-      UPDATE consultations
-      SET
-        customer_name = COALESCE(${customerName ?? null}, customer_name),
-        contact = COALESCE(${contact ?? null}, contact),
-        address = COALESCE(${address ?? null}, address),
-        pyung = COALESCE(${pyung ?? null}, pyung),
-        status = COALESCE(${status ?? null}, status),
-        pic = COALESCE(${pic ?? null}, pic),
-        note = COALESCE(${note ?? null}, note),
-        consulted_at = COALESCE(${consultedAt ?? null}, consulted_at),
-        scope = ${scopeJson},
-        budget = ${budgetStr},
-        completion_year = ${completionYearStr},
-        site_measurement_at = ${siteMeasurementAtStr},
-        estimate_meeting_at = ${estimateMeetingAtStr},
-        material_meeting_at = ${materialMeetingAtStr},
-        contract_meeting_at = ${contractMeetingAtStr},
-        design_meeting_at = ${designMeetingAtStr},
-        construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
-        move_in_at = COALESCE(${moveInAtStr}, move_in_at),
-        consulted_done = ${consultedDone === true},
-        site_measurement_done = ${siteMeasurementDone === true},
-        estimate_meeting_done = ${estimateMeetingDone === true},
-        material_meeting_done = ${materialMeetingDone === true},
-        contract_meeting_done = ${contractMeetingDone === true},
-        design_meeting_done = ${designMeetingDone === true}
-      WHERE id = ${consultationId} AND company_id = ${company.id}
-      RETURNING id
-    `;
+    await ensureConsultationsColumns();
 
-    if (result.rows.length === 0) {
+    let result: { rows: { id: number }[] };
+    try {
+      result = await sql`
+        UPDATE consultations
+        SET
+          customer_name = COALESCE(${customerName ?? null}, customer_name),
+          contact = COALESCE(${contact ?? null}, contact),
+          address = COALESCE(${address ?? null}, address),
+          pyung = COALESCE(${pyung ?? null}, pyung),
+          status = COALESCE(${status ?? null}, status),
+          pic = COALESCE(${pic ?? null}, pic),
+          note = COALESCE(${note ?? null}, note),
+          consulted_at = COALESCE(${consultedAt ?? null}, consulted_at),
+          scope = ${scopeJson},
+          budget = ${budgetStr},
+          completion_year = ${completionYearStr},
+          site_measurement_at = ${siteMeasurementAtStr},
+          estimate_meeting_at = ${estimateMeetingAtStr},
+          material_meeting_at = ${materialMeetingAtStr},
+          material_ordered_at = COALESCE(${materialOrderedAtStr}, material_ordered_at),
+          contract_meeting_at = ${contractMeetingAtStr},
+          design_meeting_at = ${designMeetingAtStr},
+          construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
+          move_in_at = COALESCE(${moveInAtStr}, move_in_at),
+          schedule_phases = COALESCE(${schedulePhasesJson}, schedule_phases),
+          consulted_done = ${consultedDone === true},
+          site_measurement_done = ${siteMeasurementDone === true},
+          estimate_meeting_done = ${estimateMeetingDone === true},
+          material_meeting_done = ${materialMeetingDone === true},
+          contract_meeting_done = ${contractMeetingDone === true},
+          design_meeting_done = ${designMeetingDone === true}
+        WHERE id = ${consultationId} AND company_id = ${company.id}
+        RETURNING id
+      `;
+    } catch (firstError) {
+      const isColumnError =
+        firstError instanceof Error && /consulted_at|scope|column|does not exist/i.test(firstError.message);
+      if (isColumnError) {
+        try {
+          result = await sql`
+            UPDATE consultations
+            SET
+              construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
+              move_in_at = COALESCE(${moveInAtStr}, move_in_at),
+              schedule_phases = COALESCE(${schedulePhasesJson}, schedule_phases)
+            WHERE id = ${consultationId} AND company_id = ${company.id}
+            RETURNING id
+          `;
+        } catch (fallbackError) {
+          console.error("consultations PATCH fallback error:", fallbackError);
+          return NextResponse.json(
+            {
+              error:
+                "일정만 저장을 시도했으나 실패했습니다. DB에 construction_start_at, move_in_at, schedule_phases 컬럼이 있는지 확인하거나, 마이그레이션을 실행해 주세요.",
+            },
+            { status: 500 }
+          );
+        }
+      } else {
+        throw firstError;
+      }
+    }
+
+    if (result!.rows.length === 0) {
       return NextResponse.json(
         { error: "해당 상담을 찾을 수 없거나 수정 권한이 없습니다." },
         { status: 404 }

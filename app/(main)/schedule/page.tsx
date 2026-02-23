@@ -52,6 +52,12 @@ function toDateValue(value: string | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
+function formatDateDisplay(value: string | undefined): string {
+  const v = toDateValue(value);
+  if (!v) return "-";
+  return v;
+}
+
 /** 해당 날짜(YYYY-MM-DD)가 공사 기간(시작일~입주일)에 포함되는지 */
 function isDateInRange(day: string, start?: string, end?: string): boolean {
   if (!start) return false;
@@ -64,14 +70,11 @@ export default function SchedulePage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [currentMonth, setCurrentMonth] = useState(() => {
     const t = new Date();
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [modalItem, setModalItem] = useState<ScheduleItem | null>(null);
-  const [editStart, setEditStart] = useState("");
-  const [editMoveIn, setEditMoveIn] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -154,55 +157,6 @@ export default function SchedulePage() {
     [scheduleList]
   );
 
-  const saveConsultationDate = async (
-    id: number,
-    payload: { constructionStartAt?: string; moveInAt?: string }
-  ) => {
-    setSavingId(id);
-    try {
-      const res = await fetch(`/api/consultations/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data.error || "저장에 실패했습니다.");
-        return;
-      }
-      setConsultations((prev) =>
-        prev.map((c) =>
-          c.id === id
-            ? {
-                ...c,
-                constructionStartAt: payload.constructionStartAt ?? c.constructionStartAt,
-                moveInAt: payload.moveInAt ?? c.moveInAt,
-              }
-            : c
-        )
-      );
-      setModalItem(null);
-    } catch {
-      alert("저장 중 오류가 발생했습니다.");
-    } finally {
-      setSavingId(null);
-    }
-  };
-
-  const openModal = (item: ScheduleItem) => {
-    setModalItem(item);
-    setEditStart(toDateValue(item.consultation.constructionStartAt));
-    setEditMoveIn(toDateValue(item.consultation.moveInAt));
-  };
-
-  const handleModalSave = () => {
-    if (!modalItem) return;
-    saveConsultationDate(modalItem.consultation.id, {
-      constructionStartAt: editStart || undefined,
-      moveInAt: editMoveIn || undefined,
-    });
-  };
-
   const prevMonth = () => {
     const [y, m] = currentMonth.split("-").map(Number);
     if (m === 1) setCurrentMonth(`${y - 1}-12`);
@@ -226,13 +180,87 @@ export default function SchedulePage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-2">일정</h1>
-      <p className="text-sm text-gray-600 mb-4">
-        견적완료 이상 상담이 캘린더에 표시됩니다. 카드를 클릭하면 공사 시작일·입주일을 편집할 수 있습니다.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900">일정</h1>
+        <button
+          type="button"
+          onClick={() => setViewMode(viewMode === "list" ? "calendar" : "list")}
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        >
+          {viewMode === "list" ? "캘린더 보기" : "목록 보기"}
+        </button>
+      </div>
 
-      {/* 월 이동 */}
-      <div className="mb-4 flex items-center justify-between">
+      {viewMode === "list" ? (
+        <>
+          <p className="text-sm text-gray-500 mb-3">
+            저장된 공사 일정 목록입니다. <strong>제목</strong>을 클릭하면 새 화면에서 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[520px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3">공사시작일</th>
+                  <th className="p-2 sm:p-3">입주일</th>
+                  <th className="p-2 sm:p-3">고객명</th>
+                  <th className="p-2 sm:p-3">연락처</th>
+                  <th className="w-20 sm:w-24 p-2 sm:p-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {scheduleList.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                      견적완료 이상인 상담이 없습니다.{" "}
+                      <Link href="/consulting" className="text-blue-600 hover:underline">
+                        상담 및 미팅관리
+                      </Link>
+                      에서 진행상태를 견적완료로 변경한 상담이 여기에 표시됩니다.
+                    </td>
+                  </tr>
+                ) : (
+                  scheduleList.map((item) => (
+                    <tr key={item.consultation.id} className="text-gray-700 hover:bg-gray-50">
+                      <td className="p-2 sm:p-3 font-medium">
+                        <Link
+                          href={`/schedule/${item.consultation.id}`}
+                          className="text-blue-600 hover:underline"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {item.estimateTitle || "-"}
+                        </Link>
+                      </td>
+                      <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.constructionStartAt)}</td>
+                      <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.moveInAt)}</td>
+                      <td className="p-2 sm:p-3">{item.consultation.customerName || "-"}</td>
+                      <td className="p-2 sm:p-3">{item.consultation.contact || "-"}</td>
+                      <td className="whitespace-nowrap p-2 sm:p-3 align-middle">
+                        <Link
+                          href={`/schedule/${item.consultation.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="rounded px-2 py-1 text-blue-600 hover:underline"
+                        >
+                          일정
+                        </Link>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-sm text-gray-600 mb-4">
+            견적완료 이상 상담이 캘린더에 표시됩니다. <strong>제목을 클릭</strong>하면 공사 일정(목공사, 전기, 도장 등 공정별 일정)을 짤 수 있습니다.
+          </p>
+
+          {/* 월 이동 */}
+          <div className="mb-4 flex items-center justify-between">
         <button
           type="button"
           onClick={prevMonth}
@@ -280,11 +308,10 @@ export default function SchedulePage() {
                   </div>
                   <div className="mt-1 space-y-1">
                     {items.map((item) => (
-                      <button
+                      <Link
                         key={item.consultation.id}
-                        type="button"
-                        onClick={() => openModal(item)}
-                        className="w-full rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-left text-xs hover:bg-blue-100"
+                        href={`/schedule/${item.consultation.id}`}
+                        className="block w-full rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-left text-xs hover:bg-blue-100"
                       >
                         <div className="truncate font-medium text-blue-900">
                           {item.estimateTitle}
@@ -295,7 +322,7 @@ export default function SchedulePage() {
                         <div className="truncate text-gray-500">
                           {item.consultation.contact}
                         </div>
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -308,84 +335,30 @@ export default function SchedulePage() {
       {/* 일정 미정 목록 */}
       {noDateItems.length > 0 && (
         <div className="mt-6">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">일정 미정 (클릭하여 날짜 설정)</h2>
+          <h2 className="mb-2 text-sm font-semibold text-gray-700">일정 미정 (제목 클릭하여 공사 일정 짜기)</h2>
           <div className="flex flex-wrap gap-2">
             {noDateItems.map((item) => (
-              <button
+              <Link
                 key={item.consultation.id}
-                type="button"
-                onClick={() => openModal(item)}
+                href={`/schedule/${item.consultation.id}`}
                 className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-sm hover:bg-amber-100"
               >
                 <span className="font-medium text-amber-900">{item.estimateTitle}</span>
                 <span className="ml-2 text-gray-600">{item.consultation.customerName}</span>
                 <span className="ml-2 text-gray-500">{item.consultation.contact}</span>
-              </button>
+              </Link>
             ))}
           </div>
         </div>
       )}
 
-      <p className="mt-4 text-sm text-gray-500">
-        <Link href="/consulting" className="text-blue-600 hover:underline">
-          상담 및 미팅관리
-        </Link>
-        에서 견적완료로 변경한 상담이 여기에 표시됩니다.
-      </p>
-
-      {/* 일정 편집 모달 */}
-      {modalItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">공사 일정</h3>
-            <div className="mb-3 text-sm text-gray-600">
-              <p><strong>견적서 제목:</strong> {modalItem.estimateTitle}</p>
-              <p><strong>이름:</strong> {modalItem.consultation.customerName}</p>
-              <p><strong>연락처:</strong> {modalItem.consultation.contact}</p>
-            </div>
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  공사 시작일
-                </label>
-                <input
-                  type="date"
-                  value={editStart}
-                  onChange={(e) => setEditStart(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-gray-600">
-                  입주일자
-                </label>
-                <input
-                  type="date"
-                  value={editMoveIn}
-                  onChange={(e) => setEditMoveIn(e.target.value)}
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setModalItem(null)}
-                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm hover:bg-gray-50"
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleModalSave}
-                disabled={savingId === modalItem.consultation.id}
-                className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {savingId === modalItem.consultation.id ? "저장 중..." : "저장"}
-              </button>
-            </div>
-          </div>
-        </div>
+          <p className="mt-4 text-sm text-gray-500">
+            <Link href="/consulting" className="text-blue-600 hover:underline">
+              상담 및 미팅관리
+            </Link>
+            에서 견적완료로 변경한 상담이 여기에 표시됩니다.
+          </p>
+        </>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -20,6 +21,8 @@ export async function GET() {
     if (!company) {
       return NextResponse.json([], { status: 200 });
     }
+
+    await ensureConsultationsColumns();
 
     const result =
       await sql`SELECT * FROM consultations WHERE company_id = ${company.id} ORDER BY id DESC`;
@@ -53,10 +56,12 @@ export async function GET() {
         designMeetingAt: row.design_meeting_at != null ? String(row.design_meeting_at) : undefined,
         constructionStartAt: (row as { construction_start_at?: string }).construction_start_at != null ? String((row as { construction_start_at?: string }).construction_start_at) : undefined,
         moveInAt: (row as { move_in_at?: string }).move_in_at != null ? String((row as { move_in_at?: string }).move_in_at) : undefined,
+        schedulePhases: (row as { schedule_phases?: string }).schedule_phases != null && String((row as { schedule_phases?: string }).schedule_phases).trim() !== "" ? (() => { try { return JSON.parse(String((row as { schedule_phases?: string }).schedule_phases)) as { name: string; start: string; end: string }[]; } catch { return undefined; } })() : undefined,
         consultedDone: Boolean((row as { consulted_done?: boolean }).consulted_done),
         siteMeasurementDone: Boolean((row as { site_measurement_done?: boolean }).site_measurement_done),
         estimateMeetingDone: Boolean((row as { estimate_meeting_done?: boolean }).estimate_meeting_done),
         materialMeetingDone: Boolean((row as { material_meeting_done?: boolean }).material_meeting_done),
+        materialOrderedAt: (row as { material_ordered_at?: string }).material_ordered_at != null ? String((row as { material_ordered_at?: string }).material_ordered_at) : undefined,
         contractMeetingDone: Boolean((row as { contract_meeting_done?: boolean }).contract_meeting_done),
         designMeetingDone: Boolean((row as { design_meeting_done?: boolean }).design_meeting_done),
       };
@@ -109,6 +114,8 @@ export async function POST(request: Request) {
     const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
     const constructionStartAtStr = constructionStartAt != null ? String(constructionStartAt) : null;
     const moveInAtStr = moveInAt != null ? String(moveInAt) : null;
+
+    await ensureConsultationsColumns();
 
     await sql`
       INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at, construction_start_at, move_in_at)
