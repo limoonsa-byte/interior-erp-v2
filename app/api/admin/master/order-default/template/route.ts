@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { sql } from "@vercel/postgres";
+import { readFile } from "fs/promises";
+import path from "path";
 
 async function requireMaster() {
   const cookieStore = await cookies();
@@ -17,7 +19,9 @@ async function requireMaster() {
   }
 }
 
-/** 마스터 전용: 발주 기본 품목 엑셀 템플릿 다운로드 (DB 우선, 없으면 임베드 템플릿 사용) */
+const TEMPLATE_FILENAME = "발주_기본품목_템플릿.xlsx";
+
+/** 마스터 전용: 발주 기본 품목 엑셀 템플릿 다운로드 (public 파일 → DB → 임베드 순) */
 export async function GET() {
   try {
     const company = await requireMaster();
@@ -26,8 +30,38 @@ export async function GET() {
     }
     const headers = {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="발주_기본품목_템플릿.xlsx"`,
+      "Content-Disposition": `attachment; filename="${TEMPLATE_FILENAME}"`,
     };
+
+    // 1) public 폴더 정적 파일 (로컬/일부 배포)
+    try {
+      const filePath = path.join(process.cwd(), "public", TEMPLATE_FILENAME);
+      const buf = await readFile(filePath);
+      if (buf.length > 0) {
+        return new NextResponse(new Uint8Array(buf), { status: 200, headers });
+      }
+    } catch {
+      /* 없으면 다음 시도 */
+    }
+
+    // 1.5) 같은 배포의 정적 URL에서 가져오기 (Vercel에서 public은 CDN으로 서빙됨)
+    try {
+      const base = process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : process.env.NEXTAUTH_URL || "http://localhost:3000";
+      const url = `${base}/${encodeURIComponent(TEMPLATE_FILENAME)}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const ab = await res.arrayBuffer();
+        if (ab.byteLength > 0) {
+          return new NextResponse(ab, { status: 200, headers });
+        }
+      }
+    } catch {
+      /* 다음 시도 */
+    }
+
+    // 2) DB
     try {
       const row = await sql`
         SELECT file_content_base64 FROM master_order_template WHERE id = 1 LIMIT 1
@@ -38,27 +72,34 @@ export async function GET() {
         return new NextResponse(new Uint8Array(buf), { status: 200, headers });
       }
     } catch {
-      /* 테이블 없거나 조회 실패 → 임베드 사용 */
+      /* 테이블 없거나 조회 실패 */
     }
-    const mod = await import("@/lib/order-template-base64");
-    const embed = mod.ORDER_TEMPLATE_BASE64;
-    if (!embed || typeof embed !== "string" || embed.length < 100) {
-      return NextResponse.json(
-        { error: "템플릿 데이터가 없습니다. node scripts/generate-order-template.js 실행 후 재배포해 주세요." },
-        { status: 500 }
-      );
-    }
-    const buf = Buffer.from(embed, "base64");
+
+    // 3) 코드 임베드 (동적 import - 서버리스에서 실패할 수 있음)
     try {
-      await sql`
-        INSERT INTO master_order_template (id, file_content_base64, updated_at)
-        VALUES (1, ${embed}, NOW())
-        ON CONFLICT (id) DO UPDATE SET file_content_base64 = EXCLUDED.file_content_base64, updated_at = NOW()
-      `;
+      const mod = await import("@/lib/order-template-base64");
+      const embed = mod.ORDER_TEMPLATE_BASE64;
+      if (embed && typeof embed === "string" && embed.length > 100) {
+        const buf = Buffer.from(embed, "base64");
+        try {
+          await sql`
+            INSERT INTO master_order_template (id, file_content_base64, updated_at)
+            VALUES (1, ${embed}, NOW())
+            ON CONFLICT (id) DO UPDATE SET file_content_base64 = EXCLUDED.file_content_base64, updated_at = NOW()
+          `;
+        } catch {
+          /* DB 저장 실패해도 응답은 내려감 */
+        }
+        return new NextResponse(new Uint8Array(buf), { status: 200, headers });
+      }
     } catch {
-      /* DB 저장 실패해도 응답은 내려감 */
+      /* 임베드 로드 실패 */
     }
-    return new NextResponse(new Uint8Array(buf), { status: 200, headers });
+
+    return NextResponse.json(
+      { error: "템플릿 파일을 불러올 수 없습니다. 관리자에게 문의하세요." },
+      { status: 500 }
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("order-default template GET error:", msg);
