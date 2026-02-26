@@ -184,10 +184,12 @@ export default function ChatPage() {
           });
           return;
         }
-        const applicationServerKey = urlBase64ToUint8Array(publicKey);
+        const keyBytes = urlBase64ToUint8Array(publicKey);
+        const applicationServerKey = new Uint8Array(keyBytes.length);
+        applicationServerKey.set(keyBytes);
         const newSub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey,
+          applicationServerKey: applicationServerKey as unknown as BufferSource,
         });
         if (cancelled) return;
         await fetch("/api/company/chat/push-subscription", {
