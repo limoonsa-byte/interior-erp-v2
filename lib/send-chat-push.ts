@@ -1,8 +1,16 @@
 import { sql } from "@vercel/postgres";
 import webpush from "web-push";
 
-const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY;
-const vapidPrivate = process.env.VAPID_PRIVATE_KEY;
+const rawPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY;
+const rawPrivate = process.env.VAPID_PRIVATE_KEY;
+
+function normalizeVapidKey(key: string | undefined): string {
+  if (!key) return "";
+  return key.trim().replace(/\s/g, "").replace(/=+$/, "");
+}
+
+const vapidPublic = normalizeVapidKey(rawPublic);
+const vapidPrivate = normalizeVapidKey(rawPrivate);
 
 if (vapidPublic && vapidPrivate) {
   webpush.setVapidDetails(
