@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     const endpoint = typeof body.endpoint === "string" ? body.endpoint.trim() : "";
     const p256dh = typeof body.keys?.p256dh === "string" ? body.keys.p256dh.trim() : "";
     const auth = typeof body.keys?.auth === "string" ? body.keys.auth.trim() : "";
+    const subscriberName = typeof body.subscriberName === "string" ? body.subscriberName.trim() : null;
     const estimateIdParam = body.estimateId;
     const estimateId =
       estimateIdParam != null ? parseInt(String(estimateIdParam), 10) : null;
@@ -34,13 +35,14 @@ export async function POST(request: Request) {
       );
     }
     await sql`
-      INSERT INTO chat_push_subscriptions (company_id, estimate_id, endpoint, p256dh, auth)
-      VALUES (${company.id}, ${estimateId}, ${endpoint}, ${p256dh}, ${auth})
+      INSERT INTO chat_push_subscriptions (company_id, estimate_id, endpoint, p256dh, auth, subscriber_name)
+      VALUES (${company.id}, ${estimateId}, ${endpoint}, ${p256dh}, ${auth}, ${subscriberName})
       ON CONFLICT (endpoint) DO UPDATE SET
         company_id = EXCLUDED.company_id,
         estimate_id = EXCLUDED.estimate_id,
         p256dh = EXCLUDED.p256dh,
-        auth = EXCLUDED.auth
+        auth = EXCLUDED.auth,
+        subscriber_name = EXCLUDED.subscriber_name
     `;
     return NextResponse.json({ ok: true });
   } catch (e) {

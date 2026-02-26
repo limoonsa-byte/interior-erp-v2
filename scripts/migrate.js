@@ -253,10 +253,12 @@ async function migrate() {
         endpoint TEXT NOT NULL,
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL,
+        subscriber_name TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE(endpoint)
       )
     `;
+    await sql`ALTER TABLE chat_push_subscriptions ADD COLUMN IF NOT EXISTS subscriber_name TEXT`;
     console.log("[migrate] chat_push_subscriptions OK");
     console.log("[migrate] 완료");
   } catch (err) {

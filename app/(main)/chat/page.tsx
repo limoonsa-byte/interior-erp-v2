@@ -129,7 +129,7 @@ export default function ChatPage() {
           playNotificationSound();
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
             try {
-              new Notification("뾰로롱", {
+              new Notification("erp메세지", {
                 body: nextLast!.body.slice(0, 80) + (nextLast!.body.length > 80 ? "…" : ""),
                 tag: `chat-${currentEstimateId ?? "all"}`,
               });
@@ -198,6 +198,7 @@ export default function ChatPage() {
               endpoint: sub.endpoint,
               keys: { p256dh: b64urlToBase64(sub.getKey("p256dh")), auth: b64urlToBase64(sub.getKey("auth")) },
               estimateId: currentEstimateId,
+              subscriberName: (senderName || companyName || "").trim() || undefined,
             }),
           });
           return;
@@ -220,12 +221,13 @@ export default function ChatPage() {
               auth: b64urlToBase64(newSub.getKey("auth")),
             },
             estimateId: currentEstimateId,
+            subscriberName: (senderName || companyName || "").trim() || undefined,
           }),
         });
       } catch (_) {}
     })();
     return () => { cancelled = true; };
-  }, [isValidRoom, notificationPermission, currentEstimateId]);
+  }, [isValidRoom, notificationPermission, currentEstimateId, senderName, companyName]);
 
   useEffect(() => {
     const unlock = () => {

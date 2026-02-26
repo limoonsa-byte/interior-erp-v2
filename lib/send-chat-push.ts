@@ -31,21 +31,24 @@ export type SendChatPushParams = {
 export async function sendChatPush(params: SendChatPushParams): Promise<void> {
   if (!vapidPublic || !vapidPrivate) return;
   try {
+    const senderKey = params.senderName.trim().toLowerCase();
     const rows =
       params.estimateId == null
         ? await sql`
             SELECT endpoint, p256dh, auth
             FROM chat_push_subscriptions
             WHERE company_id = ${params.companyId} AND estimate_id IS NULL
+              AND (subscriber_name IS NULL OR LOWER(TRIM(subscriber_name)) <> ${senderKey})
           `
         : await sql`
             SELECT endpoint, p256dh, auth
             FROM chat_push_subscriptions
             WHERE company_id = ${params.companyId}
               AND (estimate_id IS NULL OR estimate_id = ${params.estimateId})
+              AND (subscriber_name IS NULL OR LOWER(TRIM(subscriber_name)) <> ${senderKey})
           `;
     const payload = JSON.stringify({
-      title: "뾰로롱",
+      title: "erp메세지",
       body: params.body.slice(0, 80) + (params.body.length > 80 ? "…" : ""),
       tag: `chat-${params.estimateId ?? "all"}`,
       url: params.estimateId != null ? `/chat?estimateId=${params.estimateId}` : "/chat",

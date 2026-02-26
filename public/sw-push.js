@@ -2,7 +2,7 @@
  * Push 이벤트: 채팅 새 메시지 알림 (다른 탭/백그라운드에서도 수신)
  */
 self.addEventListener("push", (event) => {
-  let data = { title: "뾰로롱", body: "" };
+  let data = { title: "erp메세지", body: "" };
   if (event.data) {
     try {
       data = event.data.json();
@@ -15,7 +15,7 @@ self.addEventListener("push", (event) => {
     requireInteraction: false,
   };
   event.waitUntil(
-    self.registration.showNotification(data.title || "뾰로롱", options)
+    self.registration.showNotification(data.title || "erp메세지", options)
   );
 });
 
