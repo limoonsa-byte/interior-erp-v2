@@ -30,8 +30,8 @@ function playNotificationSound() {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("띠링~");
-    u.volume = 0.5;
+    const u = new SpeechSynthesisUtterance("ERP");
+    u.volume = 1;
     u.lang = "ko-KR";
     u.rate = 0.9;
     const voices = window.speechSynthesis.getVoices();
@@ -346,34 +346,44 @@ export default function ChatPage() {
             <span className="text-base font-medium text-slate-600">· {currentRoomLabel}</span>
           )}
           {canShowNotificationUI && "Notification" in window && (
-            <>
-              <button
-                type="button"
-                onClick={() => setAlarmMuted((m) => !m)}
-                className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs ${
-                  alarmMuted
-                    ? "border-amber-300 bg-amber-50 text-amber-700"
-                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                }`}
-                title={alarmMuted ? "알람 켜기 (새 메시지 시 소리·알림)" : "알람 끄기 (새 메시지 시 소리·알림 안 함)"}
-              >
-                {alarmMuted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-                {alarmMuted ? "알람 끄짐" : "알람 끄기"}
-              </button>
-              <button
+            <button
               type="button"
               onClick={() => {
-                if (Notification.permission === "granted") return;
-                unlockAudio();
-                Notification.requestPermission().then((p) => setNotificationPermission(p));
+                if (Notification.permission !== "granted") {
+                  unlockAudio();
+                  Notification.requestPermission().then((p) => setNotificationPermission(p));
+                  return;
+                }
+                setAlarmMuted((m) => !m);
               }}
-              className="ml-auto flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-              title={notificationPermission === "granted" ? "알림 사용 중" : "erp메세지 알림 허용"}
+              className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs ${
+                notificationPermission !== "granted"
+                  ? "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                  : alarmMuted
+                    ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              }`}
+              title={
+                notificationPermission !== "granted"
+                  ? "알림 허용 (클릭 시 브라우저 알림 권한 요청)"
+                  : alarmMuted
+                    ? "클릭하면 알람 켜짐"
+                    : "클릭하면 알람 끔"
+              }
             >
-              {notificationPermission === "granted" ? <Bell className="h-4 w-4 fill-amber-400 text-amber-500" /> : <Bell className="h-4 w-4" />}
-              {notificationPermission === "granted" ? "알림 켜짐" : "알림 허용"}
+              {notificationPermission !== "granted" ? (
+                <Bell className="h-4 w-4" />
+              ) : alarmMuted ? (
+                <BellOff className="h-4 w-4" />
+              ) : (
+                <Bell className="h-4 w-4 fill-amber-400 text-amber-500" />
+              )}
+              {notificationPermission !== "granted"
+                ? "알림 허용"
+                : alarmMuted
+                  ? "알람 끔"
+                  : "알림 켜짐"}
             </button>
-            </>
           )}
         </h1>
         <p className="mb-3 text-sm text-gray-500">
