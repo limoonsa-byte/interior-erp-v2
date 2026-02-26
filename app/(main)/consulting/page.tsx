@@ -61,10 +61,10 @@ function parseBudgetToSave(display: string): string {
 type PicItem = { id: number; name: string };
 
 /** 진행상태 옵션 (상담종료 제거) */
-const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성 미팅", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
 
 /** 견적완료 이상이면 접수/현장실측/견적미팅 선택 비활성화 */
-const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성 미팅", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
   return (STATUS_LOCKED_AFTER as readonly string[]).includes(savedStatus);
 }
@@ -369,12 +369,12 @@ function DetailModal({
           </section>
         )}
 
-        {/* 계약서 작성 미팅날짜 (계약서 작성 미팅 선택 시 또는 저장된 날짜가 있으면 표시) */}
-        {(statusSelection === "계약서 작성 미팅" || data.contractMeetingAt) && (
+        {/* 계약서 작성 날짜 (계약서 작성 선택 시 또는 저장된 날짜가 있으면 표시) */}
+        {(statusSelection === "계약서 작성" || data.contractMeetingAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">계약서 작성 미팅날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">계약서 작성 날짜</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">계약서 작성 미팅날짜</span>
+              <span className="whitespace-nowrap text-gray-700">계약서 작성 날짜</span>
               <input
                 ref={contractMeetingInputRef}
                 name="contractMeetingAt"
@@ -785,7 +785,7 @@ function getProgressDateDisplay(item: Consultation): string {
       ? item.materialMeetingAt
       : item.status === "견적미팅" && item.estimateMeetingAt
         ? item.estimateMeetingAt
-        : item.status === "계약서 작성 미팅" && item.contractMeetingAt
+        : item.status === "계약서 작성" && item.contractMeetingAt
           ? item.contractMeetingAt
           : item.status === "디자인미팅" && item.designMeetingAt
             ? item.designMeetingAt

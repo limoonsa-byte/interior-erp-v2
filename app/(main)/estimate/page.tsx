@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 
 /** 도면 보관함 API에서 한 행 형식 (ERP에서 목록 불러올 때) */
 type DrawingListRow = {
@@ -295,6 +295,8 @@ function EstimateForm({
   /** 공정 섹션 접기 상태: key = processGroup 이름, true면 접힌 상태 */
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
+  /** 정산에서 입력한 공정 금액 (견적서 미리보기용, 저장된 견적만 해당) */
+  const [settlementPhaseAmount, setSettlementPhaseAmount] = useState<number | null>(null);
   const previewPrintRef = React.useRef<HTMLDivElement>(null);
   const estimateFormRef = React.useRef<HTMLFormElement>(null);
   const [companyName, setCompanyName] = useState("");
@@ -356,6 +358,36 @@ function EstimateForm({
     }
   }, [items, processOrder.length]);
 
+  /** 공정 그룹 이름 목록 (전체접기/전체 펼치기용) */
+  const processGroupNames = useMemo(() => {
+    const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
+    const sortedIndices = items
+      .map((_, i) => i)
+      .sort((a, b) => {
+        const pa = items[a].processGroup ?? "";
+        const pb = items[b].processGroup ?? "";
+        const ia = orderMap.get(pa) ?? processOrder.length;
+        const ib = orderMap.get(pb) ?? processOrder.length;
+        if (ia !== ib) return ia - ib;
+        return a - b;
+      });
+    const groups: string[] = [];
+    let currentName = "";
+    let currentIndices: number[] = [];
+    sortedIndices.forEach((idx) => {
+      const name = items[idx].processGroup ?? "";
+      if (name !== currentName) {
+        if (currentIndices.length > 0) groups.push(currentName);
+        currentName = name;
+        currentIndices = [idx];
+      } else {
+        currentIndices.push(idx);
+      }
+    });
+    if (currentIndices.length > 0) groups.push(currentName);
+    return groups;
+  }, [items, processOrder]);
+
   // 회사 정보에서 API URL·회사명 가져오기
   useEffect(() => {
     fetch("/api/company")
@@ -366,6 +398,28 @@ function EstimateForm({
       })
       .catch(() => {});
   }, []);
+
+  /** 미리보기 열릴 때 저장된 견적이면 정산 공정금액 불러오기 */
+  useEffect(() => {
+    if (!previewOpen || !estimate?.id) {
+      if (!previewOpen) setSettlementPhaseAmount(null);
+      return;
+    }
+    fetch(`/api/company/settlements/${estimate.id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          const total = (data.items as { amount?: number }[]).reduce(
+            (sum, x) => sum + (Number(x?.amount) || 0),
+            0
+          );
+          setSettlementPhaseAmount(total > 0 ? total : null);
+        } else {
+          setSettlementPhaseAmount(null);
+        }
+      })
+      .catch(() => setSettlementPhaseAmount(null));
+  }, [previewOpen, estimate?.id]);
 
   /** 해당 공정(그룹) 아래에 항목 한 줄 추가. indices = 그 그룹의 item 인덱스들 */
   const addRowToProcess = (processGroupName: string, indices: number[]) => {
@@ -1032,6 +1086,36 @@ function EstimateForm({
             <button type="button" onClick={() => setProcessOrderModalOpen(true)} className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100">
               공정 순서 변경
             </button>
+            {processGroupNames.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsedSections((prev) => {
+                      const next = { ...prev };
+                      processGroupNames.forEach((name) => (next[name] = true));
+                      return next;
+                    })
+                  }
+                  className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                >
+                  전체접기
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsedSections((prev) => {
+                      const next = { ...prev };
+                      processGroupNames.forEach((name) => (next[name] = false));
+                      return next;
+                    })
+                  }
+                  className="min-h-[44px] rounded-lg border border-gray-400 bg-white px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 active:bg-gray-100"
+                >
+                  전체 펼치기
+                </button>
+              </>
+            )}
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
@@ -1194,6 +1278,7 @@ function EstimateForm({
               <th className="p-2 w-24">노무비단가</th>
               <th className="p-2 w-24">노무비금액</th>
               <th className="p-2 w-24">금액</th>
+              <th className="p-2 w-24">합산금액</th>
               <th className="p-2">비고</th>
               <th className="w-10 p-2" />
             </tr>
@@ -1231,28 +1316,39 @@ function EstimateForm({
                 setCollapsedSections((prev) => ({ ...prev, [name]: !prev[name] }));
               };
               let dataRowIndex = 0;
+              let runningTotal = 0;
               groups.forEach((grp) => {
                 const visibleIndices = grp.indices;
                 if (visibleIndices.length === 0) return;
+                let groupMat = 0;
+                let groupLabor = 0;
+                visibleIndices.forEach((idx) => {
+                  groupMat += materialAmount(items[idx]);
+                  groupLabor += laborAmount(items[idx]);
+                });
+                const groupTotal = groupMat + groupLabor;
+                runningTotal += groupTotal;
                 const isNewSection = /^\u200B/.test(grp.name);
                 const isCollapsed = collapsedSections[grp.name] === true;
                 const displayName = isNewSection ? "" : grp.name;
                 rows.push(
                   <tr key={`h-${grp.indices[0]}`} className="border-b border-gray-200 bg-gray-100">
-                    <td colSpan={12} className="p-2">
+                    <td className="p-2 align-top">
+                      <button
+                        type="button"
+                        onClick={() => toggleSection(grp.name)}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                        title={isCollapsed ? "펼치기" : "접기"}
+                        aria-label={isCollapsed ? "펼치기" : "접기"}
+                      >
+                        <span className="select-none text-sm">{isCollapsed ? "▶" : "▼"}</span>
+                      </button>
+                    </td>
+                    <td colSpan={2} className="p-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleSection(grp.name)}
-                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                          title={isCollapsed ? "펼치기" : "접기"}
-                          aria-label={isCollapsed ? "펼치기" : "접기"}
-                        >
-                          <span className="select-none text-sm">{isCollapsed ? "▶" : "▼"}</span>
-                        </button>
                         <input
                           type="text"
-                          className="max-w-xs flex-1 rounded border border-gray-300 bg-white px-2 py-1.5 font-semibold text-gray-800"
+                          className="max-w-xs flex-1 rounded border border-gray-300 bg-white px-2 py-1.5 font-semibold text-gray-800 min-w-0"
                           value={displayName}
                           onChange={(e) => {
                             const v = e.target.value;
@@ -1275,16 +1371,20 @@ function EstimateForm({
                         )}
                       </div>
                     </td>
+                    <td className="p-2" />
+                    <td className="p-2" />
+                    <td className="p-2" />
+                    <td className="p-2 text-right text-gray-500">-</td>
+                    <td className="p-2 text-right tabular-nums font-semibold text-gray-800">{formatNumber(groupMat)}</td>
+                    <td className="p-2 text-right text-gray-500">-</td>
+                    <td className="p-2 text-right tabular-nums font-semibold text-gray-800">{formatNumber(groupLabor)}</td>
+                    <td className="p-2 text-right tabular-nums font-semibold text-gray-800">{formatNumber(groupTotal)}</td>
+                    <td className="p-2 text-right tabular-nums font-semibold text-gray-900">{formatNumber(runningTotal)}</td>
+                    <td className="p-2" />
+                    <td className="p-2" />
                   </tr>
                 );
                 if (isCollapsed) return;
-                let groupMat = 0;
-                let groupLabor = 0;
-                visibleIndices.forEach((idx) => {
-                  groupMat += materialAmount(items[idx]);
-                  groupLabor += laborAmount(items[idx]);
-                });
-                const groupTotal = groupMat + groupLabor;
                 visibleIndices.forEach((origIdx, subNo) => {
                   const item = items[origIdx];
                   const noLabel = `${subNo + 1}.`;
@@ -1430,6 +1530,7 @@ function EstimateForm({
                       </td>
                       <td className="p-2 text-right font-medium">{formatNumber(laborAmount(item))}</td>
                       <td className="p-2 text-right font-medium">{formatNumber(amount(item))}</td>
+                      <td className="p-2" />
                       <td className="p-2">
                         <input
                           type="text"
@@ -1473,6 +1574,7 @@ function EstimateForm({
                     <td className="p-2" />
                     <td className="p-2 text-right">{formatNumber(groupLabor)}</td>
                     <td className="p-2 text-right">{formatNumber(groupTotal)}</td>
+                    <td className="p-2" />
                     <td className="p-2" colSpan={2} />
                   </tr>
                 );
@@ -1572,6 +1674,9 @@ function EstimateForm({
                         <div className="min-w-0 flex-1 space-y-1">
                           <p className="text-gray-800">공 사 명 : {title || "-"}</p>
                           <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(adjustedAmount)}</p>
+                          {settlementPhaseAmount != null && settlementPhaseAmount > 0 && (
+                            <p className="text-gray-800">공 정 금 액: (정산) ₩{formatNumber(settlementPhaseAmount)}</p>
+                          )}
                           <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
                         </div>
                         <div className="min-w-0 flex-1 space-y-1 text-right">

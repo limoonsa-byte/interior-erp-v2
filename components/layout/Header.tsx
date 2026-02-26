@@ -3,22 +3,21 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, LayoutDashboard, MessageSquare, FileText, FolderKanban, Users, Package, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Shield, Link2 } from "lucide-react";
+import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, BarChart3, UserPlus, Settings, Shield, Link2, MessageCircle, ExternalLink } from "lucide-react";
 import { clsx } from "clsx";
 
-/** 기본 메뉴는 메인(앱)에서 제공 */
+/** 기본 메뉴 - 대시보드 제거, 왼쪽 사이드바가 항시 메뉴 역할 */
 const defaultMenuItems = [
-  { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
-  { href: "/schedule", label: "일정", icon: Calendar },
-  { href: "/projects", label: "프로젝트", icon: FolderKanban },
+  { href: "/schedule", label: "일정작성", icon: Calendar },
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재발주페이지", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/reception", label: "접수", icon: UserPlus },
+  { href: "/chat", label: "채팅", icon: MessageCircle },
   { href: "/admin", label: "관리", icon: Settings },
 ];
 
@@ -45,6 +44,9 @@ export function Header() {
 
   const baseItems: MenuEntry[] = [
     ...defaultMenuItems.map((m) => ({ ...m, id: undefined })),
+    ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
+      ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink, id: undefined as number | undefined, external: true }]
+      : []),
     ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield, id: undefined as number | undefined }] : []),
   ];
   const menuItems: MenuEntry[] = [

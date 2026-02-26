@@ -61,6 +61,41 @@ function getCalendarDays(monthStr: string): { date: string; isCurrentMonth: bool
   return days.slice(0, 42);
 }
 
+/** 일정이 있는 구간만: firstDate~lastDate 포함하는 주 단위 그리드 (앞뒤 빈 칸 최소화) */
+function getCalendarDaysInRange(
+  firstDate: string,
+  lastDate: string
+): { date: string; dayNum: number; isInRange: boolean }[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDate) || !/^\d{4}-\d{2}-\d{2}$/.test(lastDate) || firstDate > lastDate) {
+    const t = new Date();
+    const fallback = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
+    return getCalendarDaysInRange(fallback, fallback);
+  }
+  const start = new Date(firstDate + "T12:00:00");
+  const end = new Date(lastDate + "T12:00:00");
+  const startWeekday = start.getDay();
+  const endWeekday = end.getDay();
+  const calendarStart = new Date(start);
+  calendarStart.setDate(calendarStart.getDate() - startWeekday);
+  const calendarEnd = new Date(end);
+  calendarEnd.setDate(calendarEnd.getDate() + (6 - endWeekday));
+  const days: { date: string; dayNum: number; isInRange: boolean }[] = [];
+  const cur = new Date(calendarStart);
+  while (cur <= calendarEnd) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, "0");
+    const d = cur.getDate();
+    const dateStr = `${y}-${m}-${String(d).padStart(2, "0")}`;
+    days.push({
+      date: dateStr,
+      dayNum: d,
+      isInRange: dateStr >= firstDate && dateStr <= lastDate,
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
 /** 5점 별점 표시/선택 (1~5) */
 function StarRating({
   value,
@@ -333,18 +368,60 @@ export default function WorkersPage() {
     () => shareSchedules.find((s) => s.consultation.id === shareSelectedId),
     [shareSchedules, shareSelectedId]
   );
-  const shareCalendarMonth = useMemo(() => {
+
+  /** 일정 공유 캘린더: 공정이 있는 구간만 표시 (앞뒤 빈 칸 최소화) */
+  const shareCalendarRange = useMemo(() => {
     const c = selectedShareItem?.consultation;
-    if (!c) return "";
-    const start = (c.constructionStartAt || "").trim().slice(0, 10);
-    if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) return start.slice(0, 7);
-    const firstPhase = Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0 ? c.schedulePhases[0] : null;
-    const firstStart = firstPhase?.start?.trim().slice(0, 10);
-    if (firstStart && /^\d{4}-\d{2}-\d{2}$/.test(firstStart)) return firstStart.slice(0, 7);
-    const t = new Date();
-    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
+    if (!c) return null;
+    const phases = Array.isArray(c.schedulePhases) ? c.schedulePhases : [];
+    let firstDate = (c.constructionStartAt || "").trim().slice(0, 10);
+    let lastDate = (c.moveInAt || c.constructionStartAt || "").trim().slice(0, 10) || firstDate;
+    if (phases.length > 0) {
+      let min = "";
+      let max = "";
+      phases.forEach((p) => {
+        const s = (p.start ?? "").trim().slice(0, 10);
+        const e = (p.end ?? p.start ?? "").trim().slice(0, 10) || s;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+          if (!min || s < min) min = s;
+          if (!max || s > max) max = s;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(e)) {
+          if (!min || e < min) min = e;
+          if (!max || e > max) max = e;
+        }
+      });
+      if (min && max) {
+        firstDate = min;
+        lastDate = max;
+      }
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(firstDate)) {
+      const t = new Date();
+      firstDate = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-01`;
+      lastDate = firstDate;
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(lastDate) || lastDate < firstDate) {
+      lastDate = firstDate;
+    }
+    return { firstDate, lastDate };
   }, [selectedShareItem]);
-  const shareCalendarDays = useMemo(() => getCalendarDays(shareCalendarMonth || "2020-01"), [shareCalendarMonth]);
+
+  const shareCalendarDays = useMemo(
+    () =>
+      shareCalendarRange
+        ? getCalendarDaysInRange(shareCalendarRange.firstDate, shareCalendarRange.lastDate)
+        : [],
+    [shareCalendarRange]
+  );
+
+  /** 공유 캘린더 제목용 월 표시 (구간이 한 달이면 "2026년 3월", 넘치면 "2026년 2월 ~ 3월") */
+  const shareCalendarMonthLabel = useMemo(() => {
+    if (!shareCalendarRange) return "";
+    const [y1, m1] = shareCalendarRange.firstDate.split("-").map(Number);
+    const [y2, m2] = shareCalendarRange.lastDate.split("-").map(Number);
+    if (y1 === y2 && m1 === m2) return `${y1}년 ${m1}월`;
+    return `${y1}년 ${m1}월 ~ ${y2}년 ${m2}월`;
+  }, [shareCalendarRange]);
 
   /** 공정 이름별 고정 색상 (캘린더에서 철거/설비 등 구분) */
   const sharePhaseColorMap = useMemo(() => {
@@ -375,7 +452,9 @@ export default function WorkersPage() {
       });
       const link = document.createElement("a");
       const title = selectedShareItem?.title?.replace(/[/\\?%*:|"]/g, "_") || "일정";
-      link.download = `일정_${title}_${shareCalendarMonth}.jpg`;
+      link.download = shareCalendarRange
+        ? `일정_${title}_${shareCalendarRange.firstDate}_${shareCalendarRange.lastDate}.jpg`
+        : `일정_${title}.jpg`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
@@ -384,7 +463,7 @@ export default function WorkersPage() {
     } finally {
       setShareSavingJpg(false);
     }
-  }, [selectedShareItem?.title, shareCalendarMonth]);
+  }, [selectedShareItem?.title, shareCalendarRange]);
 
 
   return (
@@ -637,7 +716,7 @@ export default function WorkersPage() {
                     );
                   })}
                 </select>
-                {selectedShareItem && shareCalendarMonth && (
+                {selectedShareItem && shareCalendarRange && shareCalendarDays.length > 0 && (
                   <div className="mb-4">
                     <p className="mb-1.5 text-xs font-medium text-gray-500">캘린더 이미지 (복사 후 카카오톡에 붙여넣기)</p>
                     <p className="mb-1.5 text-[11px] text-gray-500">
@@ -663,7 +742,7 @@ export default function WorkersPage() {
                           marginBottom: "2px",
                         }}
                       >
-                        {shareCalendarMonth.slice(0, 4)}년 {Number(shareCalendarMonth.slice(5, 7))}월 · {selectedShareItem.title}
+                        {shareCalendarMonthLabel} · {selectedShareItem.title}
                       </div>
                       {(selectedShareItem.consultation.customerName || selectedShareItem.consultation.address) && (
                         <div
@@ -712,10 +791,10 @@ export default function WorkersPage() {
                           borderTop: "1px solid #d1d5db",
                         }}
                       >
-                        {shareCalendarDays.map(({ date, isCurrentMonth, dayNum }, cellIndex) => {
+                        {shareCalendarDays.map(({ date, isInRange, dayNum }, cellIndex) => {
                           const dayOfWeek = new Date(date + "T12:00:00").getDay();
                           const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                          const cellBg = !isCurrentMonth ? "#f9fafb" : isWeekend ? "#fdf2f8" : "#ffffff";
+                          const cellBg = !isInRange ? "#f3f4f6" : isWeekend ? "#fdf2f8" : "#ffffff";
                           const phasesOnDay = Array.isArray(selectedShareItem.consultation.schedulePhases)
                             ? selectedShareItem.consultation.schedulePhases.filter((p) => {
                                 const s = (p.start ?? "").trim().slice(0, 10);
@@ -739,7 +818,7 @@ export default function WorkersPage() {
                                 style={{
                                   textAlign: "right",
                                   fontSize: "10px",
-                                  color: isCurrentMonth ? "#374151" : "#9ca3af",
+                                  color: isInRange ? "#374151" : "#9ca3af",
                                   lineHeight: 1.2,
                                 }}
                               >

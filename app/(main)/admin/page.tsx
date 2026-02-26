@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
 
-type PicItem = { id: number; name: string; phone?: string };
+type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
 
 type EstimateTemplateItem = { id: number; title: string; createdAt?: string };
 
@@ -27,8 +27,15 @@ export default function AdminPage() {
   const [pics, setPics] = useState<PicItem[]>([]);
   const [newName, setNewName] = useState("");
   const [newPhone, setNewPhone] = useState("");
+  const [newEmployeeCode, setNewEmployeeCode] = useState("");
+  const [newPosition, setNewPosition] = useState("");
+  const [newPositionCustom, setNewPositionCustom] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingPic, setEditingPic] = useState<PicItem | null>(null);
+  const [editEmployeeCode, setEditEmployeeCode] = useState("");
+  const [editPosition, setEditPosition] = useState("");
+  const [editPositionCustom, setEditPositionCustom] = useState("");
 
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNew, setPwNew] = useState("");
@@ -163,16 +170,25 @@ export default function AdminPage() {
     if (!name) return;
     setLoading(true);
     setError(null);
+    const positionValue = newPosition === "추가입력" ? newPositionCustom.trim() : newPosition;
     fetch("/api/company/pics", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, phone: newPhone.trim() }),
+      body: JSON.stringify({
+        name,
+        phone: newPhone.trim(),
+        employeeCode: newEmployeeCode.trim() || undefined,
+        position: positionValue || undefined,
+      }),
     })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setNewName("");
           setNewPhone("");
+          setNewEmployeeCode("");
+          setNewPosition("");
+          setNewPositionCustom("");
           setError(null);
           loadPics();
         } else {
@@ -194,10 +210,40 @@ export default function AdminPage() {
     fetch(`/api/company/pics/${id}`, { method: "DELETE" })
       .then(async (res) => {
         const data = await res.json().catch(() => ({}));
-        if (res.ok) loadPics();
-        else alert((data as { error?: string }).error || "삭제 실패");
+        if (res.ok) {
+          loadPics();
+          setEditingPic(null);
+        } else {
+          alert((data as { error?: string }).error || "삭제 실패");
+        }
       })
       .catch(() => alert("삭제 중 오류가 발생했습니다."));
+  };
+
+  const handleSavePicEdit = () => {
+    if (!editingPic) return;
+    const positionValue = editPosition === "추가입력" ? editPositionCustom.trim() : editPosition;
+    fetch(`/api/company/pics/${editingPic.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employeeCode: editEmployeeCode.trim() || undefined,
+        position: positionValue || undefined,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          loadPics();
+          setEditingPic(null);
+          setEditEmployeeCode("");
+          setEditPosition("");
+          setEditPositionCustom("");
+        } else {
+          alert((data as { error?: string }).error || "수정 실패");
+        }
+      })
+      .catch(() => alert("수정 중 오류가 발생했습니다."));
   };
 
   const handlePasswordChange = () => {
@@ -568,26 +614,53 @@ export default function AdminPage() {
               </button>
             </div>
             <p className="mb-4 text-sm text-gray-600">
-              여기서 등록한 담당자는 상담 등록·수정 시 담당자 선택 목록에 표시됩니다.
+              여기서 등록한 담당자는 상담 등록·수정 시 담당자 선택 목록에 표시됩니다. 직원 코드를 설정하면 해당 담당자로 로그인할 수 있으며, 회사 가입 비밀번호를 사용합니다.
             </p>
-            <div className="mb-4 space-y-2">
-              <div className="flex flex-wrap gap-2">
+            <div className="mb-4 space-y-3">
+              <div className="flex flex-wrap gap-2 items-end">
                 <input
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddPic()}
-                  placeholder="담당자명 입력"
-                  className="min-w-[120px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="담당자명"
+                  className="min-w-[100px] rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
                 <input
                   type="tel"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddPic()}
-                  placeholder="담당자 전화번호"
-                  className="min-w-[120px] flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="전화번호"
+                  className="min-w-[100px] rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
+                <input
+                  type="text"
+                  value={newEmployeeCode}
+                  onChange={(e) => setNewEmployeeCode(e.target.value)}
+                  placeholder="직원 코드 (로그인용)"
+                  className="min-w-[100px] rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <select
+                  value={newPosition}
+                  onChange={(e) => setNewPosition(e.target.value)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">직급 선택</option>
+                  <option value="대표">대표</option>
+                  <option value="관리자">관리자</option>
+                  <option value="사원">사원</option>
+                  <option value="추가입력">추가입력</option>
+                </select>
+                {newPosition === "추가입력" && (
+                  <input
+                    type="text"
+                    value={newPositionCustom}
+                    onChange={(e) => setNewPositionCustom(e.target.value)}
+                    placeholder="직급 직접 입력"
+                    className="min-w-[100px] rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                )}
                 <button
                   type="button"
                   onClick={handleAddPic}
@@ -612,17 +685,93 @@ export default function AdminPage() {
                 {pics.map((item) => (
                   <li
                     key={item.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
                   >
-                    <span className="font-medium text-gray-800">{item.name}</span>
-                    <span className="text-gray-600">{item.phone || "-"}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePic(item.id)}
-                      className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
-                    >
-                      삭제
-                    </button>
+                    {editingPic?.id === item.id ? (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <input
+                            type="text"
+                            value={editEmployeeCode}
+                            onChange={(e) => setEditEmployeeCode(e.target.value)}
+                            placeholder="직원 코드"
+                            className="rounded border border-gray-300 px-2 py-1 text-sm w-24"
+                          />
+                          <select
+                            value={editPosition}
+                            onChange={(e) => setEditPosition(e.target.value)}
+                            className="rounded border border-gray-300 px-2 py-1 text-sm"
+                          >
+                            <option value="">직급</option>
+                            <option value="대표">대표</option>
+                            <option value="관리자">관리자</option>
+                            <option value="사원">사원</option>
+                            <option value="추가입력">추가입력</option>
+                          </select>
+                          {editPosition === "추가입력" && (
+                            <input
+                              type="text"
+                              value={editPositionCustom}
+                              onChange={(e) => setEditPositionCustom(e.target.value)}
+                              placeholder="직급 입력"
+                              className="rounded border border-gray-300 px-2 py-1 text-sm w-24"
+                            />
+                          )}
+                          <button
+                            type="button"
+                            onClick={handleSavePicEdit}
+                            className="rounded bg-blue-600 px-2 py-1 text-xs text-white"
+                          >
+                            저장
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setEditingPic(null); }}
+                            className="rounded border border-gray-300 px-2 py-1 text-xs"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-gray-800">{item.name}</span>
+                          <span className="text-gray-500">{item.phone || "-"}</span>
+                          {item.employeeCode && (
+                            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                              코드: {item.employeeCode}
+                            </span>
+                          )}
+                          {item.position && (
+                            <span className="text-gray-600 text-xs">직급: {item.position}</span>
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPic(item);
+                              setEditEmployeeCode(item.employeeCode ?? "");
+                              const pos = item.position ?? "";
+                              const isPreset = ["대표", "관리자", "사원"].includes(pos);
+                              setEditPosition(isPreset ? pos : (pos ? "추가입력" : ""));
+                              setEditPositionCustom(isPreset ? "" : pos);
+                            }}
+                            className="rounded px-2 py-1 text-blue-600 hover:bg-blue-50 text-xs"
+                          >
+                            수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePic(item.id)}
+                            className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
+                          >
+                            삭제
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

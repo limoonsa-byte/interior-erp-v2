@@ -61,6 +61,11 @@ async function migrate() {
     console.log("[migrate] company_pics OK");
     await sql`ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS phone TEXT`;
     console.log("[migrate] company_pics phone OK");
+    await sql`ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS employee_code TEXT`;
+    await sql`ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS password_hash TEXT`;
+    await sql`ALTER TABLE company_pics ADD COLUMN IF NOT EXISTS position TEXT`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS company_pics_company_employee_code ON company_pics (company_id, employee_code) WHERE (employee_code IS NOT NULL AND employee_code <> '')`;
+    console.log("[migrate] company_pics employee_code, position OK");
     await sql`
       CREATE TABLE IF NOT EXISTS company_admin_pin (
         company_id INT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
@@ -202,6 +207,44 @@ async function migrate() {
     `;
     await sql`ALTER TABLE master_order_template ADD COLUMN IF NOT EXISTS file_content_base64 TEXT`;
     console.log("[migrate] master_order_template OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_work_logs (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        log_date DATE NOT NULL,
+        estimate_id INT REFERENCES estimates(id) ON DELETE SET NULL,
+        pic_id INT REFERENCES company_pics(id) ON DELETE SET NULL,
+        content TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`ALTER TABLE company_work_logs ADD COLUMN IF NOT EXISTS expenses TEXT`;
+    console.log("[migrate] company_work_logs OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS estimate_settlements (
+        estimate_id INT PRIMARY KEY REFERENCES estimates(id) ON DELETE CASCADE,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        items TEXT NOT NULL DEFAULT '[]',
+        settled_at DATE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    console.log("[migrate] estimate_settlements OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_chat_messages (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE,
+        estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE,
+        sender_name TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE`;
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE`;
+    console.log("[migrate] company_chat_messages OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

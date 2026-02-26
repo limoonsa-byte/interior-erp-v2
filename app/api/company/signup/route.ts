@@ -38,6 +38,16 @@ export async function POST(request: Request) {
 
     const companyId = inserted.rows[0].id as number;
 
+    // 새 회사 생성 시 대표 담당자 자동 생성 (개인코드 0000, 동일 비밀번호)
+    try {
+      await sql`
+        INSERT INTO company_pics (company_id, name, employee_code, position, password_hash)
+        VALUES (${companyId}, '대표', '0000', '대표', ${password})
+      `;
+    } catch (picErr) {
+      console.warn("대표 담당자 생성 실패(무시):", picErr);
+    }
+
     if (ownerEmail) {
       await sql`
         INSERT INTO members (company_id, email, role)

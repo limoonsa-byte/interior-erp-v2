@@ -2,15 +2,18 @@
 
 import { Header } from "@/components/layout/Header";
 import { useSidebar } from "@/components/layout/SidebarContext";
+import { useRightPanel } from "@/components/layout/RightPanelContext";
 import { clsx } from "clsx";
 
 export function MainContent({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
+  const { open: rightPanelOpen } = useRightPanel();
   return (
     <div
       className={clsx(
         "min-w-0 flex-1 transition-[margin] duration-200",
-        collapsed ? "md:pl-[72px]" : "md:pl-64"
+        collapsed ? "pl-[72px]" : "pl-64",
+        rightPanelOpen ? "pr-72" : "pr-12"
       )}
     >
       <Header />

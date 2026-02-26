@@ -5,10 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
 import {
-  LayoutDashboard,
   MessageSquare,
   FileText,
-  FolderKanban,
   Users,
   Package,
   Wallet,
@@ -20,21 +18,22 @@ import {
   Shield,
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
-const baseMenuItems = [
-  { href: "/dashboard", label: "대시보드", icon: LayoutDashboard },
+const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; external?: boolean }[] = [
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
-  { href: "/schedule", label: "일정", icon: Calendar },
-  { href: "/projects", label: "프로젝트", icon: FolderKanban },
+  { href: "/schedule", label: "일정작성", icon: Calendar },
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재 발주", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/reception", label: "접수", icon: UserPlus },
+  { href: "/chat", label: "채팅", icon: MessageCircle },
   { href: "/admin", label: "관리", icon: Settings },
 ];
 
@@ -53,6 +52,9 @@ export function Sidebar() {
         } else if (data.company?.code) {
           setCompanyLabel(data.company.code);
         }
+        if (data.company?.picName) {
+          setCompanyLabel((prev) => `${prev} (${data.company.picName})`);
+        }
         setIsMaster(Boolean(data.company?.isMaster));
       })
       .catch(() => {
@@ -63,14 +65,16 @@ export function Sidebar() {
 
   const menuItems = [
     ...baseMenuItems,
-    ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield }] : []),
+    ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
+      ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink as React.ComponentType<{ className?: string }>, external: true as const }]
+      : []),
+    ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield, external: false as const }] : []),
   ];
 
   return (
     <aside
       className={clsx(
         "fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-slate-700/50 bg-[#1e293b] text-white transition-[width] duration-200",
-        "hidden md:flex",
         collapsed ? "w-[72px]" : "w-64"
       )}
     >
@@ -88,30 +92,41 @@ export function Sidebar() {
             <span className="truncate text-lg font-semibold">
               인테리어 올인원 ERP시스템
             </span>
-            <span className="mt-0.5 truncate text-[11px] text-slate-300 underline-offset-2 hover:underline">
-              {companyLabel} 님, 환영합니다. (클릭 시 로그아웃)
+            <span className="mt-0.5 block text-[11px] text-slate-300 underline-offset-2 hover:underline">
+              <span className="block truncate">{companyLabel} 님, 환영합니다.</span>
+              <span className="block truncate">(클릭 시 로그아웃)</span>
             </span>
           </button>
         )}
       </div>
       <nav className="flex-1 overflow-y-auto py-3">
         <ul className="space-y-0.5 px-2">
-          {menuItems.map(({ href, label, icon: Icon }) => {
-            const isActive = pathname === href;
+          {menuItems.map(({ href, label, icon: Icon, external = false }) => {
+            const isActive = !external && pathname === href;
+            const linkClass = clsx(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
+              isActive
+                ? "bg-slate-600/80 text-white"
+                : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
+            );
             return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className={clsx(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors",
-                    isActive
-                      ? "bg-slate-600/80 text-white"
-                      : "text-slate-300 hover:bg-slate-700/50 hover:text-white"
-                  )}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  {!collapsed && <span className="truncate">{label}</span>}
-                </Link>
+              <li key={external ? `kakao-${href}` : href}>
+                {external ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkClass}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {!collapsed && <span className="truncate">{label}</span>}
+                  </a>
+                ) : (
+                  <Link href={href} className={linkClass}>
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {!collapsed && <span className="truncate">{label}</span>}
+                  </Link>
+                )}
               </li>
             );
           })}

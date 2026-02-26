@@ -192,6 +192,24 @@ export default function ScheduleDetailPage() {
     setPhases((prev) => [...prev, { name: "", start: "", end: "", color: PHASE_COLORS[prev.length % PHASE_COLORS.length] }]);
   };
   const [openColorForIndex, setOpenColorForIndex] = useState<number | null>(null);
+  /** 색상 팔레트 위치(버튼 기준) - fixed로 표시해 스크롤/overflow에 묻히지 않게 함 */
+  const [openColorAnchorRect, setOpenColorAnchorRect] = useState<{ top: number; left: number; bottom: number } | null>(null);
+
+  const openColorPicker = (index: number, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openColorForIndex === index) {
+      setOpenColorForIndex(null);
+      setOpenColorAnchorRect(null);
+    } else {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setOpenColorForIndex(index);
+      setOpenColorAnchorRect({ top: rect.top, left: rect.left, bottom: rect.bottom });
+    }
+  };
+
+  const closeColorPicker = () => {
+    setOpenColorForIndex(null);
+    setOpenColorAnchorRect(null);
+  };
 
   const updatePhase = (index: number, field: keyof SchedulePhase, value: string) => {
     setPhases((prev) => {
@@ -616,7 +634,7 @@ export default function ScheduleDetailPage() {
                   <td className="p-2 relative">
                     <button
                       type="button"
-                      onClick={() => setOpenColorForIndex(openColorForIndex === index ? null : index)}
+                      onClick={(e) => openColorPicker(index, e)}
                       className="w-full min-w-[80px] h-8 rounded border border-gray-300 flex items-center justify-center gap-1.5 bg-white hover:bg-gray-50"
                     >
                       <span
@@ -625,17 +643,25 @@ export default function ScheduleDetailPage() {
                       />
                       <span className="text-gray-400 text-xs">▼</span>
                     </button>
-                    {openColorForIndex === index && (
+                    {openColorForIndex === index && openColorAnchorRect && (
                       <>
-                        <div className="fixed inset-0 z-10" aria-hidden onClick={() => setOpenColorForIndex(null)} />
-                        <div className="absolute left-2 top-full mt-1 z-20 rounded-lg border border-gray-200 bg-white p-2 shadow-lg flex flex-wrap gap-1.5 min-w-[120px]">
+                        <div className="fixed inset-0 z-[100]" aria-hidden onClick={closeColorPicker} />
+                        <div
+                          className="fixed z-[101] rounded-lg border border-gray-200 bg-white p-2 shadow-lg flex flex-wrap gap-1.5 min-w-[120px]"
+                          style={{
+                            left: openColorAnchorRect.left,
+                            top: openColorAnchorRect.bottom + 8 + 100 <= (typeof window !== "undefined" ? window.innerHeight : 9999)
+                              ? openColorAnchorRect.bottom + 8
+                              : openColorAnchorRect.top - 8 - 100,
+                          }}
+                        >
                           {PHASE_COLORS.map((hex) => (
                             <button
                               key={hex}
                               type="button"
                               onClick={() => {
                                 updatePhase(index, "color", hex);
-                                setOpenColorForIndex(null);
+                                closeColorPicker();
                               }}
                               className={`w-7 h-7 rounded border-2 shrink-0 hover:ring-2 ring-blue-400 ${phase.color === hex ? "border-gray-800" : "border-gray-200"}`}
                               style={{ backgroundColor: hex }}

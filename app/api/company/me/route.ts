@@ -15,6 +15,8 @@ export async function GET() {
       id: number;
       code: string;
       name: string;
+      picId?: number;
+      picName?: string;
     };
     const result = await sql`
       SELECT id, name, code, is_master
@@ -31,6 +33,8 @@ export async function GET() {
       code: row.code,
       name: row.name,
       isMaster: Boolean(row.is_master),
+      picId: fromCookie.picId ?? null,
+      picName: fromCookie.picName ?? null,
     };
     return NextResponse.json({ company }, { status: 200 });
   } catch {

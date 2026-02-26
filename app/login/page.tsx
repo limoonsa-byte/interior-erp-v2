@@ -1,6 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+
+const SAVE_LOGIN_KEY = "erp_save_login";
+const SAVE_CODE_KEY = "erp_login_code";
+const SAVE_EMPLOYEE_KEY = "erp_login_employee";
+const SAVE_PASSWORD_KEY = "erp_login_password";
 
 type SignupState = {
   name: string;
@@ -11,6 +16,7 @@ type SignupState = {
 
 type LoginState = {
   code: string;
+  employeeCode: string;
   password: string;
 };
 
@@ -24,10 +30,30 @@ export default function LoginPage() {
     password: "",
     ownerEmail: "",
   });
-  const [login, setLogin] = useState<LoginState>({ code: "", password: "" });
+  const [login, setLogin] = useState<LoginState>({ code: "", employeeCode: "", password: "" });
+  const [saveLogin, setSaveLogin] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 아이디(회사코드) / 비밀번호 찾기
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = localStorage.getItem(SAVE_LOGIN_KEY);
+      if (saved === "1") {
+        setSaveLogin(true);
+        const code = localStorage.getItem(SAVE_CODE_KEY);
+        const emp = localStorage.getItem(SAVE_EMPLOYEE_KEY);
+        const pwd = localStorage.getItem(SAVE_PASSWORD_KEY);
+        setLogin((prev) => ({
+          ...prev,
+          code: code ?? prev.code,
+          employeeCode: emp ?? prev.employeeCode,
+          password: pwd ?? prev.password,
+        }));
+      }
+    } catch (_) {}
+  }, []);
+
+  // 아이디(회사아이디) / 비밀번호 찾기
   const [findMode, setFindMode] = useState<FindMode>(null);
   const [findEmail, setFindEmail] = useState("");
   const [resetCode, setResetCode] = useState("");
@@ -37,7 +63,7 @@ export default function LoginPage() {
 
   const handleSignup = async () => {
     if (!signup.name || !signup.code || !signup.password) {
-      alert("회사명 / 회사코드 / 비밀번호를 모두 입력해 주세요.");
+      alert("회사명 / 회사아이디 / 비밀번호를 모두 입력해 주세요.");
       return;
     }
     setLoading(true);
@@ -54,7 +80,7 @@ export default function LoginPage() {
       }
       alert(`회사 생성 완료!\n코드: ${data.code}\n이 코드로 로그인하세요.`);
       setMode("login");
-      setLogin({ code: signup.code, password: "" });
+      setLogin({ code: signup.code, employeeCode: "", password: "" });
     } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
@@ -64,7 +90,11 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!login.code || !login.password) {
-      alert("회사코드와 비밀번호를 입력해 주세요.");
+      alert("회사아이디와 비밀번호를 입력해 주세요.");
+      return;
+    }
+    if (!login.employeeCode.trim()) {
+      alert("개인코드를 입력해 주세요.");
       return;
     }
     setLoading(true);
@@ -72,15 +102,34 @@ export default function LoginPage() {
       const res = await fetch("/api/company/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(login),
+        body: JSON.stringify({
+          code: login.code,
+          password: login.password,
+          employeeCode: login.employeeCode.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "로그인에 실패했습니다.");
+        alert((data.error || "로그인에 실패했습니다.") + (data.debug ? "\n\n[개발] " + data.debug : ""));
         return;
       }
+      if (saveLogin) {
+        try {
+          localStorage.setItem(SAVE_LOGIN_KEY, "1");
+          localStorage.setItem(SAVE_CODE_KEY, login.code.trim());
+          localStorage.setItem(SAVE_EMPLOYEE_KEY, login.employeeCode.trim());
+          localStorage.setItem(SAVE_PASSWORD_KEY, login.password);
+        } catch (_) {}
+      } else {
+        try {
+          localStorage.removeItem(SAVE_LOGIN_KEY);
+          localStorage.removeItem(SAVE_CODE_KEY);
+          localStorage.removeItem(SAVE_EMPLOYEE_KEY);
+          localStorage.removeItem(SAVE_PASSWORD_KEY);
+        } catch (_) {}
+      }
       // 쿠키는 서버에서 설정되므로 여기서는 메인 페이지로 이동만 수행
-      window.location.href = "/dashboard";
+      window.location.href = "/consulting";
     } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {
@@ -116,7 +165,7 @@ export default function LoginPage() {
 
   const handleResetPassword = async () => {
     if (!resetCode.trim() || !resetEmail.trim() || !resetPassword) {
-      alert("회사코드, 이메일, 새 비밀번호를 모두 입력해 주세요.");
+      alert("회사아이디, 이메일, 새 비밀번호를 모두 입력해 주세요.");
       return;
     }
     if (resetPassword.length < 6) {
@@ -168,7 +217,7 @@ export default function LoginPage() {
           인테리어 올인원 ERP시스템
         </h1>
         <p className="mb-6 text-center text-xs text-gray-500">
-          회사코드로 로그인해서 회사별 ERP를 사용합니다.
+          회사아이디 · 개인코드 · 비밀번호로 ERP 로그인합니다.
         </p>
 
         <div className="mb-6 flex rounded-xl bg-gray-100 p-1 text-sm font-medium text-gray-700">
@@ -179,7 +228,7 @@ export default function LoginPage() {
               mode === "login" ? "bg-white shadow-sm" : "text-gray-500"
             }`}
           >
-            회사코드 로그인
+            ERP 로그인
           </button>
           <button
             type="button"
@@ -194,6 +243,14 @@ export default function LoginPage() {
 
         {mode === "signup" ? (
           <div className="space-y-4">
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-sm text-blue-900">
+              <p className="font-medium mb-1">새 회사 등록 안내</p>
+              <ul className="list-disc list-inside space-y-0.5 text-xs text-blue-800">
+                <li>관리자 개인코드 기본값은 <strong>0000</strong>이며, 원하면 담당자 설정에서 변경할 수 있습니다.</li>
+                <li>가입 후 <strong>ERP 로그인</strong>에서 회사아이디 · 개인코드 · 비밀번호로 로그인합니다.</li>
+                <li>관리 → 담당자 설정에서 담당자(개인코드·비밀번호)를 추가하면 담당자로 로그인할 수 있습니다.</li>
+              </ul>
+            </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">
                 회사명
@@ -210,7 +267,7 @@ export default function LoginPage() {
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">
-                회사코드
+                회사아이디
               </label>
               <input
                 type="text"
@@ -219,7 +276,7 @@ export default function LoginPage() {
                 onChange={(e) =>
                   setSignup((s) => ({ ...s, code: e.target.value }))
                 }
-                placeholder="로그인에 사용할 코드 (영문/숫자)"
+                placeholder="원하는 회사아이디 입력 (영문·숫자)"
               />
             </div>
             <div>
@@ -270,7 +327,7 @@ export default function LoginPage() {
           >
             <div>
               <label className="mb-1 block text-xs font-semibold text-gray-600">
-                회사코드
+                회사아이디
               </label>
               <input
                 type="text"
@@ -279,7 +336,21 @@ export default function LoginPage() {
                 onChange={(e) =>
                   setLogin((s) => ({ ...s, code: e.target.value }))
                 }
-                placeholder="발급받은 회사코드"
+                placeholder="회사아이디 입력"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-gray-600">
+                개인코드
+              </label>
+              <input
+                type="text"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                value={login.employeeCode}
+                onChange={(e) =>
+                  setLogin((s) => ({ ...s, employeeCode: e.target.value }))
+                }
+                placeholder="개인코드 입력"
               />
             </div>
             <div>
@@ -293,9 +364,18 @@ export default function LoginPage() {
                 onChange={(e) =>
                   setLogin((s) => ({ ...s, password: e.target.value }))
                 }
-                placeholder="회사 비밀번호"
+                placeholder="비밀번호 입력"
               />
             </div>
+            <label className="flex cursor-pointer items-center gap-2 py-1">
+              <input
+                type="checkbox"
+                checked={saveLogin}
+                onChange={(e) => setSaveLogin(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-slate-700"
+              />
+              <span className="text-sm text-gray-600">로그인 정보 저장 (회사·개인코드·비밀번호)</span>
+            </label>
             <button
               type="submit"
               disabled={loading}
@@ -313,7 +393,7 @@ export default function LoginPage() {
                   onClick={() => setFindMode("code")}
                   className="underline hover:text-gray-700"
                 >
-                  회사코드 찾기
+                  회사아이디 찾기
                 </button>
                 {" · "}
                 <button
@@ -329,7 +409,7 @@ export default function LoginPage() {
             {findMode === "code" && (
               <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="mb-2 text-xs font-medium text-gray-700">
-                  가입 시 등록한 이메일로 회사코드를 조회합니다.
+                  가입 시 등록한 이메일로 회사아이디를 조회합니다.
                 </p>
                 <input
                   type="email"
@@ -345,7 +425,7 @@ export default function LoginPage() {
                     disabled={loading}
                     className="flex-1 rounded-lg bg-slate-600 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-60"
                   >
-                    {loading ? "조회 중..." : "회사코드 찾기"}
+                    {loading ? "조회 중..." : "회사아이디 찾기"}
                   </button>
                   <button
                     type="button"
@@ -358,7 +438,7 @@ export default function LoginPage() {
                 {findResult && (
                   <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-800">
                     <span className="font-medium">{findResult.companyName}</span>
-                    의 회사코드는 <strong>{findResult.code}</strong> 입니다.
+                    의 회사아이디는 <strong>{findResult.code}</strong> 입니다.
                   </p>
                 )}
               </div>
@@ -367,12 +447,12 @@ export default function LoginPage() {
             {findMode === "password" && (
               <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
                 <p className="mb-3 text-xs font-medium text-gray-700">
-                  회사코드와 가입 시 등록한 이메일로 새 비밀번호를 설정합니다.
+                  회사아이디와 가입 시 등록한 이메일로 새 비밀번호를 설정합니다.
                 </p>
                 <input
                   type="text"
                   className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="회사코드"
+                  placeholder="회사아이디"
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                 />
