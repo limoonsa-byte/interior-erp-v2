@@ -26,24 +26,40 @@ function b64urlToBase64(buf: ArrayBuffer | null): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+let audioContext: AudioContext | null = null;
+
 function playNotificationSound() {
   try {
-    if (typeof window === "undefined" || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("ERP");
-    u.volume = 1;
-    u.lang = "ko-KR";
-    u.rate = 0.9;
-    const voices = window.speechSynthesis.getVoices();
-    const koVoice = voices.find((v) => v.lang.startsWith("ko"));
-    if (koVoice) u.voice = koVoice;
-    window.speechSynthesis.speak(u);
+    const C = typeof window !== "undefined" ? window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext : null;
+    if (!C) return;
+    const ctx = audioContext ?? new C();
+    if (!audioContext) audioContext = ctx;
+    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    const t = ctx.currentTime;
+    const chime = (at: number, freq: number, duration: number) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = "sine";
+      gain.gain.setValueAtTime(0, at);
+      gain.gain.linearRampToValueAtTime(0.4, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, at + duration);
+      osc.start(at);
+      osc.stop(at + duration);
+    };
+    chime(t, 1319, 0.2);
+    chime(t + 0.08, 1760, 0.25);
+    chime(t + 0.18, 1047, 0.22);
   } catch (_) {}
 }
 
 function unlockAudio() {
   if (typeof window === "undefined") return;
-  if (window.speechSynthesis) window.speechSynthesis.getVoices();
+  const C = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (C && !audioContext) audioContext = new C();
+  if (audioContext?.state === "suspended") audioContext.resume().catch(() => {});
 }
 
 type ChatMessage = {
@@ -103,7 +119,9 @@ export default function ChatPage() {
         const prevLastId = lastNotifiedIdRef.current;
         const nextLast = nextMessages.length > 0 ? (nextMessages[nextMessages.length - 1] as ChatMessage) : null;
         const isNew = nextLast && (lastNotifiedIdRef.current > 0 && nextLast.id > lastNotifiedIdRef.current);
-        const isFromOthers = nextLast && nextLast.senderName !== senderName && nextLast.senderName !== companyName;
+        const lastSender = nextLast?.senderName?.trim().toLowerCase() ?? "";
+        const myNames = [senderName.trim().toLowerCase(), companyName.trim().toLowerCase()].filter(Boolean);
+        const isFromOthers = nextLast && lastSender !== "" && !myNames.includes(lastSender);
         const shouldNotify = isNew && isFromOthers && !alarmMutedRef.current && typeof document !== "undefined";
         if (nextLast && lastNotifiedIdRef.current === 0) {
           lastNotifiedIdRef.current = nextLast.id;
@@ -111,9 +129,9 @@ export default function ChatPage() {
           playNotificationSound();
           if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
             try {
-              new Notification("erp메세지", {
+              new Notification("뾰로롱", {
                 body: nextLast!.body.slice(0, 80) + (nextLast!.body.length > 80 ? "…" : ""),
-                tag: `erp-chat-${currentEstimateId ?? "all"}`,
+                tag: `chat-${currentEstimateId ?? "all"}`,
               });
             } catch (_) {}
           }

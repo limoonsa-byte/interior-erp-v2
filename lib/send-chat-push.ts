@@ -45,9 +45,9 @@ export async function sendChatPush(params: SendChatPushParams): Promise<void> {
               AND (estimate_id IS NULL OR estimate_id = ${params.estimateId})
           `;
     const payload = JSON.stringify({
-      title: "erp메세지",
+      title: "뾰로롱",
       body: params.body.slice(0, 80) + (params.body.length > 80 ? "…" : ""),
-      tag: `erp-chat-${params.estimateId ?? "all"}`,
+      tag: `chat-${params.estimateId ?? "all"}`,
       url: params.estimateId != null ? `/chat?estimateId=${params.estimateId}` : "/chat",
     });
     for (const row of rows.rows as { endpoint: string; p256dh: string; auth: string }[]) {
