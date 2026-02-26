@@ -3,17 +3,34 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MessageCircle, Send, MessageSquare, Bell } from "lucide-react";
+import { MessageCircle, Send, MessageSquare, Bell, BellOff } from "lucide-react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 
 const CHAT_TITLE = "인테리어 올인원 ERP";
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  const output = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) output[i] = rawData.charCodeAt(i);
+  return output;
+}
+
+function b64urlToBase64(buf: ArrayBuffer | null): string {
+  if (!buf) return "";
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
 function playNotificationSound() {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance("erp메세지");
+    const u = new SpeechSynthesisUtterance("띠링~");
     u.volume = 0.5;
     u.lang = "ko-KR";
     u.rate = 0.9;
@@ -63,6 +80,15 @@ export default function ChatPage() {
   const originalTitleRef = useRef<string>("");
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [canShowNotificationUI, setCanShowNotificationUI] = useState(false);
+  const [alarmMuted, setAlarmMuted] = useState(() =>
+    typeof window !== "undefined" && localStorage.getItem("chat-alarm-muted") === "1"
+  );
+  const alarmMutedRef = useRef(false);
+
+  useEffect(() => {
+    alarmMutedRef.current = alarmMuted;
+    if (typeof window !== "undefined") localStorage.setItem("chat-alarm-muted", alarmMuted ? "1" : "0");
+  }, [alarmMuted]);
 
   const fetchMessages = useCallback(async (notifyOnReturn = false) => {
     if (!isValidRoom) return;
@@ -78,7 +104,7 @@ export default function ChatPage() {
         const nextLast = nextMessages.length > 0 ? (nextMessages[nextMessages.length - 1] as ChatMessage) : null;
         const isNew = nextLast && (lastNotifiedIdRef.current > 0 && nextLast.id > lastNotifiedIdRef.current);
         const isFromOthers = nextLast && nextLast.senderName !== senderName && nextLast.senderName !== companyName;
-        const shouldNotify = (document.hidden || notifyOnReturn) && isNew && isFromOthers && typeof document !== "undefined";
+        const shouldNotify = isNew && isFromOthers && !alarmMutedRef.current && typeof document !== "undefined";
         if (nextLast && lastNotifiedIdRef.current === 0) {
           lastNotifiedIdRef.current = nextLast.id;
         } else if (shouldNotify) {
@@ -133,6 +159,53 @@ export default function ChatPage() {
       setNotificationPermission(Notification.permission);
     }
   }, []);
+
+  useEffect(() => {
+    if (!isValidRoom || notificationPermission !== "granted" || typeof window === "undefined") return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const vapidRes = await fetch("/api/company/chat/vapid-public");
+        const { publicKey } = await vapidRes.json();
+        if (!publicKey || cancelled) return;
+        const reg = await navigator.serviceWorker.register("/sw-push.js", { scope: "/chat" });
+        await reg.update();
+        const sub = await reg.pushManager.getSubscription();
+        if (sub && !cancelled) {
+          await fetch("/api/company/chat/push-subscription", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              endpoint: sub.endpoint,
+              keys: { p256dh: b64urlToBase64(sub.getKey("p256dh")), auth: b64urlToBase64(sub.getKey("auth")) },
+              estimateId: currentEstimateId,
+            }),
+          });
+          return;
+        }
+        const applicationServerKey = urlBase64ToUint8Array(publicKey);
+        const newSub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+        if (cancelled) return;
+        await fetch("/api/company/chat/push-subscription", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            endpoint: newSub.endpoint,
+            keys: {
+              p256dh: b64urlToBase64(newSub.getKey("p256dh")),
+              auth: b64urlToBase64(newSub.getKey("auth")),
+            },
+            estimateId: currentEstimateId,
+          }),
+        });
+      } catch (_) {}
+    })();
+    return () => { cancelled = true; };
+  }, [isValidRoom, notificationPermission, currentEstimateId]);
 
   useEffect(() => {
     const unlock = () => {
@@ -273,7 +346,21 @@ export default function ChatPage() {
             <span className="text-base font-medium text-slate-600">· {currentRoomLabel}</span>
           )}
           {canShowNotificationUI && "Notification" in window && (
-            <button
+            <>
+              <button
+                type="button"
+                onClick={() => setAlarmMuted((m) => !m)}
+                className={`flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs ${
+                  alarmMuted
+                    ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+                title={alarmMuted ? "알람 켜기 (새 메시지 시 소리·알림)" : "알람 끄기 (새 메시지 시 소리·알림 안 함)"}
+              >
+                {alarmMuted ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+                {alarmMuted ? "알람 끄짐" : "알람 끄기"}
+              </button>
+              <button
               type="button"
               onClick={() => {
                 if (Notification.permission === "granted") return;
@@ -286,6 +373,7 @@ export default function ChatPage() {
               {notificationPermission === "granted" ? <Bell className="h-4 w-4 fill-amber-400 text-amber-500" /> : <Bell className="h-4 w-4" />}
               {notificationPermission === "granted" ? "알림 켜짐" : "알림 허용"}
             </button>
+            </>
           )}
         </h1>
         <p className="mb-3 text-sm text-gray-500">

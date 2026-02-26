@@ -245,6 +245,19 @@ async function migrate() {
     await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE`;
     await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE`;
     console.log("[migrate] company_chat_messages OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS chat_push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(endpoint)
+      )
+    `;
+    console.log("[migrate] chat_push_subscriptions OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

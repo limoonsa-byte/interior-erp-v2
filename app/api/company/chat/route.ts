@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { sql } from "@vercel/postgres";
+import { sendChatPush } from "@/lib/send-chat-push";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -141,6 +142,12 @@ export async function POST(request: Request) {
         body: row.body,
         createdAt: row.created_at != null ? new Date(row.created_at as string).toISOString() : null,
       };
+      sendChatPush({
+        companyId: company.id,
+        estimateId: estimateId ?? null,
+        senderName: row.sender_name,
+        body: row.body,
+      }).catch(() => {});
       return NextResponse.json(msg);
     } catch (insertErr: unknown) {
       const errMsg = String(insertErr instanceof Error ? insertErr.message : insertErr);
@@ -165,6 +172,12 @@ export async function POST(request: Request) {
           body: row.body,
           createdAt: row.created_at != null ? new Date(row.created_at as string).toISOString() : null,
         };
+        sendChatPush({
+          companyId: company.id,
+          estimateId: null,
+          senderName: row.sender_name,
+          body: row.body,
+        }).catch(() => {});
         return NextResponse.json(msg);
       }
       throw insertErr;
