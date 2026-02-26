@@ -94,6 +94,8 @@ export default function ChatPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const lastNotifiedIdRef = useRef<number>(0);
   const originalTitleRef = useRef<string>("");
+  const lastReadRef = useRef<Record<string, number>>({});
+  const [unreadByRoom, setUnreadByRoom] = useState<Record<string, number>>({});
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
   const [canShowNotificationUI, setCanShowNotificationUI] = useState(false);
   const [alarmMuted, setAlarmMuted] = useState(() =>
@@ -105,6 +107,33 @@ export default function ChatPage() {
     alarmMutedRef.current = alarmMuted;
     if (typeof window !== "undefined") localStorage.setItem("chat-alarm-muted", alarmMuted ? "1" : "0");
   }, [alarmMuted]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem("chat-last-read");
+      if (raw) lastReadRef.current = JSON.parse(raw) as Record<string, number>;
+    } catch (_) {}
+  }, []);
+
+  const fetchRoomsSummary = useCallback(async () => {
+    try {
+      const lastRead = lastReadRef.current;
+      const q = encodeURIComponent(JSON.stringify(lastRead));
+      const res = await fetch(`/api/company/chat/rooms-summary?lastRead=${q}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const rooms = (data.rooms || []) as { estimateId: number | null; unreadCount: number }[];
+      const next: Record<string, number> = {};
+      for (const r of rooms) {
+        const key = r.estimateId == null ? "all" : String(r.estimateId);
+        next[key] = r.unreadCount;
+      }
+      setUnreadByRoom(next);
+    } catch (_) {}
+  }, []);
+
+  const roomKey = currentEstimateId == null ? "all" : String(currentEstimateId);
 
   const fetchMessages = useCallback(async (notifyOnReturn = false) => {
     if (!isValidRoom) return;
@@ -141,6 +170,15 @@ export default function ChatPage() {
         }
         setMessages(nextMessages);
         lastNotifiedIdRef.current = nextLast?.id ?? lastNotifiedIdRef.current;
+        if (nextLast) {
+          const key = currentEstimateId == null ? "all" : String(currentEstimateId);
+          lastReadRef.current[key] = nextLast.id;
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem("chat-last-read", JSON.stringify(lastReadRef.current));
+            } catch (_) {}
+          }
+        }
       }
     } catch {
       setMessages([]);
@@ -246,9 +284,13 @@ export default function ChatPage() {
   useEffect(() => {
     setLoading(true);
     fetchMessages();
-    const interval = setInterval(fetchMessages, 3000);
+    fetchRoomsSummary();
+    const interval = setInterval(() => {
+      fetchMessages();
+      fetchRoomsSummary();
+    }, 3000);
     return () => clearInterval(interval);
-  }, [fetchMessages]);
+  }, [fetchMessages, fetchRoomsSummary]);
 
   useEffect(() => {
     const handleVisible = () => {
@@ -335,9 +377,16 @@ export default function ChatPage() {
                   : "text-gray-700 hover:bg-gray-50"
               }`}
             >
-              <span className="flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 shrink-0" />
-                회사 전체
+              <span className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 min-w-0">
+                  <MessageSquare className="h-4 w-4 shrink-0" />
+                  <span className="truncate">회사 전체</span>
+                </span>
+                {(unreadByRoom.all ?? 0) > 0 && (
+                  <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                    {unreadByRoom.all > 99 ? "99+" : unreadByRoom.all}
+                  </span>
+                )}
               </span>
             </Link>
           </li>
@@ -352,7 +401,14 @@ export default function ChatPage() {
                 }`}
                 title={e.customerName || undefined}
               >
-                {e.title || e.customerName || `견적 #${e.id}`}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate">{e.title || e.customerName || `견적 #${e.id}`}</span>
+                  {(unreadByRoom[String(e.id)] ?? 0) > 0 && (
+                    <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      {unreadByRoom[String(e.id)]! > 99 ? "99+" : unreadByRoom[String(e.id)]}
+                    </span>
+                  )}
+                </span>
               </Link>
             </li>
           ))}
