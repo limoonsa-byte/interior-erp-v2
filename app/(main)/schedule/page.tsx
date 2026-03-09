@@ -16,11 +16,20 @@ const SCHEDULE_TARGET_STATUSES = [
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const LIST_PAGE_SIZE = 10;
-/** 목록 제목 글자색 (현장마다 다르게) */
+/** 공사명(제목)별 색상 - 같은 공사명은 같은 색 */
 const TITLE_COLORS = [
   "#2563EB", "#059669", "#B45309", "#7C3AED", "#BE185D",
   "#0D9488", "#CA8A04", "#DC2626", "#4F46E5", "#0F766E",
 ];
+
+/** 공사명 문자열로부터 일관된 색상 인덱스 반환 */
+function getColorIndexByTitle(title: string): number {
+  if (!title || !title.trim()) return 0;
+  let h = 0;
+  const s = title.trim();
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return h % TITLE_COLORS.length;
+}
 
 type Consultation = {
   id: number;
@@ -117,7 +126,7 @@ function getSiteBarsOnDay(day: string, scheduleList: ScheduleItem[]): SiteBar[] 
     consultationId,
     estimateTitle,
     phaseNames,
-    color: TITLE_COLORS[consultationId % TITLE_COLORS.length],
+    color: TITLE_COLORS[getColorIndexByTitle(estimateTitle)],
   }));
 }
 
@@ -130,6 +139,8 @@ export default function SchedulePage() {
     const t = new Date();
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
   });
+  /** 완료 건 보기: 기본 꺼짐(완료 건 숨김) */
+  const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -148,9 +159,10 @@ export default function SchedulePage() {
   }, []);
 
   const scheduleList = useMemo(() => {
-    const list = consultations.filter((c) =>
-      SCHEDULE_TARGET_STATUSES.includes(c.status as (typeof SCHEDULE_TARGET_STATUSES)[number])
-    );
+    const list = consultations.filter((c) => {
+      if (!showCompleted && c.status === "완료") return false;
+      return SCHEDULE_TARGET_STATUSES.includes(c.status as (typeof SCHEDULE_TARGET_STATUSES)[number]);
+    });
     return list
       .map((consultation) => {
         const est = estimates.find((e) => e.consultationId === consultation.id);
@@ -161,7 +173,7 @@ export default function SchedulePage() {
         };
       })
       .filter((item) => item.hasEstimate);
-  }, [consultations, estimates]);
+  }, [consultations, estimates, showCompleted]);
 
   const totalListPages = Math.max(1, Math.ceil(scheduleList.length / LIST_PAGE_SIZE));
   const paginatedList = useMemo(
@@ -251,6 +263,15 @@ export default function SchedulePage() {
       <p className="text-sm text-gray-500 mb-3">
         저장된 공사 일정 목록입니다. <strong>견적서를 작성한 상담</strong>만 표시됩니다. 제목을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
       </p>
+      <label className="mb-4 flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          checked={showCompleted}
+          onChange={(e) => setShowCompleted(e.target.checked)}
+          className="rounded border-gray-300"
+        />
+        <span className="text-sm text-gray-700">완료 건 보기</span>
+      </label>
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white mb-8">
         <table className="w-full min-w-[520px] text-left text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
@@ -280,7 +301,7 @@ export default function SchedulePage() {
               </tr>
             ) : (
               paginatedList.map((item) => {
-                const titleColor = TITLE_COLORS[item.consultation.id % TITLE_COLORS.length];
+                const titleColor = TITLE_COLORS[getColorIndexByTitle(item.estimateTitle)];
                 return (
                 <tr key={item.consultation.id} className="text-gray-700 hover:bg-gray-50">
                   <td className="p-2 sm:p-3 font-medium">

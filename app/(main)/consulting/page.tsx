@@ -61,10 +61,10 @@ function parseBudgetToSave(display: string): string {
 type PicItem = { id: number; name: string };
 
 /** 진행상태 옵션 (상담종료 제거) */
-const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "공사진행", "완료"] as const;
 
 /** 견적완료 이상이면 접수/현장실측/견적미팅 선택 비활성화 */
-const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "완료"] as const;
+const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "공사진행", "완료"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
   return (STATUS_LOCKED_AFTER as readonly string[]).includes(savedStatus);
 }
@@ -616,11 +616,7 @@ function DetailModal({
                   <input
                     type="checkbox"
                     name={`scope_${label}`}
-                    defaultChecked={
-                      data.scope
-                        ? data.scope.includes(label)
-                        : idx < 2 || label === "중문" || label === "확장"
-                    }
+                    defaultChecked={data.scope ? data.scope.includes(label) : false}
                   />
                   {label}
                 </label>
@@ -864,10 +860,13 @@ export default function ConsultingPage() {
   const [filterPyungMin, setFilterPyungMin] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
-  const [filterDatePreset, setFilterDatePreset] = useState<"" | "금일" | "작일" | "당월">("");
+  const [filterDatePreset, setFilterDatePreset] = useState<"" | "금일" | "작일" | "당월" | "전체">("전체");
+  /** 완료 건 보기: 기본 꺼짐(완료 건 숨김) */
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const filteredConsultations = React.useMemo(() => {
     return consultations.filter((item) => {
+      if (!showCompleted && item.status === "완료") return false;
       if (filterCustomerName.trim()) {
         if (!item.customerName?.toLowerCase().includes(filterCustomerName.trim().toLowerCase())) return false;
       }
@@ -886,7 +885,7 @@ export default function ConsultingPage() {
       }
       return true;
     });
-  }, [consultations, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
+  }, [consultations, showCompleted, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
 
   const loadFromDb = (): Promise<void> => {
     return fetch("/api/consultations")
@@ -1096,6 +1095,30 @@ export default function ConsultingPage() {
             </div>
 
             <div className="flex gap-2 text-sm">
+              <label className="flex cursor-pointer items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1.5">
+                <input
+                  type="checkbox"
+                  checked={showCompleted}
+                  onChange={(e) => setShowCompleted(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                <span className="text-gray-700">완료 건 보기</span>
+              </label>
+            </div>
+            <div className="flex gap-2 text-sm">
+              <label className="flex cursor-pointer items-center gap-1">
+                <input
+                  type="radio"
+                  name="datePreset"
+                  checked={filterDatePreset === "전체"}
+                  onChange={() => {
+                    setFilterDatePreset("전체");
+                    setFilterDateFrom("");
+                    setFilterDateTo("");
+                  }}
+                />
+                전체
+              </label>
               <label className="flex cursor-pointer items-center gap-1">
                 <input
                   type="radio"

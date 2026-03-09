@@ -2132,6 +2132,7 @@ type Consultation = {
   address?: string;
   pic?: string;
   estimateMeetingAt?: string;
+  status?: string;
 };
 
 export default function EstimatePage() {
@@ -2141,6 +2142,12 @@ export default function EstimatePage() {
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loadingConsultations, setLoadingConsultations] = useState(false);
+  /** 상담 선택 모달에서 완료 건 보기: 기본 꺼짐 */
+  const [showCompletedInModal, setShowCompletedInModal] = useState(false);
+  /** 목록에서 완료 건 보기: 기본 꺼짐 (연결된 상담이 완료인 견적 숨김) */
+  const [showCompletedInList, setShowCompletedInList] = useState(false);
+  /** 목록 필터용 상담 전체 (상담 진행상태로 견적 필터링) */
+  const [consultationsForList, setConsultationsForList] = useState<Consultation[]>([]);
 
   const load = () => {
     fetch("/api/estimates")
@@ -2154,6 +2161,23 @@ export default function EstimatePage() {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    fetch("/api/consultations")
+      .then((res) => res.json())
+      .then((list) => setConsultationsForList(Array.isArray(list) ? list : []))
+      .catch(() => setConsultationsForList([]));
+  }, []);
+
+  /** 목록에 표시할 견적 (완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외) */
+  const filteredEstimates = React.useMemo(() => {
+    if (showCompletedInList) return estimates;
+    return estimates.filter((est) => {
+      if (est.consultationId == null) return true;
+      const c = consultationsForList.find((x) => x.id === est.consultationId);
+      return c?.status !== "완료";
+    });
+  }, [estimates, consultationsForList, showCompletedInList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2207,8 +2231,89 @@ export default function EstimatePage() {
     setFormOpen("new");
   };
 
+  /** 모달에 표시할 상담 목록 (완료 건 보기 꺼짐이면 완료 제외) */
+  const consultationsToShow = React.useMemo(
+    () => consultations.filter((c) => showCompletedInModal || c.status !== "완료"),
+    [consultations, showCompletedInModal]
+  );
+
   const editingEstimate = formOpen !== null && formOpen !== "new" ? estimates.find((e) => e.id === formOpen) ?? null : null;
   const showForm = formOpen !== null;
+
+  const consultationModal = consultationModalOpen ? (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
+        <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800">상담 선택 (견적미팅 예정)</h3>
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompletedInModal}
+                onChange={(e) => setShowCompletedInModal(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              완료 건 보기
+            </label>
+            <button
+              type="button"
+              onClick={() => setConsultationModalOpen(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        <div className="p-4">
+          {loadingConsultations ? (
+            <p className="text-center text-sm text-gray-500 py-8">불러오는 중...</p>
+          ) : consultationsToShow.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-500 mb-2">
+                {consultations.length === 0
+                  ? "견적미팅이 예정된 상담이 없습니다."
+                  : "표시할 상담이 없습니다. '완료 건 보기'를 켜 보세요."}
+              </p>
+              <p className="text-xs text-gray-400">상담 및 미팅관리에서 견적미팅 일시를 먼저 입력해 주세요.</p>
+            </div>
+          ) : (
+            <div className="overflow-auto max-h-[60vh]">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-gray-100 sticky top-0">
+                  <tr>
+                    <th className="p-2">고객명</th>
+                    <th className="p-2">연락처</th>
+                    <th className="p-2">주소</th>
+                    <th className="p-2">견적미팅</th>
+                    <th className="w-20 p-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {consultationsToShow.map((c) => (
+                    <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <td className="p-2 font-medium">{c.customerName || "-"}</td>
+                      <td className="p-2">{c.contact || "-"}</td>
+                      <td className="p-2 text-gray-600 truncate max-w-[200px]" title={c.address}>{c.address || "-"}</td>
+                      <td className="p-2 text-gray-600">{c.estimateMeetingAt || "-"}</td>
+                      <td className="p-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectConsultation(c)}
+                          className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                        >
+                          선택
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -2224,65 +2329,7 @@ export default function EstimatePage() {
       </div>
 
       {/* 상담 선택 모달 */}
-      {consultationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-xl">
-            <div className="border-b border-gray-200 bg-gray-50 px-4 py-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-800">상담 선택 (견적미팅 예정)</h3>
-              <button 
-                type="button" 
-                onClick={() => setConsultationModalOpen(false)} 
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-4">
-              {loadingConsultations ? (
-                <p className="text-center text-sm text-gray-500 py-8">불러오는 중...</p>
-              ) : consultations.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-gray-500 mb-2">견적미팅이 예정된 상담이 없습니다.</p>
-                  <p className="text-xs text-gray-400">상담 및 미팅관리에서 견적미팅 일시를 먼저 입력해 주세요.</p>
-                </div>
-              ) : (
-                <div className="overflow-auto max-h-[60vh]">
-                  <table className="w-full text-left text-sm">
-                    <thead className="bg-gray-100 sticky top-0">
-                      <tr>
-                        <th className="p-2">고객명</th>
-                        <th className="p-2">연락처</th>
-                        <th className="p-2">주소</th>
-                        <th className="p-2">견적미팅</th>
-                        <th className="w-20 p-2" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {consultations.map((c) => (
-                        <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                          <td className="p-2 font-medium">{c.customerName || "-"}</td>
-                          <td className="p-2">{c.contact || "-"}</td>
-                          <td className="p-2 text-gray-600 truncate max-w-[200px]" title={c.address}>{c.address || "-"}</td>
-                          <td className="p-2 text-gray-600">{c.estimateMeetingAt || "-"}</td>
-                          <td className="p-2">
-                            <button 
-                              type="button" 
-                              onClick={() => handleSelectConsultation(c)} 
-                              className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
-                            >
-                              선택
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {consultationModal}
 
       {showForm ? (
         <EstimateForm
@@ -2297,6 +2344,17 @@ export default function EstimatePage() {
       ) : (
         <>
           <p className="text-sm text-gray-500">저장된 견적 목록입니다. 수정·삭제하거나 신규 견적을 작성할 수 있습니다.</p>
+          <div className="flex items-center gap-3 mb-2">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompletedInList}
+                onChange={(e) => setShowCompletedInList(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              완료 건 보기
+            </label>
+          </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
@@ -2310,14 +2368,16 @@ export default function EstimatePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {estimates.length === 0 ? (
+                {filteredEstimates.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-gray-500">
-                      저장된 견적이 없습니다. &quot;신규 견적&quot;으로 작성해 보세요.
+                      {estimates.length === 0
+                        ? "저장된 견적이 없습니다. \"신규 견적\"으로 작성해 보세요."
+                        : "표시할 견적이 없습니다. '완료 건 보기'를 켜 보세요."}
                     </td>
                   </tr>
                 ) : (
-                  estimates.map((est) => {
+                  filteredEstimates.map((est) => {
                     const subtotal = (est.items || []).reduce(
                       (s, i) =>
                         s +

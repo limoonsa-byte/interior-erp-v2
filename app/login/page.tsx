@@ -257,7 +257,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="text"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={signup.name}
                 onChange={(e) =>
                   setSignup((s) => ({ ...s, name: e.target.value }))
@@ -271,7 +271,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="text"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={signup.code}
                 onChange={(e) =>
                   setSignup((s) => ({ ...s, code: e.target.value }))
@@ -285,7 +285,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="password"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={signup.password}
                 onChange={(e) =>
                   setSignup((s) => ({ ...s, password: e.target.value }))
@@ -299,7 +299,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="email"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={signup.ownerEmail}
                 onChange={(e) =>
                   setSignup((s) => ({ ...s, ownerEmail: e.target.value }))
@@ -331,7 +331,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="text"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={login.code}
                 onChange={(e) =>
                   setLogin((s) => ({ ...s, code: e.target.value }))
@@ -345,7 +345,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="text"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={login.employeeCode}
                 onChange={(e) =>
                   setLogin((s) => ({ ...s, employeeCode: e.target.value }))
@@ -359,7 +359,7 @@ export default function LoginPage() {
               </label>
               <input
                 type="password"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                 value={login.password}
                 onChange={(e) =>
                   setLogin((s) => ({ ...s, password: e.target.value }))
@@ -413,7 +413,7 @@ export default function LoginPage() {
                 </p>
                 <input
                   type="email"
-                  className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                   placeholder="이메일 주소"
                   value={findEmail}
                   onChange={(e) => setFindEmail(e.target.value)}
@@ -451,21 +451,21 @@ export default function LoginPage() {
                 </p>
                 <input
                   type="text"
-                  className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                   placeholder="회사아이디"
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
                 />
                 <input
                   type="email"
-                  className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                   placeholder="이메일 주소"
                   value={resetEmail}
                   onChange={(e) => setResetEmail(e.target.value)}
                 />
                 <input
                   type="password"
-                  className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="mb-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500"
                   placeholder="새 비밀번호 (6자 이상)"
                   value={resetPassword}
                   onChange={(e) => setResetPassword(e.target.value)}

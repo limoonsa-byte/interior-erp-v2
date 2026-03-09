@@ -86,6 +86,28 @@ export async function POST(request: Request) {
     await sql`INSERT INTO env_backup (id, content) VALUES (1, '') ON CONFLICT (id) DO NOTHING`;
     results.push("env_backup 테이블 확인");
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS contracts (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        consultation_id INT REFERENCES consultations(id) ON DELETE SET NULL,
+        estimate_id INT REFERENCES estimates(id) ON DELETE SET NULL,
+        title TEXT NOT NULL DEFAULT '',
+        customer_name TEXT NOT NULL DEFAULT '',
+        contact TEXT NOT NULL DEFAULT '',
+        signer_email TEXT,
+        document_path TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        sign_token TEXT UNIQUE,
+        signed_at TIMESTAMPTZ,
+        signer_name TEXT,
+        signature_data TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    results.push("contracts 테이블 확인");
+
     return NextResponse.json({
       message: "마이그레이션 완료",
       done: results,

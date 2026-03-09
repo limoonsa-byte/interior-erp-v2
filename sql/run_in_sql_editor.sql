@@ -53,3 +53,23 @@ ALTER TABLE consultations DROP COLUMN IF EXISTS region;
 
 -- 12) 회사별 도면 보관함 API URL
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS drawing_list_api_url TEXT;
+
+-- 13) 계약서 (전자서명용)
+CREATE TABLE IF NOT EXISTS contracts (
+  id SERIAL PRIMARY KEY,
+  company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  consultation_id INT REFERENCES consultations(id) ON DELETE SET NULL,
+  estimate_id INT REFERENCES estimates(id) ON DELETE SET NULL,
+  title TEXT NOT NULL DEFAULT '',
+  customer_name TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL DEFAULT '',
+  signer_email TEXT,
+  document_path TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  sign_token TEXT UNIQUE,
+  signed_at TIMESTAMPTZ,
+  signer_name TEXT,
+  signature_data TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
