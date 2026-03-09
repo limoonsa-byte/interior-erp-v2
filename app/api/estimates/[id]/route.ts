@@ -57,7 +57,9 @@ function rowToEstimate(row: Record<string, unknown>) {
     note: row.note ?? "",
     items,
     processOrder,
-    createdAt: row.created_at != null ? String(row.created_at) : undefined,
+    overheadPercent: row.overhead_percent != null ? Number(row.overhead_percent) : 5,
+    profitPercent: row.profit_percent != null ? Number(row.profit_percent) : 10,
+    picName: row.pic_name != null ? String(row.pic_name) : undefined,    createdAt: row.created_at != null ? String(row.created_at) : undefined,
   };
 }
 
@@ -75,11 +77,31 @@ export async function GET(
     if (Number.isNaN(estimateId)) {
       return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
     }
-    const result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
-      FROM estimates
-      WHERE id = ${estimateId} AND company_id = ${company.id}
-    `;
+    let result: Awaited<ReturnType<typeof sql>>;
+    try {
+      result = await sql`
+        SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
+        FROM estimates
+        WHERE id = ${estimateId} AND company_id = ${company.id}
+      `;
+    } catch (colErr) {
+      const msg = colErr instanceof Error ? colErr.message : String(colErr);
+      if (/column.*overhead_percent|column.*profit_percent/i.test(msg)) {
+        result = await sql`
+          SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
+          FROM estimates
+          WHERE id = ${estimateId} AND company_id = ${company.id}
+        `;
+      } else if (/column.*pic_name/i.test(msg)) {
+        result = await sql`
+          SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, created_at
+          FROM estimates
+          WHERE id = ${estimateId} AND company_id = ${company.id}
+        `;
+      } else {
+        throw colErr;
+      }
+    }
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
     }
@@ -115,27 +137,102 @@ export async function PATCH(
       note,
       items,
       processOrder,
+      overheadPercent,
+      profitPercent,
+      picName,
     } = body;
     const itemsJson = Array.isArray(items) ? JSON.stringify(items) : null;
     const processOrderJson = Array.isArray(processOrder) ? JSON.stringify(processOrder) : undefined;
     const estimateDateVal = estimateDate != null && String(estimateDate).trim() !== "" ? String(estimateDate).slice(0, 10) : null;
-    const result = await sql`
-      UPDATE estimates
-      SET
-        consultation_id = COALESCE(${consultationId ?? null}, consultation_id),
-        customer_name = COALESCE(${customerName ?? null}, customer_name),
-        contact = COALESCE(${contact ?? null}, contact),
-        address = COALESCE(${address ?? null}, address),
-        title = COALESCE(${title ?? null}, title),
-        estimate_date = ${estimateDateVal},
-        note = COALESCE(${note ?? null}, note),
-        items = COALESCE(${itemsJson}, items),
-        process_order = COALESCE(${processOrderJson ?? null}, process_order)
-      WHERE id = ${estimateId} AND company_id = ${company.id}
-      RETURNING id
-    `;
-    if (result.rows.length === 0) {
-      return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
+    const overheadVal = overheadPercent != null && !Number.isNaN(Number(overheadPercent)) ? Math.min(100, Math.max(0, Math.round(Number(overheadPercent)))) : undefined;
+    const profitVal = profitPercent != null && !Number.isNaN(Number(profitPercent)) ? Math.min(100, Math.max(0, Math.round(Number(profitPercent)))) : undefined;
+    const picNameVal = picName !== undefined ? (picName != null && String(picName).trim() !== "" ? String(picName).trim() : null) : undefined;
+    try {
+      const result =
+        picNameVal !== undefined
+          ? await sql`
+              UPDATE estimates
+              SET
+                consultation_id = COALESCE(${consultationId ?? null}, consultation_id),
+                customer_name = COALESCE(${customerName ?? null}, customer_name),
+                contact = COALESCE(${contact ?? null}, contact),
+                address = COALESCE(${address ?? null}, address),
+                title = COALESCE(${title ?? null}, title),
+                estimate_date = ${estimateDateVal},
+                note = COALESCE(${note ?? null}, note),
+                items = COALESCE(${itemsJson}, items),
+                process_order = COALESCE(${processOrderJson ?? null}, process_order),
+                overhead_percent = COALESCE(${overheadVal ?? null}, overhead_percent),
+                profit_percent = COALESCE(${profitVal ?? null}, profit_percent),
+                pic_name = ${picNameVal}
+              WHERE id = ${estimateId} AND company_id = ${company.id}
+              RETURNING id
+            `
+          : await sql`
+              UPDATE estimates
+              SET
+                consultation_id = COALESCE(${consultationId ?? null}, consultation_id),
+                customer_name = COALESCE(${customerName ?? null}, customer_name),
+                contact = COALESCE(${contact ?? null}, contact),
+                address = COALESCE(${address ?? null}, address),
+                title = COALESCE(${title ?? null}, title),
+                estimate_date = ${estimateDateVal},
+                note = COALESCE(${note ?? null}, note),
+                items = COALESCE(${itemsJson}, items),
+                process_order = COALESCE(${processOrderJson ?? null}, process_order),
+                overhead_percent = COALESCE(${overheadVal ?? null}, overhead_percent),
+                profit_percent = COALESCE(${profitVal ?? null}, profit_percent)
+              WHERE id = ${estimateId} AND company_id = ${company.id}
+              RETURNING id
+            `;
+      if (result.rows.length === 0) {
+        return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
+      }
+    } catch (updateErr) {
+      const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+      if (/column.*overhead_percent|column.*profit_percent/i.test(msg)) {
+        const result = await sql`
+          UPDATE estimates
+          SET
+            consultation_id = COALESCE(${consultationId ?? null}, consultation_id),
+            customer_name = COALESCE(${customerName ?? null}, customer_name),
+            contact = COALESCE(${contact ?? null}, contact),
+            address = COALESCE(${address ?? null}, address),
+            title = COALESCE(${title ?? null}, title),
+            estimate_date = ${estimateDateVal},
+            note = COALESCE(${note ?? null}, note),
+            items = COALESCE(${itemsJson}, items),
+            process_order = COALESCE(${processOrderJson ?? null}, process_order)
+          WHERE id = ${estimateId} AND company_id = ${company.id}
+          RETURNING id
+        `;
+        if (result.rows.length === 0) {
+          return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
+        }
+      } else if (/column.*pic_name/i.test(msg) && picNameVal !== undefined) {
+        const result = await sql`
+          UPDATE estimates
+          SET
+            consultation_id = COALESCE(${consultationId ?? null}, consultation_id),
+            customer_name = COALESCE(${customerName ?? null}, customer_name),
+            contact = COALESCE(${contact ?? null}, contact),
+            address = COALESCE(${address ?? null}, address),
+            title = COALESCE(${title ?? null}, title),
+            estimate_date = ${estimateDateVal},
+            note = COALESCE(${note ?? null}, note),
+            items = COALESCE(${itemsJson}, items),
+            process_order = COALESCE(${processOrderJson ?? null}, process_order),
+            overhead_percent = COALESCE(${overheadVal ?? null}, overhead_percent),
+            profit_percent = COALESCE(${profitVal ?? null}, profit_percent)
+          WHERE id = ${estimateId} AND company_id = ${company.id}
+          RETURNING id
+        `;
+        if (result.rows.length === 0) {
+          return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
+        }
+      } else {
+        throw updateErr;
+      }
     }
     return NextResponse.json({ message: "수정되었습니다." }, { status: 200 });
   } catch (error) {

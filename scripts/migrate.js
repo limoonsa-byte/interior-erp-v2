@@ -120,6 +120,9 @@ async function migrate() {
     `;
     console.log("[migrate] estimates OK");
     await sql`ALTER TABLE estimates ADD COLUMN IF NOT EXISTS process_order TEXT`;
+    await sql`ALTER TABLE estimates ADD COLUMN IF NOT EXISTS overhead_percent INT DEFAULT 5`;
+    await sql`ALTER TABLE estimates ADD COLUMN IF NOT EXISTS profit_percent INT DEFAULT 10`;
+    await sql`ALTER TABLE estimates ADD COLUMN IF NOT EXISTS pic_name TEXT`;
     console.log("[migrate] estimates process_order OK");
     await sql`
       CREATE TABLE IF NOT EXISTS env_backup (
@@ -230,6 +233,7 @@ async function migrate() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `;
+    await sql`ALTER TABLE estimate_settlements ADD COLUMN IF NOT EXISTS customer_payment TEXT`;
     console.log("[migrate] estimate_settlements OK");
     await sql`
       CREATE TABLE IF NOT EXISTS company_chat_messages (
@@ -260,6 +264,52 @@ async function migrate() {
     `;
     await sql`ALTER TABLE chat_push_subscriptions ADD COLUMN IF NOT EXISTS subscriber_name TEXT`;
     console.log("[migrate] chat_push_subscriptions OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS site_material_list_items (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        estimate_id INT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+        item_name TEXT,
+        image_url TEXT,
+        size TEXT,
+        hole_size_install TEXT,
+        remarks TEXT,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`ALTER TABLE site_material_list_items ADD COLUMN IF NOT EXISTS product_name_code TEXT`;
+    await sql`ALTER TABLE site_material_list_items ADD COLUMN IF NOT EXISTS shopping_link TEXT`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS site_material_list_sections (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        estimate_id INT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT '',
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`ALTER TABLE site_material_list_items ADD COLUMN IF NOT EXISTS section_id INT REFERENCES site_material_list_sections(id) ON DELETE CASCADE`;
+    console.log("[migrate] site_material_list_items OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS material_order_drafts (
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        estimate_id INT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id, estimate_id)
+      )
+    `;
+    console.log("[migrate] material_order_drafts OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_order_template (
+        company_id INT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    console.log("[migrate] company_order_template OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

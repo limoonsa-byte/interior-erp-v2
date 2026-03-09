@@ -53,20 +53,20 @@ export async function sendChatPush(params: SendChatPushParams): Promise<void> {
       tag: `chat-${params.estimateId ?? "all"}`,
       url: params.estimateId != null ? `/chat?estimateId=${params.estimateId}` : "/chat",
     });
-    for (const row of rows.rows as { endpoint: string; p256dh: string; auth: string }[]) {
-      try {
-        await webpush.sendNotification(
+    const options = { TTL: 60 };
+    const sendPromises = (rows.rows as { endpoint: string; p256dh: string; auth: string }[]).map((row) =>
+      webpush
+        .sendNotification(
           {
             endpoint: row.endpoint,
             keys: { p256dh: row.p256dh, auth: row.auth },
           },
           payload,
-          { TTL: 60 }
-        );
-      } catch (_) {
-        // 구독 만료 등 시 무시
-      }
-    }
+          options
+        )
+        .catch(() => {})
+    );
+    await Promise.all(sendPromises);
   } catch (_) {
     // DB/테이블 없음 등 무시
   }

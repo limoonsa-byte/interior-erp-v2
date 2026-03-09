@@ -146,7 +146,7 @@ export default function ScheduleDetailPage() {
         }
         const estimates = Array.isArray(est) ? est : [];
         const e = estimates.find((x: Estimate) => x.consultationId === id);
-        setEstimateTitle(e?.title?.trim() || "제목 없음");
+        setEstimateTitle(e?.title?.trim() || `${(c as { customerName?: string })?.customerName || "상담"} (견적 없음)`);
       })
       .catch(() => setConsultation(null))
       .finally(() => setLoading(false));

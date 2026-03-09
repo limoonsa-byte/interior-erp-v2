@@ -45,6 +45,7 @@ type Estimate = {
 type ScheduleItem = {
   consultation: Consultation;
   estimateTitle: string;
+  hasEstimate?: boolean;
 };
 
 function toDateValue(value: string | undefined): string {
@@ -150,13 +151,16 @@ export default function SchedulePage() {
     const list = consultations.filter((c) =>
       SCHEDULE_TARGET_STATUSES.includes(c.status as (typeof SCHEDULE_TARGET_STATUSES)[number])
     );
-    return list.map((consultation) => {
-      const est = estimates.find((e) => e.consultationId === consultation.id);
-      return {
-        consultation,
-        estimateTitle: est?.title?.trim() || "제목 없음",
-      };
-    });
+    return list
+      .map((consultation) => {
+        const est = estimates.find((e) => e.consultationId === consultation.id);
+        return {
+          consultation,
+          estimateTitle: (est?.title?.trim() || "제목 없음"),
+          hasEstimate: !!est,
+        };
+      })
+      .filter((item) => item.hasEstimate);
   }, [consultations, estimates]);
 
   const totalListPages = Math.max(1, Math.ceil(scheduleList.length / LIST_PAGE_SIZE));
@@ -245,7 +249,7 @@ export default function SchedulePage() {
       <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">일정</h1>
 
       <p className="text-sm text-gray-500 mb-3">
-        저장된 공사 일정 목록입니다. <strong>제목</strong>을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
+        저장된 공사 일정 목록입니다. <strong>견적서를 작성한 상담</strong>만 표시됩니다. 제목을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
       </p>
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white mb-8">
         <table className="w-full min-w-[520px] text-left text-sm">
@@ -263,11 +267,15 @@ export default function SchedulePage() {
             {scheduleList.length === 0 ? (
               <tr>
                 <td colSpan={6} className="p-8 text-center text-gray-500">
-                  견적완료 이상인 상담이 없습니다.{" "}
+                  견적서가 연결된 상담이 없습니다.{" "}
                   <Link href="/consulting" className="text-blue-600 hover:underline">
                     상담 및 미팅관리
                   </Link>
-                  에서 진행상태를 견적완료로 변경한 상담이 여기에 표시됩니다.
+                  에서 진행상태를 견적완료로 변경한 뒤,{" "}
+                  <Link href="/estimate" className="text-blue-600 hover:underline">
+                    견적서 작성
+                  </Link>
+                  에서 해당 상담으로 견적을 저장하면 여기에 표시됩니다.
                 </td>
               </tr>
             ) : (
@@ -434,7 +442,11 @@ export default function SchedulePage() {
         <Link href="/consulting" className="text-blue-600 hover:underline">
           상담 및 미팅관리
         </Link>
-        에서 견적완료로 변경한 상담이 여기에 표시됩니다.
+        에서 견적완료로 변경한 뒤,{" "}
+        <Link href="/estimate" className="text-blue-600 hover:underline">
+          견적서 작성
+        </Link>
+        에서 해당 상담으로 견적을 저장하면 일정 목록에 표시됩니다.
       </p>
     </div>
   );

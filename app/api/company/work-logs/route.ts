@@ -13,7 +13,7 @@ async function getCompanyFromCookie() {
   }
 }
 
-/** DB에서 나온 log_date를 YYYY-MM-DD 문자열로 */
+/** DB에서 나온 log_date를 YYYY-MM-DD 문자열로. Date 객체는 한국 시간 기준으로 변환해 타임존으로 하루 밀리는 현상 방지 */
 function toDateString(val: unknown): string {
   if (val == null) return "";
   if (typeof val === "string") {
@@ -21,10 +21,13 @@ function toDateString(val: unknown): string {
     return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
   }
   if (val instanceof Date && !Number.isNaN(val.getTime())) {
-    const y = val.getUTCFullYear();
-    const m = String(val.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(val.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    const s = val.toLocaleDateString("en-CA", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
   }
   return "";
 }
@@ -40,6 +43,9 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const dateFrom = searchParams.get("dateFrom")?.trim().slice(0, 10);
     const dateTo = searchParams.get("dateTo")?.trim().slice(0, 10);
+    const estimateIdParam = searchParams.get("estimateId")?.trim();
+    const estimateIdFilter =
+      estimateIdParam && /^\d+$/.test(estimateIdParam) ? parseInt(estimateIdParam, 10) : null;
     const fromDate = dateFrom && /^\d{4}-\d{2}-\d{2}$/.test(dateFrom) ? dateFrom : "1970-01-01";
     const toDate = dateTo && /^\d{4}-\d{2}-\d{2}$/.test(dateTo) ? dateTo : "2100-12-31";
 
@@ -55,6 +61,7 @@ export async function GET(request: Request) {
         WHERE w.company_id = ${company.id}
         AND w.log_date >= ${fromDate}::date
         AND w.log_date <= ${toDate}::date
+        AND (${estimateIdFilter}::int IS NULL OR w.estimate_id = ${estimateIdFilter})
         ORDER BY w.log_date DESC, w.created_at DESC
       `;
     } catch (colErr) {
@@ -70,6 +77,7 @@ export async function GET(request: Request) {
           WHERE w.company_id = ${company.id}
           AND w.log_date >= ${fromDate}::date
           AND w.log_date <= ${toDate}::date
+          AND (${estimateIdFilter}::int IS NULL OR w.estimate_id = ${estimateIdFilter})
           ORDER BY w.log_date DESC, w.created_at DESC
         `;
         (result.rows as Record<string, unknown>[]).forEach((row) => {

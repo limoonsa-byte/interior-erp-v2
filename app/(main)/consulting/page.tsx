@@ -76,6 +76,12 @@ function normalizeStatusDisplay(status: string | undefined): string {
   return map[status] || status;
 }
 
+/** 목록 등에서 진행상태 표시 시 '현장실측' → '현장 상담 실측' */
+function displayStatusLabel(status: string | undefined): string {
+  if (!status) return "-";
+  return status === "현장실측" ? "현장 상담 실측" : status;
+}
+
 function DetailModal({
   data,
   editId,
@@ -92,7 +98,6 @@ function DetailModal({
   onSaved: () => void | Promise<void>;
 }) {
   const formRef = useRef<HTMLFormElement | null>(null);
-  const dateInputRef = useRef<HTMLInputElement | null>(null);
   const siteMeasurementInputRef = useRef<HTMLInputElement | null>(null);
   const estimateMeetingInputRef = useRef<HTMLInputElement | null>(null);
   const materialMeetingInputRef = useRef<HTMLInputElement | null>(null);
@@ -137,6 +142,13 @@ function DetailModal({
   const [materialMeetingDone, setMaterialMeetingDone] = useState(!!data.materialMeetingDone);
   const [contractMeetingDone, setContractMeetingDone] = useState(!!data.contractMeetingDone);
   const [designMeetingDone, setDesignMeetingDone] = useState(!!data.designMeetingDone);
+
+  useEffect(() => {
+    if (data.consultedDone || data.siteMeasurementDone) {
+      setSiteMeasurementDone(true);
+      setConsultedDone(true);
+    }
+  }, [data.consultedDone, data.siteMeasurementDone]);
 
   const handleSearchAddress = () => {
     if (typeof window === "undefined") return;
@@ -187,6 +199,9 @@ function DetailModal({
     const address = `${postcode} ${fullRoad}`.trim();
     const scope = scopeItems.filter((label) => fd.get(`scope_${label}`) === "on");
     const budget = parseBudgetToSave(budgetDisplay);
+    const siteConsultValue = siteMeasurementDone
+      ? ((siteMeasurementInputRef.current?.value?.trim() || data.siteMeasurementAt || data.consultedAt) ?? undefined)
+      : ((fd.get("siteMeasurementAt") as string)?.trim() || undefined);
     return {
       customerName: (fd.get("customerName") as string) ?? data.customerName,
       contact: (fd.get("contact") as string) ?? data.contact,
@@ -195,8 +210,8 @@ function DetailModal({
       status: statusSelection,
       pic: (fd.get("pic") as string) ?? data.pic,
       note: (fd.get("note") as string) ?? "",
-      consultedAt: consultedDone ? ((dateInputRef.current?.value?.trim() || data.consultedAt) ?? undefined) : ((fd.get("consultedAt") as string) || undefined),
-      siteMeasurementAt: siteMeasurementDone ? ((siteMeasurementInputRef.current?.value?.trim() || data.siteMeasurementAt) ?? undefined) : ((fd.get("siteMeasurementAt") as string)?.trim() || undefined),
+      consultedAt: siteConsultValue,
+      siteMeasurementAt: siteConsultValue,
       estimateMeetingAt: estimateMeetingDone ? ((estimateMeetingInputRef.current?.value?.trim() || data.estimateMeetingAt) ?? undefined) : ((fd.get("estimateMeetingAt") as string)?.trim() || undefined),
       materialMeetingAt: materialMeetingDone ? ((materialMeetingInputRef.current?.value?.trim() || data.materialMeetingAt) ?? undefined) : ((fd.get("materialMeetingAt") as string)?.trim() || undefined),
       contractMeetingAt: contractMeetingDone ? ((contractMeetingInputRef.current?.value?.trim() || data.contractMeetingAt) ?? undefined) : ((fd.get("contractMeetingAt") as string)?.trim() || undefined),
@@ -208,7 +223,7 @@ function DetailModal({
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
       ...(editId !== null && editId > 0
         ? {
-            consultedDone,
+            consultedDone: siteMeasurementDone,
             siteMeasurementDone,
             estimateMeetingDone,
             materialMeetingDone,
@@ -300,6 +315,7 @@ function DetailModal({
           <div className="flex flex-wrap gap-4 text-sm">
             {STATUS_OPTIONS.map((label) => {
               const disabled = ["접수", "현장실측", "견적미팅"].includes(label) && isStatusLockedEarly(normalizeStatusDisplay(data.status));
+              const displayLabel = label === "현장실측" ? "현장 상담 실측" : label;
               return (
                 <label
                   key={label}
@@ -316,7 +332,7 @@ function DetailModal({
                     disabled={disabled}
                     onChange={() => !disabled && setStatusSelection(label)}
                   />
-                  {label}
+                  {displayLabel}
                 </label>
               );
             })}
@@ -415,50 +431,37 @@ function DetailModal({
           </section>
         )}
 
-        {/* 현장실측날짜 (진행상태가 현장실측일 때 또는 저장된 현장실측날짜가 있으면 표시 유지) */}
-        {(statusSelection === "현장실측" || data.siteMeasurementAt) && (
+        {/* 현장 상담 및 실측 (현장실측 선택 시 또는 저장된 날짜가 있으면 표시) — 하나로 통합 */}
+        {(statusSelection === "현장실측" || data.siteMeasurementAt || data.consultedAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">현장실측날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">현장 상담 및 실측</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">현장실측날짜</span>
+              <span className="whitespace-nowrap text-gray-700">현장 상담 및 실측</span>
               <input
                 ref={siteMeasurementInputRef}
                 name="siteMeasurementAt"
                 type="datetime-local"
                 className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${siteMeasurementDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
-                defaultValue={data.siteMeasurementAt ? data.siteMeasurementAt.slice(0, 16) : getTodayDatetimeLocal()}
+                defaultValue={(data.siteMeasurementAt || data.consultedAt)?.slice(0, 16) ?? getTodayDatetimeLocal()}
                 disabled={siteMeasurementDone}
                 onClick={(e) => e.stopPropagation()}
               />
               <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" checked={siteMeasurementDone} onChange={() => setSiteMeasurementDone((v) => !v)} className="rounded border-gray-300" />
+                <input
+                  type="checkbox"
+                  checked={siteMeasurementDone}
+                  onChange={() => {
+                    const v = !siteMeasurementDone;
+                    setSiteMeasurementDone(v);
+                    setConsultedDone(v);
+                  }}
+                  className="rounded border-gray-300"
+                />
                 <span className="text-gray-700">완료</span>
               </label>
             </div>
           </section>
         )}
-
-        {/* 상담 예약날짜 */}
-        <section className="mb-5">
-          <p className="mb-2 text-sm font-semibold text-gray-700">상담 예약날짜</p>
-          <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-            <span className="whitespace-nowrap text-gray-700">상담 예약날짜</span>
-            <input
-              ref={dateInputRef}
-              id="consulting-datetime"
-              name="consultedAt"
-              type="datetime-local"
-              className={`w-72 max-w-[330px] rounded-lg border border-gray-300 px-3 py-2 text-sm ${consultedDone ? "cursor-not-allowed bg-gray-100 text-gray-500" : "cursor-pointer bg-white"}`}
-              defaultValue={data.consultedAt ? data.consultedAt.slice(0, 16) : getTodayDatetimeLocal()}
-              disabled={consultedDone}
-              onClick={(e) => e.stopPropagation()}
-            />
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={consultedDone} onChange={() => setConsultedDone((v) => !v)} className="rounded border-gray-300" />
-              <span className="text-gray-700">완료</span>
-            </label>
-          </div>
-        </section>
 
         {/* 기본 정보 */}
         <section className="mb-5 space-y-5">
@@ -1190,7 +1193,7 @@ export default function ConsultingPage() {
                   />
                 </td>
                 <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{item.status || "-"}</td>
+                <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
                 <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
                 <td className="min-w-[72px] p-2 sm:p-3 font-medium whitespace-nowrap">
                   <button

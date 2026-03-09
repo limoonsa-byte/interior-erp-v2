@@ -33,11 +33,24 @@ export async function GET() {
   try {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
-    const result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
+    let result: Awaited<ReturnType<typeof sql>>;
+    try {
+      result = await sql`
+      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
       FROM estimates WHERE company_id = ${company.id} ORDER BY id DESC
     `;
-    const rows = result.rows.map((row) => {
+    } catch (colErr) {
+      const msg = colErr instanceof Error ? colErr.message : String(colErr);
+      if (/column.*pic_name/i.test(msg)) {
+        result = await sql`
+      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, created_at
+      FROM estimates WHERE company_id = ${company.id} ORDER BY id DESC
+    `;
+      } else {
+        throw colErr;
+      }
+    }
+    const rows = result.rows.map((row: Record<string, unknown>) => {
       let items: unknown[] = [];
       if (row.items != null && String(row.items).trim() !== "") {
         try {
@@ -65,6 +78,9 @@ export async function GET() {
         note: row.note ?? "",
         items,
         processOrder,
+        overheadPercent: row.overhead_percent != null ? Number(row.overhead_percent) : 5,
+        profitPercent: row.profit_percent != null ? Number(row.profit_percent) : 10,
+        picName: row.pic_name != null ? String(row.pic_name) : undefined,
         createdAt: row.created_at != null ? String(row.created_at) : undefined,
       };
     });
@@ -80,14 +96,29 @@ export async function POST(request: Request) {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
     const body = await request.json();
-    const { consultationId, customerName, contact, address, title, estimateDate, note, items, processOrder } = body;
+    const { consultationId, customerName, contact, address, title, estimateDate, note, items, processOrder, overheadPercent, profitPercent, picName } = body;
     const itemsJson = Array.isArray(items) ? JSON.stringify(items) : "[]";
     const processOrderJson = Array.isArray(processOrder) ? JSON.stringify(processOrder) : null;
     const estimateDateVal = estimateDate != null && String(estimateDate).trim() !== "" ? String(estimateDate).slice(0, 10) : null;
-    await sql`
-      INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order)
-      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson})
+    const overheadVal = overheadPercent != null && !Number.isNaN(Number(overheadPercent)) ? Math.min(100, Math.max(0, Math.round(Number(overheadPercent)))) : 5;
+    const profitVal = profitPercent != null && !Number.isNaN(Number(profitPercent)) ? Math.min(100, Math.max(0, Math.round(Number(profitPercent)))) : 10;
+    const picNameVal = picName != null && String(picName).trim() !== "" ? String(picName).trim() : null;
+    try {
+      await sql`
+      INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name)
+      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal}, ${picNameVal})
     `;
+    } catch (insertErr) {
+      const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+      if (/column.*pic_name/i.test(msg)) {
+        await sql`
+      INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent)
+      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal})
+    `;
+      } else {
+        throw insertErr;
+      }
+    }
     return NextResponse.json({ message: "저장되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("estimates POST error:", error);

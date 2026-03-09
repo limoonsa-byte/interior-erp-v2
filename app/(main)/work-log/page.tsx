@@ -1,8 +1,25 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 type EstimateItem = { id: number; title: string | null; customerName?: string; processOrder?: string[] };
+type EstimateDetailItem = {
+  processGroup?: string;
+  category?: string;
+  spec?: string;
+  unit?: string;
+  qty?: number | string;
+  materialUnitPrice?: number | string;
+  laborUnitPrice?: number | string;
+  unitPrice?: number;
+  note?: string;
+};
+type EstimateDetail = {
+  id: number;
+  items?: EstimateDetailItem[];
+  processOrder?: string[];
+};
 type PicItem = { id: number; name: string; phone?: string };
 type WorkLogItem = {
   id: number;
@@ -16,12 +33,36 @@ type WorkLogItem = {
   picName: string | null;
 };
 
-const EXPENSE_LABELS_FIXED = ["자재비", "인건비", "운반비", "소모품비"] as const;
-/** @deprecated 공정+직접입력 사용. 호환용 유지 */
-const EXPENSE_LABELS = EXPENSE_LABELS_FIXED;
-const EXPENSE_DIRECT_INPUT_VALUE = "__direct__"; // 기타 대신 직접입력
+const EXPENSE_DIRECT_INPUT_VALUE = "__direct__"; // 직접입력
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+
+function itemAmount(item: EstimateDetailItem): number {
+  const q = Number(item.qty) || 0;
+  const mat = Number(item.materialUnitPrice ?? item.unitPrice ?? 0) || 0;
+  const labor = Number(item.laborUnitPrice ?? 0) || 0;
+  return q * (mat + labor);
+}
+
+/** 견적 상세에서 공정별 금액이 0보다 큰 공정 이름만 (processOrder 순서) */
+function getPhaseNamesWithAmount(est: EstimateDetail): string[] {
+  const order = est.processOrder?.length
+    ? est.processOrder.filter((n) => !String(n).startsWith("\u200B"))
+    : [];
+  const sumByGroup = new Map<string, number>();
+  (est.items || []).forEach((item) => {
+    const g = (item.processGroup ?? "").trim();
+    if (!g || String(g).startsWith("\u200B")) return;
+    const amt = itemAmount(item);
+    sumByGroup.set(g, (sumByGroup.get(g) ?? 0) + amt);
+  });
+  if (order.length > 0) {
+    return order.filter((name) => (sumByGroup.get(name) ?? 0) > 0);
+  }
+  return Array.from(sumByGroup.entries())
+    .filter(([, amt]) => amt > 0)
+    .map(([name]) => name);
+}
 
 /** logDate(YYYY-MM-DD 또는 ISO 문자열) → YYYY-MM-DD */
 function toLogDateKey(logDate: string): string {
@@ -58,18 +99,25 @@ export default function WorkLogPage() {
     const t = new Date();
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
   });
+  const [selectedEstimatePhases, setSelectedEstimatePhases] = useState<string[]>([]);
+  const editingIdRef = useRef<number | null>(null);
+  editingIdRef.current = editingId;
 
-  const expenseLabelOptions = useMemo(() => {
-    const list: string[] = [...EXPENSE_LABELS_FIXED];
-    const est = estimates.find((e) => e.id === Number(formEstimateId));
-    if (est?.processOrder?.length) {
-      est.processOrder.forEach((name) => {
-        const n = (name || "").trim();
-        if (n && !String(n).startsWith("\u200B") && !list.includes(n)) list.push(n);
-      });
+  useEffect(() => {
+    if (!formEstimateId) {
+      setSelectedEstimatePhases([]);
+      return;
     }
-    return list;
-  }, [estimates, formEstimateId]);
+    fetch(`/api/estimates/${formEstimateId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: EstimateDetail | null) => {
+        if (data) setSelectedEstimatePhases(getPhaseNamesWithAmount(data));
+        else setSelectedEstimatePhases([]);
+      })
+      .catch(() => setSelectedEstimatePhases([]));
+  }, [formEstimateId]);
+
+  const expenseLabelOptions = useMemo(() => [...selectedEstimatePhases], [selectedEstimatePhases]);
 
   const getExpenseSelectValue = (rowLabel: string) => {
     if (!rowLabel) return "";
@@ -120,9 +168,10 @@ export default function WorkLogPage() {
     fetchLogs().finally(() => setLoading(false));
   }, [viewMode]);
 
-  /** 캘린더 보기일 때 해당 월 로드 */
+  /** 캘린더 보기일 때 해당 월 로드 (수정 중에는 리패치하지 않음 → 작업일 등 폼 덮어쓰기 방지, ref 사용으로 의존 배열 길이 고정) */
   useEffect(() => {
     if (viewMode !== "calendar") return;
+    if (editingIdRef.current != null) return;
     const [y, m] = currentMonth.split("-").map(Number);
     const first = `${y}-${String(m).padStart(2, "0")}-01`;
     const lastDay = new Date(y, m, 0).getDate();
@@ -241,16 +290,7 @@ export default function WorkLogPage() {
                 : log
             )
           );
-          // 서버에서 다시 불러와서 날짜 수정이 다른 화면 갔다 와도 유지되도록 함
-          if (viewMode === "calendar") {
-            const [y, m] = currentMonth.split("-").map(Number);
-            const first = `${y}-${String(m).padStart(2, "0")}-01`;
-            const lastDay = new Date(y, m, 0).getDate();
-            const last = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
-            fetchLogs(first, last);
-          } else {
-            fetchLogs();
-          }
+          // 저장 후 refetch 하지 않음 → API/타임존으로 인해 날짜가 다시 덮어써지는 것 방지 (다른 탭/새로고침 시에는 서버 데이터로 로드됨)
         })
         .catch(() => setError("저장에 실패했습니다."))
         .finally(() => setSaving(false));
@@ -290,6 +330,7 @@ export default function WorkLogPage() {
   };
 
   const handleEdit = (log: WorkLogItem) => {
+    if (editingId === log.id) return;
     setEditingId(log.id);
     setFormLogDate(toLogDateKey(log.logDate) || log.logDate);
     setFormEstimateId(log.estimateId != null ? String(log.estimateId) : "");
@@ -320,10 +361,11 @@ export default function WorkLogPage() {
   };
 
   useEffect(() => {
-    if (!formLogDate && !editingId) {
+    if (editingId != null) return;
+    if (!formLogDate) {
       setFormLogDate(new Date().toISOString().slice(0, 10));
     }
-  }, [editingId, formLogDate]);
+  }, [editingId]);
 
   return (
     <div className="space-y-6">
@@ -355,18 +397,28 @@ export default function WorkLogPage() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">프로젝트(견적)</label>
-            <select
-              value={formEstimateId}
-              onChange={(e) => setFormEstimateId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              <option value="">선택 안 함</option>
-              {estimates.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.title || `견적 #${e.id}`} {e.customerName ? ` (${e.customerName})` : ""}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={formEstimateId}
+                onChange={(e) => setFormEstimateId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">선택 안 함</option>
+                {estimates.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.title || `견적 #${e.id}`} {e.customerName ? ` (${e.customerName})` : ""}
+                  </option>
+                ))}
+              </select>
+              {formEstimateId && (
+                <Link
+                  href={`/settlement?estimateId=${formEstimateId}`}
+                  className="no-print shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  정산에서 보기
+                </Link>
+              )}
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-600">담당자</label>
@@ -459,14 +511,17 @@ export default function WorkLogPage() {
                   className="min-w-[120px] flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />
                 <input
-                  type="number"
-                  min={0}
-                  value={row.amount || ""}
-                  onChange={(e) =>
+                  type="text"
+                  inputMode="numeric"
+                  value={row.amount === 0 ? "" : row.amount.toLocaleString("ko-KR")}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/\D/g, "");
+                    const num = raw === "" ? 0 : parseInt(raw, 10);
+                    if (Number.isNaN(num)) return;
                     setFormExpenses((prev) =>
-                      prev.map((r, i) => (i === idx ? { ...r, amount: Number(e.target.value) || 0 } : r))
-                    )
-                  }
+                      prev.map((r, i) => (i === idx ? { ...r, amount: num } : r))
+                    );
+                  }}
                   placeholder="금액"
                   className="w-28 rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />

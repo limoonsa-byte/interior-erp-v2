@@ -115,6 +115,9 @@ export default function MaterialOrderPage() {
   const [selectedEstimateId, setSelectedEstimateId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [orderSaving, setOrderSaving] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [saveDraftLoading, setSaveDraftLoading] = useState(false);
+  const [templateLoadType, setTemplateLoadType] = useState<null | "default" | "company">(null);
 
   /** 필수 기입란 - 발주일은 오늘 고정, 담당자/연락처는 마스터(관리) 담당자에서 선택 */
   const [requiredOrderDate] = useState(() => getTodayDate());
@@ -244,12 +247,63 @@ export default function MaterialOrderPage() {
     return consultations.find((c) => c.id === selectedEstimate.consultationId) ?? null;
   }, [consultations, selectedEstimate]);
 
-  /** 견적 선택 시 현장명·배송지 자동 채움 */
+  /** 견적 선택 시 현장명(프로젝트 제목)·배송지 주소를 선택한 프로젝트 정보로 자동 채움 */
   useEffect(() => {
     if (!selectedEstimate) return;
-    setRequiredSiteName((prev) => (prev === "" ? selectedEstimate.title ?? "" : prev));
-    setRequiredDeliveryAddress((prev) => (prev === "" ? selectedEstimate.address ?? "" : prev));
+    setRequiredSiteName(selectedEstimate.title ?? "");
+    setRequiredDeliveryAddress(selectedEstimate.address ?? "");
   }, [selectedEstimate?.id]);
+
+  /** 견적 선택 시 저장된 자재 발주 초안 불러오기 */
+  useEffect(() => {
+    if (selectedEstimateId == null) return;
+    setDraftLoading(true);
+    fetch(`/api/company/material-order?estimateId=${selectedEstimateId}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        const draft = (data as { draft?: Record<string, unknown> }).draft;
+        if (!draft || typeof draft !== "object") {
+          setDraftLoading(false);
+          return;
+        }
+        if (typeof draft.requiredSiteName === "string") setRequiredSiteName(draft.requiredSiteName);
+        if (typeof draft.requiredDeliveryAddress === "string") setRequiredDeliveryAddress(draft.requiredDeliveryAddress);
+        if (typeof draft.requiredContactName === "string") setRequiredContactName(draft.requiredContactName);
+        if (typeof draft.requiredContactPhone === "string") setRequiredContactPhone(draft.requiredContactPhone);
+        if (draft.deliveryDateByLabel && typeof draft.deliveryDateByLabel === "object") {
+          setDeliveryDateByLabel(draft.deliveryDateByLabel as Record<string, string>);
+        }
+        if (draft.memoByKey && typeof draft.memoByKey === "object") {
+          setMemoByKey(draft.memoByKey as Record<string, string>);
+        }
+        if (Array.isArray(draft.visibleOrderLabels) && draft.visibleOrderLabels.length > 0) {
+          setVisibleOrderLabels(draft.visibleOrderLabels as string[]);
+        }
+        if (draft.addedRowsByLabel && typeof draft.addedRowsByLabel === "object") {
+          const raw = draft.addedRowsByLabel as Record<string, unknown[]>;
+          const normalized: Record<string, AddedOrderRow[]> = {};
+          Object.entries(raw).forEach(([label, rows]) => {
+            if (!Array.isArray(rows)) return;
+            normalized[label] = rows.map((r: unknown, i: number) => {
+              const x = r as Record<string, unknown>;
+              return {
+                id: (x.id && String(x.id).trim()) ? String(x.id) : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                processGroup: String(x.processGroup ?? "").trim(),
+                category: String(x.category ?? "").trim(),
+                spec: String(x.spec ?? "").trim(),
+                unit: String(x.unit ?? "").trim(),
+                qty: String(x.qty ?? "").trim(),
+                materialUnitPrice: String(x.materialUnitPrice ?? "").trim(),
+                note: String(x.note ?? "").trim(),
+              };
+            });
+          });
+          setAddedRowsByLabel(normalized);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setDraftLoading(false));
+  }, [selectedEstimateId]);
 
   /** 발주 유형별로 그룹. 현재는 견적 항목 없이 빈 목록만 사용 */
   const itemsByCategory = useMemo(
@@ -313,6 +367,82 @@ export default function MaterialOrderPage() {
     });
     if (previewLabel === label) setPreviewLabel(null);
   };
+
+  /** 템플릿 불러오기: 기본서식(마스터) */
+  const loadDefaultTemplate = useCallback(() => {
+    setTemplateLoadType("default");
+    fetch("/api/company/order-default-items", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        const defaultData = data as { itemsByLabel?: Record<string, AddedOrderRow[]> };
+        setVisibleOrderLabels([...ORDER_CATEGORIES.map((c) => c.label), "기타"]);
+        if (defaultData?.itemsByLabel && typeof defaultData.itemsByLabel === "object" && Object.keys(defaultData.itemsByLabel).length > 0) {
+          const byLabel = defaultData.itemsByLabel as Record<string, AddedOrderRow[]>;
+          setAddedRowsByLabel((prev) => {
+            const next = { ...prev };
+            Object.entries(byLabel).forEach(([label, rows]) => {
+              if (Array.isArray(rows) && rows.length > 0) {
+                next[label] = rows.map((r, i) => ({
+                  id: r.id && String(r.id).trim() ? r.id : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                  processGroup: String(r.processGroup ?? "").trim(),
+                  category: String(r.category ?? "").trim(),
+                  spec: String(r.spec ?? "").trim(),
+                  unit: String(r.unit ?? "").trim(),
+                  qty: String(r.qty ?? "").trim(),
+                  materialUnitPrice: String(r.materialUnitPrice ?? "").trim(),
+                  note: String(r.note ?? "").trim(),
+                }));
+              }
+            });
+            return next;
+          });
+        }
+        alert("기본서식을 불러왔습니다.");
+      })
+      .catch(() => alert("기본서식 불러오기에 실패했습니다."))
+      .finally(() => setTemplateLoadType(null));
+  }, []);
+
+  /** 템플릿 불러오기: 우리회사 템플릿 */
+  const loadCompanyTemplate = useCallback(() => {
+    setTemplateLoadType("company");
+    fetch("/api/company/order-template", { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => {
+        const t = (data as { template?: { visibleOrderLabels?: string[]; addedRowsByLabel?: Record<string, unknown[]> } }).template;
+        if (!t) {
+          alert("저장된 우리회사 템플릿이 없습니다. 관리 → 자재발주 서식관리에서 먼저 저장해 주세요.");
+          return;
+        }
+        if (Array.isArray(t.visibleOrderLabels) && t.visibleOrderLabels.length > 0) {
+          setVisibleOrderLabels(t.visibleOrderLabels);
+        }
+        if (t.addedRowsByLabel && typeof t.addedRowsByLabel === "object") {
+          const raw = t.addedRowsByLabel as Record<string, unknown[]>;
+          const normalized: Record<string, AddedOrderRow[]> = {};
+          Object.entries(raw).forEach(([label, rows]) => {
+            if (!Array.isArray(rows)) return;
+            normalized[label] = rows.map((r: unknown, i: number) => {
+              const x = r as Record<string, unknown>;
+              return {
+                id: (x.id && String(x.id).trim()) ? String(x.id) : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                processGroup: String(x.processGroup ?? "").trim(),
+                category: String(x.category ?? "").trim(),
+                spec: String(x.spec ?? "").trim(),
+                unit: String(x.unit ?? "").trim(),
+                qty: String(x.qty ?? "").trim(),
+                materialUnitPrice: String(x.materialUnitPrice ?? "").trim(),
+                note: String(x.note ?? "").trim(),
+              };
+            });
+          });
+          setAddedRowsByLabel(normalized);
+        }
+        alert("우리회사 템플릿을 불러왔습니다.");
+      })
+      .catch(() => alert("우리회사 템플릿 불러오기에 실패했습니다."))
+      .finally(() => setTemplateLoadType(null));
+  }, []);
 
   const totalMaterialAmount = useMemo(() => {
     return itemsByCategory.reduce((sum, { label }) => {
@@ -457,6 +587,50 @@ export default function MaterialOrderPage() {
       setOrderSaving(false);
     }
   }, [selectedConsultation, requiredFilled]);
+
+  /** 자재 발주 초안 저장 (현장명·배송지·담당자·발주 유형별 항목·입하예정일 등) */
+  const saveDraft = useCallback(async () => {
+    if (selectedEstimateId == null) {
+      alert("프로젝트(견적)를 선택해 주세요.");
+      return;
+    }
+    setSaveDraftLoading(true);
+    try {
+      const res = await fetch("/api/company/material-order", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          estimateId: selectedEstimateId,
+          requiredSiteName,
+          requiredDeliveryAddress,
+          requiredContactName,
+          requiredContactPhone,
+          deliveryDateByLabel,
+          addedRowsByLabel,
+          memoByKey,
+          visibleOrderLabels,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
+      alert("저장되었습니다.");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
+    } finally {
+      setSaveDraftLoading(false);
+    }
+  }, [
+    selectedEstimateId,
+    requiredSiteName,
+    requiredDeliveryAddress,
+    requiredContactName,
+    requiredContactPhone,
+    deliveryDateByLabel,
+    addedRowsByLabel,
+    memoByKey,
+    visibleOrderLabels,
+  ]);
 
   /** 해당 발주 섹션을 이미지(PNG)로 저장 — 사용자가 준 표 양식 그대로(삭제 열 없음) */
   const saveOrderSectionAsImage = useCallback(
@@ -638,6 +812,26 @@ export default function MaterialOrderPage() {
 
             <div className="mt-4 space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm text-gray-600">템플릿 불러오기:</span>
+                    <button
+                      type="button"
+                      onClick={loadDefaultTemplate}
+                      disabled={templateLoadType !== null}
+                      className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      title="마스터 관리에서 등록한 기본서식"
+                    >
+                      {templateLoadType === "default" ? "불러오는 중…" : "기본서식"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadCompanyTemplate}
+                      disabled={templateLoadType !== null}
+                      className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      title="관리 → 자재발주 서식관리에서 저장한 우리회사 템플릿"
+                    >
+                      {templateLoadType === "company" ? "불러오는 중…" : "우리회사 템플릿"}
+                    </button>
+                    <span className="text-gray-400">|</span>
                     <button
                       type="button"
                       onClick={handleAddOrderType}
@@ -1156,6 +1350,14 @@ export default function MaterialOrderPage() {
                     자재 합계: {formatNum(totalMaterialAmount)}원
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={saveDraft}
+                      disabled={saveDraftLoading || selectedEstimateId == null}
+                      className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {saveDraftLoading ? "저장 중…" : "저장"}
+                    </button>
                     <button
                       type="button"
                       onClick={exportToExcel}

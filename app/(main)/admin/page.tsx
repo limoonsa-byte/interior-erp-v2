@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
@@ -586,6 +587,14 @@ export default function AdminPage() {
           >
             견적서 관리
           </button>
+        </li>
+        <li>
+          <Link
+            href="/admin/order-format"
+            className="min-h-[48px] flex w-full items-center rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            자재발주 서식관리
+          </Link>
         </li>
         <li>
           <button

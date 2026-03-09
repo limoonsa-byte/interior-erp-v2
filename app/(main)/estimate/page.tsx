@@ -94,6 +94,9 @@ type Estimate = {
   note: string;
   items: EstimateItem[];
   processOrder?: string[];
+  overheadPercent?: number;
+  profitPercent?: number;
+  picName?: string;
   createdAt?: string;
 };
 
@@ -223,6 +226,8 @@ function EstimateForm({
     return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
   });
   const [note, setNote] = useState(estimate?.note ?? "");
+  const [overheadPercent, setOverheadPercent] = useState(estimate?.overheadPercent ?? 5);
+  const [profitPercent, setProfitPercent] = useState(estimate?.profitPercent ?? 10);
   const [items, setItems] = useState<EstimateItem[]>(
     estimate?.items?.length
       ? estimate.items.map((i) => ({
@@ -247,6 +252,17 @@ function EstimateForm({
       setConsultationPic("");
     }
   }, [consultationPreFill, isEdit]);
+
+  useEffect(() => {
+    if (estimate?.picName !== undefined) setConsultationPic(estimate.picName ?? "");
+  }, [estimate?.id, estimate?.picName]);
+
+  useEffect(() => {
+    if (estimate != null) {
+      setOverheadPercent(estimate.overheadPercent ?? 5);
+      setProfitPercent(estimate.profitPercent ?? 10);
+    }
+  }, [estimate?.id, estimate?.overheadPercent, estimate?.profitPercent]);
 
   const consultationId = estimate?.consultationId ?? consultationPreFill?.consultationId ?? null;
   useEffect(() => {
@@ -292,6 +308,12 @@ function EstimateForm({
     return order;
   });
   const [processOrderModalOpen, setProcessOrderModalOpen] = useState(false);
+  /** 공정 순서 ref - addNewSection에서 항상 맨 뒤에 추가되도록 최신값 참조 */
+  const processOrderRef = useRef<string[]>([]);
+  processOrderRef.current = processOrder;
+  /** 현재 items ref - addNewSection에서 순서를 items 기준으로 계산해 새 공정을 맨 뒤에 붙이기 위함 */
+  const itemsRef = useRef<EstimateItem[]>([]);
+  itemsRef.current = items;
   /** 공정 섹션 접기 상태: key = processGroup 이름, true면 접힌 상태 */
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -301,10 +323,10 @@ function EstimateForm({
   const estimateFormRef = React.useRef<HTMLFormElement>(null);
   const [companyName, setCompanyName] = useState("");
   /** 상담에서 선택한 담당자명 → 미리보기 '담 당 자'에 표시 */
-  const [consultationPic, setConsultationPic] = useState("");
+  const [consultationPic, setConsultationPic] = useState(estimate?.picName ?? "");
   /** 관리 > 담당자 설정 목록(이름+전화번호) → 담당자 전화번호 표시용 */
   const [picList, setPicList] = useState<{ id: number; name: string; phone?: string }[]>([]);
-  /** 인쇄: 견적 내용만 body 직계로 복사해 그 부분만 출력(73페이지처럼 전체 화면 잡히는 것 방지) */
+  /** 인쇄: 견적 내용만 body 직계로 복사해 그 부분만 출력(73페이지처럼 전체 화면 잡히는 것 방지). PDF 저장 시 제안 파일명 = document.title */
   const printEstimate = () => {
     const el = document.getElementById("estimate-preview-print");
     const printRootId = "estimate-print-only";
@@ -317,7 +339,8 @@ function EstimateForm({
       document.body.classList.add("printing");
     }
     const prevTitle = document.title;
-    document.title = "";
+    const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
+    document.title = `견적서 ${safeName}`;
     window.print();
     const cleanup = () => {
       document.title = prevTitle;
@@ -436,8 +459,18 @@ function EstimateForm({
   /** 공정 추가: 새 공정을 제일 마지막(맨 밑)에 배치 */
   const addNewSection = () => {
     const newId = `\u200B${Date.now()}`;
+    const currentItems = itemsRef.current;
+    const orderFromItems: string[] = [];
+    const seen = new Set<string>();
+    currentItems.forEach((i) => {
+      const g = i.processGroup ?? "";
+      if (g && !seen.has(g)) {
+        seen.add(g);
+        orderFromItems.push(g);
+      }
+    });
     setItems((prev) => [...prev, { ...emptyItem, processGroup: newId }]);
-    setProcessOrder((prev) => [...prev, newId]);
+    setProcessOrder([...orderFromItems, newId]);
   };
   
   const loadSmartFieldList = () => {
@@ -894,8 +927,11 @@ function EstimateForm({
 
   /** 수량 0인 항목은 견적서에 포함하지 않음 */
   const subtotal = items.reduce((sum, it) => ((Number(it.qty) || 0) > 0 ? sum + amount(it) : sum), 0);
-  const vat = Math.floor(subtotal * 0.1);
-  const total = subtotal + vat;
+  const overheadRate = (Number(overheadPercent) || 5) / 100;
+  const profitRate = (Number(profitPercent) || 10) / 100;
+  const overheadAmount = Math.floor(subtotal * overheadRate);
+  const profitAmount = Math.floor(subtotal * profitRate);
+  const total = subtotal + overheadAmount + profitAmount;
 
   /** 방향키로 입력 칸 이동 (견적서 작성 시 적기 편하게). 테이블 안에서는 위/아래는 같은 열 다음·이전 행으로 이동 */
   const handleEstimateFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
@@ -975,7 +1011,10 @@ function EstimateForm({
         title: title.trim(),
         estimateDate: estimateDate || undefined,
         note: note.trim(),
+        picName: consultationPic.trim() || undefined,
         processOrder: processOrder.length > 0 ? processOrder : undefined,
+        overheadPercent: Math.min(100, Math.max(0, Math.round(Number(overheadPercent) || 0))),
+        profitPercent: Math.min(100, Math.max(0, Math.round(Number(profitPercent) || 0))),
         items: items.map((it) => ({
           processGroup: it.processGroup ?? "",
           category: it.category,
@@ -1062,6 +1101,25 @@ function EstimateForm({
             onChange={(e) => setEstimateDate(e.target.value)}
           />
         </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">담당자</label>
+          <select
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            value={consultationPic}
+            onChange={(e) => setConsultationPic(e.target.value)}
+          >
+            <option value="">선택 안 함</option>
+            {picList.map((p) => (
+              <option key={p.id} value={p.name}>
+                {p.name}
+                {p.phone ? ` (${p.phone})` : ""}
+              </option>
+            ))}
+          </select>
+          {picList.length === 0 && (
+            <p className="mt-0.5 text-xs text-amber-600">관리 → 담당자 설정에서 담당자를 등록하면 선택할 수 있습니다.</p>
+          )}
+        </div>
         <div className="sm:col-span-2">
 <label className="mb-1 block text-sm font-medium text-gray-700">특이사항 (비고)</label>
             <textarea
@@ -1070,6 +1128,64 @@ function EstimateForm({
             onChange={(e) => setNote(e.target.value)}
             placeholder="인쇄·미리보기 *특이사항에 표시됩니다. 여러 줄 입력 가능."
           />
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+        <p className="mb-3 text-sm font-medium text-gray-800">공과잡비 · 이윤 (%)</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 max-w-md">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">공과잡비 %</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={overheadPercent}
+              placeholder="5"
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setOverheadPercent(5);
+                  return;
+                }
+                const v = parseInt(raw, 10);
+                if (!Number.isNaN(v)) setOverheadPercent(Math.min(100, Math.max(0, v)));
+              }}
+              onBlur={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (e.target.value === "" || Number.isNaN(v)) setOverheadPercent(5);
+              }}
+            />
+            <p className="mt-0.5 text-xs text-gray-500">기본 5%</p>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">이윤 %</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+              value={profitPercent}
+              placeholder="10"
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (raw === "") {
+                  setProfitPercent(10);
+                  return;
+                }
+                const v = parseInt(raw, 10);
+                if (!Number.isNaN(v)) setProfitPercent(Math.min(100, Math.max(0, v)));
+              }}
+              onBlur={(e) => {
+                const v = parseInt(e.target.value, 10);
+                if (e.target.value === "" || Number.isNaN(v)) setProfitPercent(10);
+              }}
+            />
+            <p className="mt-0.5 text-xs text-gray-500">기본 10%</p>
+          </div>
         </div>
       </div>
 
@@ -1586,7 +1702,7 @@ function EstimateForm({
       </div>
       <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-gray-200 pt-4">
         <div className="w-full text-sm text-gray-600 sm:w-auto">
-          소계: <strong>{formatNumber(subtotal)}</strong>원 · 부가세(10%): <strong>{formatNumber(vat)}</strong>원 · 합계: <strong>{formatNumber(total)}</strong>원
+          소계: <strong>{formatNumber(subtotal)}</strong>원 · 이윤: <strong>{formatNumber(profitAmount)}</strong>원 · 공과잡비: <strong>{formatNumber(overheadAmount)}</strong>원 · 합계: <strong>{formatNumber(total)}</strong>원
         </div>
       </div>
       <input ref={excelInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelFile} />
@@ -1661,8 +1777,10 @@ function EstimateForm({
                   processRows.push({ name: displayName, amount: groupTotal });
                 });
                 const mainSubtotal = processRows.reduce((s, r) => s + r.amount, 0);
-                const overhead = Math.floor(mainSubtotal * 0.05);
-                const profit = Math.floor(mainSubtotal * 0.1);
+                const overheadRate = (Number(overheadPercent) || 5) / 100;
+                const profitRate = (Number(profitPercent) || 10) / 100;
+                const overhead = Math.floor(mainSubtotal * overheadRate);
+                const profit = Math.floor(mainSubtotal * profitRate);
                 const adjustedAmount = Math.floor((mainSubtotal + overhead + profit) / 10000) * 10000;
                 const vatIncluded = Math.floor((adjustedAmount * 1.1) / 10000) * 10000;
                 return (
@@ -1674,9 +1792,6 @@ function EstimateForm({
                         <div className="min-w-0 flex-1 space-y-1">
                           <p className="text-gray-800">공 사 명 : {title || "-"}</p>
                           <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(adjustedAmount)}</p>
-                          {settlementPhaseAmount != null && settlementPhaseAmount > 0 && (
-                            <p className="text-gray-800">공 정 금 액: (정산) ₩{formatNumber(settlementPhaseAmount)}</p>
-                          )}
                           <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
                         </div>
                         <div className="min-w-0 flex-1 space-y-1 text-right">
@@ -1735,7 +1850,7 @@ function EstimateForm({
                           <td className="border border-gray-300 p-1.5 text-center"></td>
                           <td className="border border-gray-300 p-1.5 text-center text-gray-800">공과잡비</td>
                           <td className="border border-gray-300 p-1.5 text-center">%</td>
-                          <td className="border border-gray-300 p-1.5 text-center">5</td>
+                          <td className="border border-gray-300 p-1.5 text-center">{Number(overheadPercent) || 5}</td>
                           <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800 whitespace-nowrap">{formatNumber(overhead)}</td>
                           <td className="border border-gray-300 p-1.5" />
                         </tr>
@@ -1743,7 +1858,7 @@ function EstimateForm({
                           <td className="border border-gray-300 p-1.5 text-center"></td>
                           <td className="border border-gray-300 p-1.5 text-center text-gray-800">이     윤</td>
                           <td className="border border-gray-300 p-1.5 text-center">%</td>
-                          <td className="border border-gray-300 p-1.5 text-center">10</td>
+                          <td className="border border-gray-300 p-1.5 text-center">{Number(profitPercent) || 10}</td>
                           <td className="border border-gray-300 p-1.5 text-right tabular-nums text-gray-800 whitespace-nowrap">{formatNumber(profit)}</td>
                           <td className="border border-gray-300 p-1.5" />
                         </tr>
@@ -2210,7 +2325,9 @@ export default function EstimatePage() {
                         (Number(i.qty) || 0) * (Number(i.laborUnitPrice ?? 0) || 0),
                       0
                     );
-                    const total = subtotal + Math.floor(subtotal * 0.1);
+                    const ohRate = (Number(est.overheadPercent) ?? 5) / 100;
+                    const prRate = (Number(est.profitPercent) ?? 10) / 100;
+                    const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
                     return (
                       <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
                         <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>

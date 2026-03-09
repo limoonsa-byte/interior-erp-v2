@@ -13,13 +13,14 @@ import {
   Calendar,
   ClipboardList,
   BarChart3,
-  UserPlus,
   Settings,
   Shield,
   ChevronLeft,
   ChevronRight,
   MessageCircle,
   ExternalLink,
+  ListChecks,
+  Signature,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
@@ -27,12 +28,13 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
   { href: "/schedule", label: "일정작성", icon: Calendar },
+  { href: "/contract", label: "계약서 작성", icon: Signature },
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재 발주", icon: Package },
+  { href: "/material-list", label: "현장용 자재리스트", icon: ListChecks },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
-  { href: "/reception", label: "접수", icon: UserPlus },
   { href: "/chat", label: "채팅", icon: MessageCircle },
   { href: "/admin", label: "관리", icon: Settings },
 ];
