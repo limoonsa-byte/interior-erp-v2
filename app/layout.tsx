@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   title: "인테리어 올인원 ERP시스템",
   description: "인테리어 업체 올인원 ERP 시스템",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "인테리어 올인원",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {

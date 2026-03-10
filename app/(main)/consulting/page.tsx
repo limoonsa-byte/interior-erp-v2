@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 /** 오늘 날짜 00:00 기준 (datetime-local 형식). 오늘·이후만 선택 가능하게 min에 사용 */
 function getTodayDatetimeLocal(): string {
@@ -20,6 +20,7 @@ type Consultation = {
   id: number;
   customerName: string;
   contact: string;
+  email?: string;
   address: string;
   pyung: number;
   status: string;
@@ -60,11 +61,18 @@ function parseBudgetToSave(display: string): string {
 
 type PicItem = { id: number; name: string };
 
-/** 진행상태 옵션 (상담종료 제거) */
-const STATUS_OPTIONS = ["접수", "현장실측", "견적미팅", "견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "공사진행", "완료"] as const;
+/** 진행상태 옵션 */
+const STATUS_OPTIONS = ["접수", "현장상담실측", "견적서작성", "자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산"] as const;
 
-/** 견적완료 이상이면 접수/현장실측/견적미팅 선택 비활성화 */
-const STATUS_LOCKED_AFTER = ["견적완료", "자재미팅", "계약서 작성", "디자인미팅", "계약완료", "취소/보류", "공사진행", "완료"] as const;
+/** 진행상태 단계별 그룹 (칩 UI용) */
+const STATUS_GROUPS: { label: string; options: readonly string[] }[] = [
+  { label: "접수 ~ 견적", options: ["접수", "현장상담실측", "견적서작성"] },
+  { label: "자재 ~ 계약", options: ["자재리스트", "계약서작성", "디자인", "계약"] },
+  { label: "종료", options: ["공사진행", "완료및정산"] },
+];
+
+/** 자재리스트 이상이면 접수/현장상담실측/견적서작성 선택 비활성화 */
+const STATUS_LOCKED_AFTER = ["자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
   return (STATUS_LOCKED_AFTER as readonly string[]).includes(savedStatus);
 }
@@ -72,14 +80,26 @@ function isStatusLockedEarly(savedStatus: string): boolean {
 /** DB 저장값 → 화면 표시용 (구 라벨 호환) */
 function normalizeStatusDisplay(status: string | undefined): string {
   if (!status) return "접수";
-  const map: Record<string, string> = { 상담종단: "상담종료", 계약: "계약완료", 취소: "취소/보류" };
+  const map: Record<string, string> = {
+    상담종단: "접수",
+    현장실측: "현장상담실측",
+    견적미팅: "견적서작성",
+    견적완료: "견적서작성",
+    자재미팅: "자재리스트",
+    "계약서 작성": "계약서작성",
+    디자인미팅: "디자인",
+    계약완료: "계약",
+    취소: "완료및정산",
+    "취소/보류": "완료및정산",
+    완료: "완료및정산",
+  };
   return map[status] || status;
 }
 
-/** 목록 등에서 진행상태 표시 시 '현장실측' → '현장 상담 실측' */
+/** 목록 등에서 진행상태 표시 */
 function displayStatusLabel(status: string | undefined): string {
   if (!status) return "-";
-  return status === "현장실측" ? "현장 상담 실측" : status;
+  return status;
 }
 
 function DetailModal({
@@ -205,6 +225,7 @@ function DetailModal({
     return {
       customerName: (fd.get("customerName") as string) ?? data.customerName,
       contact: (fd.get("contact") as string) ?? data.contact,
+      email: (fd.get("email") as string) ?? data.email ?? "",
       address,
       pyung: Number(fd.get("pyung")) || data.pyung,
       status: statusSelection,
@@ -307,44 +328,55 @@ function DetailModal({
             </button>
           </div>
 
-        {/* 진행상태 */}
+        {/* 진행상태 (칩 스타일 + 단계별 그룹) */}
         <section className="mb-5">
-          <h3 className="mb-2 text-sm font-semibold text-gray-700">
+          <h3 className="mb-3 text-sm font-semibold text-gray-700">
             진행상태
           </h3>
-          <div className="flex flex-wrap gap-4 text-sm">
-            {STATUS_OPTIONS.map((label) => {
-              const disabled = ["접수", "현장실측", "견적미팅"].includes(label) && isStatusLockedEarly(normalizeStatusDisplay(data.status));
-              const displayLabel = label === "현장실측" ? "현장 상담 실측" : label;
-              return (
-                <label
-                  key={label}
-                  htmlFor={`status-${label}`}
-                  className={`flex items-center gap-1 ${disabled ? "cursor-not-allowed text-gray-400" : "cursor-pointer"}`}
-                  onClick={() => !disabled && setStatusSelection(label)}
-                >
-                  <input
-                    id={`status-${label}`}
-                    type="radio"
-                    name="status"
-                    value={label}
-                    checked={statusSelection === label}
-                    disabled={disabled}
-                    onChange={() => !disabled && setStatusSelection(label)}
-                  />
-                  {displayLabel}
-                </label>
-              );
-            })}
+          <div className="space-y-3">
+            {STATUS_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="mb-1.5 text-xs font-medium text-gray-500">
+                  {group.label}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {group.options.map((label) => {
+                    const disabled = ["접수", "현장상담실측", "견적서작성"].includes(label) && isStatusLockedEarly(normalizeStatusDisplay(data.status));
+                    const displayLabel = label;
+                    const selected = statusSelection === label;
+                    return (
+                      <label
+                        key={label}
+                        htmlFor={`status-${label}`}
+                        className={`inline-flex cursor-pointer items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${disabled ? "cursor-not-allowed opacity-50" : ""} ${selected ? "bg-blue-600 text-white" : "border border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"}`}
+                        onClick={() => !disabled && setStatusSelection(label)}
+                      >
+                        <input
+                          id={`status-${label}`}
+                          type="radio"
+                          name="status"
+                          value={label}
+                          checked={selected}
+                          disabled={disabled}
+                          onChange={() => !disabled && setStatusSelection(label)}
+                          className="sr-only"
+                        />
+                        {displayLabel}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* 자재미팅날짜 (자재미팅 선택 시 또는 저장된 자재미팅날짜가 있으면 표시, 위쪽) */}
-        {(statusSelection === "자재미팅" || data.materialMeetingAt) && (
+        {/* 자재리스트 날짜 */}
+        {(statusSelection === "자재리스트" || data.materialMeetingAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">자재미팅날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">자재리스트 날짜</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">자재미팅날짜</span>
+              <span className="whitespace-nowrap text-gray-700">자재리스트 날짜</span>
               <input
                 ref={materialMeetingInputRef}
                 name="materialMeetingAt"
@@ -362,12 +394,12 @@ function DetailModal({
           </section>
         )}
 
-        {/* 견적미팅날짜 (견적미팅 선택 시 또는 저장된 견적미팅날짜가 있으면 표시) */}
-        {(statusSelection === "견적미팅" || data.estimateMeetingAt) && (
+        {/* 견적서작성 날짜 */}
+        {(statusSelection === "견적서작성" || data.estimateMeetingAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">견적미팅날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">견적서작성 날짜</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">견적미팅날짜</span>
+              <span className="whitespace-nowrap text-gray-700">견적서작성 날짜</span>
               <input
                 ref={estimateMeetingInputRef}
                 name="estimateMeetingAt"
@@ -385,12 +417,12 @@ function DetailModal({
           </section>
         )}
 
-        {/* 계약서 작성 날짜 (계약서 작성 선택 시 또는 저장된 날짜가 있으면 표시) */}
-        {(statusSelection === "계약서 작성" || data.contractMeetingAt) && (
+        {/* 계약서작성 날짜 */}
+        {(statusSelection === "계약서작성" || data.contractMeetingAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">계약서 작성 날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">계약서작성 날짜</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">계약서 작성 날짜</span>
+              <span className="whitespace-nowrap text-gray-700">계약서작성 날짜</span>
               <input
                 ref={contractMeetingInputRef}
                 name="contractMeetingAt"
@@ -408,12 +440,12 @@ function DetailModal({
           </section>
         )}
 
-        {/* 디자인미팅날짜 (디자인미팅 선택 시 또는 저장된 날짜가 있으면 표시) */}
-        {(statusSelection === "디자인미팅" || data.designMeetingAt) && (
+        {/* 디자인 날짜 */}
+        {(statusSelection === "디자인" || data.designMeetingAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">디자인미팅날짜</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">디자인 날짜</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">디자인미팅날짜</span>
+              <span className="whitespace-nowrap text-gray-700">디자인 날짜</span>
               <input
                 ref={designMeetingInputRef}
                 name="designMeetingAt"
@@ -431,12 +463,12 @@ function DetailModal({
           </section>
         )}
 
-        {/* 현장 상담 및 실측 (현장실측 선택 시 또는 저장된 날짜가 있으면 표시) — 하나로 통합 */}
-        {(statusSelection === "현장실측" || data.siteMeasurementAt || data.consultedAt) && (
+        {/* 현장상담실측 날짜 */}
+        {(statusSelection === "현장상담실측" || data.siteMeasurementAt || data.consultedAt) && (
           <section className="mb-5">
-            <p className="mb-2 text-sm font-semibold text-gray-700">현장 상담 및 실측</p>
+            <p className="mb-2 text-sm font-semibold text-gray-700">현장상담실측</p>
             <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm md:flex-row md:items-center md:gap-4">
-              <span className="whitespace-nowrap text-gray-700">현장 상담 및 실측</span>
+              <span className="whitespace-nowrap text-gray-700">현장상담실측</span>
               <input
                 ref={siteMeasurementInputRef}
                 name="siteMeasurementAt"
@@ -488,6 +520,18 @@ function DetailModal({
                 defaultValue={data.contact}
               />
             </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              이메일
+            </label>
+            <input
+              type="email"
+              name="email"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              defaultValue={data.email ?? ""}
+            />
           </div>
 
           <div>
@@ -777,18 +821,18 @@ function DetailModal({
 
 /** 진행상태에 맞는 진행날짜 값 선택 (목록 표시용) */
 function getProgressDateDisplay(item: Consultation): string {
-  // 계약완료, 취소/보류, 완료는 진행날짜 표기 없음
-  if (["계약완료", "취소/보류", "완료"].includes(item.status)) return "-";
+  // 계약, 완료및정산은 진행날짜 표기 없음
+  if (["계약", "완료및정산"].includes(item.status)) return "-";
   const raw =
-    item.status === "자재미팅" && item.materialMeetingAt
+    item.status === "자재리스트" && item.materialMeetingAt
       ? item.materialMeetingAt
-      : item.status === "견적미팅" && item.estimateMeetingAt
+      : item.status === "견적서작성" && item.estimateMeetingAt
         ? item.estimateMeetingAt
-        : item.status === "계약서 작성" && item.contractMeetingAt
+        : item.status === "계약서작성" && item.contractMeetingAt
           ? item.contractMeetingAt
-          : item.status === "디자인미팅" && item.designMeetingAt
+          : item.status === "디자인" && item.designMeetingAt
             ? item.designMeetingAt
-            : item.status === "현장실측" && item.siteMeasurementAt
+            : item.status === "현장상담실측" && item.siteMeasurementAt
               ? item.siteMeasurementAt
               : item.consultedAt || item.date || "";
   if (!raw) return "-";
@@ -812,6 +856,7 @@ const emptyConsultation: Consultation = {
   id: 0,
   customerName: "",
   contact: "",
+  email: "",
   address: "",
   pyung: 0,
   status: "접수",
@@ -866,7 +911,7 @@ export default function ConsultingPage() {
 
   const filteredConsultations = React.useMemo(() => {
     return consultations.filter((item) => {
-      if (!showCompleted && item.status === "완료") return false;
+      if (!showCompleted && item.status === "완료및정산") return false;
       if (filterCustomerName.trim()) {
         if (!item.customerName?.toLowerCase().includes(filterCustomerName.trim().toLowerCase())) return false;
       }
@@ -887,6 +932,16 @@ export default function ConsultingPage() {
     });
   }, [consultations, showCompleted, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
 
+  /** 완료 및 정산된 건이 있을 때만 '완료 건 보기' 활성화 */
+  const hasCompletedSettled = useMemo(
+    () => consultations.some((c) => c.status === "완료및정산"),
+    [consultations]
+  );
+
+  useEffect(() => {
+    if (!hasCompletedSettled && showCompleted) setShowCompleted(false);
+  }, [hasCompletedSettled, showCompleted]);
+
   const loadFromDb = (): Promise<void> => {
     return fetch("/api/consultations")
       .then((res) => res.json())
@@ -897,6 +952,7 @@ export default function ConsultingPage() {
             id: Number(item.id),
             customerName: String(item.customerName ?? item.customer_name ?? ""),
             contact: String(item.contact ?? ""),
+            email: String(item.email ?? (item as { customer_email?: string }).customer_email ?? ""),
             address: String(item.address ?? ""),
             pyung: Number(item.pyung ?? 0),
             status: normalizeStatusDisplay(String(item.status ?? "")),
@@ -1095,14 +1151,18 @@ export default function ConsultingPage() {
             </div>
 
             <div className="flex gap-2 text-sm">
-              <label className="flex cursor-pointer items-center gap-1.5 rounded border border-gray-200 bg-white px-2 py-1.5">
+              <label
+                className={`flex items-center gap-1.5 rounded border px-2 py-1.5 ${hasCompletedSettled ? "cursor-pointer border-gray-200 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
+                title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
+              >
                 <input
                   type="checkbox"
                   checked={showCompleted}
                   onChange={(e) => setShowCompleted(e.target.checked)}
+                  disabled={!hasCompletedSettled}
                   className="rounded border-gray-300"
                 />
-                <span className="text-gray-700">완료 건 보기</span>
+                <span className={hasCompletedSettled ? "text-gray-700" : "text-gray-400"}>완료 건 보기</span>
               </label>
             </div>
             <div className="flex gap-2 text-sm">

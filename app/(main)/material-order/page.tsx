@@ -31,6 +31,7 @@ type Estimate = {
 
 type Consultation = {
   id: number;
+  status?: string;
   customerName: string;
   address?: string;
   materialMeetingAt?: string;
@@ -113,6 +114,7 @@ export default function MaterialOrderPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [picList, setPicList] = useState<PicItem[]>([]);
   const [selectedEstimateId, setSelectedEstimateId] = useState<number | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [orderSaving, setOrderSaving] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -231,9 +233,7 @@ export default function MaterialOrderPage() {
           return next;
         });
       }
-      if (Array.isArray(est) && est.length > 0 && !selectedEstimateId) {
-        setSelectedEstimateId((est as Estimate[])[0].id);
-      }
+      // 기본은 선택 없음 (완료된 항목 보기 체크 후 선택하도록)
     }).finally(() => setLoading(false));
   }, []);
 
@@ -241,6 +241,24 @@ export default function MaterialOrderPage() {
     () => estimates.find((e) => e.id === selectedEstimateId) ?? null,
     [estimates, selectedEstimateId]
   );
+
+  /** 프로젝트 선택 목록: 완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  const filteredEstimates = useMemo(() => {
+    if (showCompleted) return estimates;
+    return estimates.filter((est) => {
+      if (est.consultationId == null) return true;
+      const c = consultations.find((x) => x.id === est.consultationId);
+      const status = c?.status ?? "";
+      return status !== "완료및정산" && status !== "완료";
+    });
+  }, [estimates, consultations, showCompleted]);
+
+  const estimatesForSelect = useMemo(() => {
+    if (selectedEstimateId == null) return filteredEstimates;
+    if (filteredEstimates.some((e) => e.id === selectedEstimateId)) return filteredEstimates;
+    const selected = estimates.find((e) => e.id === selectedEstimateId);
+    return selected ? [selected, ...filteredEstimates] : filteredEstimates;
+  }, [filteredEstimates, estimates, selectedEstimateId]);
 
   const selectedConsultation = useMemo(() => {
     if (!selectedEstimate?.consultationId) return null;
@@ -681,13 +699,24 @@ export default function MaterialOrderPage() {
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <label className="mb-2 block text-sm font-medium text-gray-700">프로젝트(견적) 선택</label>
+        <div className="flex flex-wrap items-center gap-3 mb-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            완료된 항목 보기
+          </label>
+        </div>
         <select
           value={selectedEstimateId ?? ""}
           onChange={(e) => setSelectedEstimateId(Number(e.target.value) || null)}
           className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
         >
           <option value="">선택하세요</option>
-          {estimates.map((e) => (
+          {estimatesForSelect.map((e) => (
             <option key={e.id} value={e.id}>
               {e.customerName || "고객"} / {e.title || "제목 없음"} (견적 #{e.id})
             </option>

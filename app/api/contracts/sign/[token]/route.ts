@@ -1,7 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 
-function rowToSignInfo(row: Record<string, unknown>) {
+function rowToSignInfo(row: Record<string, unknown>, includeBody: boolean) {
   return {
     id: row.id,
     title: String(row.title ?? ""),
@@ -9,6 +9,7 @@ function rowToSignInfo(row: Record<string, unknown>) {
     contact: String(row.contact ?? ""),
     status: String(row.status ?? "sent"),
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
+    body: includeBody && row.body != null ? String(row.body) : undefined,
   };
 }
 
@@ -20,16 +21,17 @@ export async function GET(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const result = await sql`
-      SELECT id, title, customer_name, contact, status, document_path
+      SELECT id, title, customer_name, contact, status, document_path, body
       FROM contracts
       WHERE sign_token = ${token}
     `;
     if (result.rows.length === 0) return NextResponse.json({ error: "유효하지 않거나 만료된 링크입니다." }, { status: 404 });
     const c = result.rows[0];
-    if (c.status === "signed") return NextResponse.json({ ...rowToSignInfo(c), alreadySigned: true }, { status: 200 });
+    if (c.status === "signed") return NextResponse.json({ ...rowToSignInfo(c, true), alreadySigned: true }, { status: 200 });
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "";
     const documentUrl = c.document_path ? `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}` : undefined;
-    return NextResponse.json({ ...rowToSignInfo(c), documentUrl }, { status: 200 });
+    const includeBody = !documentUrl;
+    return NextResponse.json({ ...rowToSignInfo(c, includeBody), documentUrl }, { status: 200 });
   } catch (error) {
     console.error("contracts sign GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

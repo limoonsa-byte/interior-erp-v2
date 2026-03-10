@@ -40,6 +40,7 @@ export async function GET() {
         id: row.id,
         customerName: row.customer_name,
         contact: row.contact,
+        email: (row as { email?: string }).email != null ? String((row as { email?: string }).email) : undefined,
         address: row.address,
         pyung: row.pyung,
         status: row.status,
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
     const {
       customerName,
       contact,
+      email,
       address,
       pyung,
       status,
@@ -118,8 +120,8 @@ export async function POST(request: Request) {
     await ensureConsultationsColumns();
 
     await sql`
-      INSERT INTO consultations (company_id, customer_name, contact, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at, construction_start_at, move_in_at)
-      VALUES (${company.id}, ${customerName}, ${contact}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr}, ${contractMeetingAtStr}, ${designMeetingAtStr}, ${constructionStartAtStr}, ${moveInAtStr})
+      INSERT INTO consultations (company_id, customer_name, contact, email, address, pyung, status, pic, note, consulted_at, scope, budget, completion_year, site_measurement_at, estimate_meeting_at, material_meeting_at, contract_meeting_at, design_meeting_at, construction_start_at, move_in_at)
+      VALUES (${company.id}, ${customerName}, ${contact}, ${email ?? null}, ${address}, ${pyung}, ${status}, ${pic}, ${note}, ${consultedAt ?? null}, ${scopeJson}, ${budgetStr}, ${completionYearStr}, ${siteMeasurementAtStr}, ${estimateMeetingAtStr}, ${materialMeetingAtStr}, ${contractMeetingAtStr}, ${designMeetingAtStr}, ${constructionStartAtStr}, ${moveInAtStr})
     `;
 
     return NextResponse.json({ message: "Success" }, { status: 200 });

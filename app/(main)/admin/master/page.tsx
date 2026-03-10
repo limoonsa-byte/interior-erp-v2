@@ -135,6 +135,19 @@ export default function MasterAdminPage() {
   const [orderSelectedFileName, setOrderSelectedFileName] = useState("");
   const [orderError, setOrderError] = useState("");
   const [orderSubmitLoading, setOrderSubmitLoading] = useState(false);
+  const [contractTemplateTitle, setContractTemplateTitle] = useState("");
+  const [contractTemplateBody, setContractTemplateBody] = useState("");
+  const [contractTemplateDocumentPath, setContractTemplateDocumentPath] = useState<string | null>(null);
+  const [contractTemplatePdfVersion, setContractTemplatePdfVersion] = useState(0);
+  const [contractTemplateLoading, setContractTemplateLoading] = useState(false);
+  const [contractTemplateSaving, setContractTemplateSaving] = useState(false);
+  const [contractTemplateError, setContractTemplateError] = useState("");
+  const contractExcelInputRef = useRef<HTMLInputElement>(null);
+  const [contractExcelFile, setContractExcelFile] = useState<File | null>(null);
+  const [contractExcelImporting, setContractExcelImporting] = useState(false);
+  const contractPdfInputRef = useRef<HTMLInputElement>(null);
+  const [contractPdfFile, setContractPdfFile] = useState<File | null>(null);
+  const [contractPdfImporting, setContractPdfImporting] = useState(false);
   useEffect(() => {
     fetch("/api/company/me")
       .then((res) => res.json())
@@ -167,6 +180,89 @@ export default function MasterAdminPage() {
   useEffect(() => {
     if (allowed) loadTemplates();
   }, [allowed]);
+
+  const loadContractTemplate = () => {
+    setContractTemplateLoading(true);
+    fetch("/api/admin/master/contract-template")
+      .then((res) => {
+        if (!res.ok) throw new Error("조회 실패");
+        return res.json();
+      })
+      .then((data) => {
+        setContractTemplateTitle(data.title ?? "");
+        setContractTemplateBody(data.body ?? "");
+        setContractTemplateDocumentPath(data.documentPath != null ? String(data.documentPath) : null);
+        setContractTemplateError("");
+      })
+      .catch(() => setContractTemplateError("계약서 양식을 불러올 수 없습니다."))
+      .finally(() => setContractTemplateLoading(false));
+  };
+
+  useEffect(() => {
+    if (allowed) loadContractTemplate();
+  }, [allowed]);
+
+  const handleContractTemplateSave = () => {
+    setContractTemplateError("");
+    setContractTemplateSaving(true);
+    fetch("/api/admin/master/contract-template", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: contractTemplateTitle, body: contractTemplateBody }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data: data as { error?: string; message?: string } })))
+      .then(({ ok, data }) => {
+        if (!ok) throw new Error(data.error || "저장 실패");
+        alert("계약서 양식이 저장되었습니다.");
+      })
+      .catch((e) => setContractTemplateError(e instanceof Error ? e.message : "저장 실패"))
+      .finally(() => setContractTemplateSaving(false));
+  };
+
+  const handleContractExcelImport = () => {
+    if (!contractExcelFile) {
+      alert("엑셀 파일을 선택해 주세요.");
+      return;
+    }
+    setContractTemplateError("");
+    setContractExcelImporting(true);
+    const formData = new FormData();
+    formData.append("file", contractExcelFile);
+    fetch("/api/admin/master/contract-template/import-excel", { method: "POST", body: formData })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setContractExcelFile(null);
+        if (contractExcelInputRef.current) contractExcelInputRef.current.value = "";
+        loadContractTemplate();
+        alert(data.message || "엑셀 양식이 적용되었습니다.");
+      })
+      .catch((e) => setContractTemplateError(e.message || "엑셀 불러오기 실패"))
+      .finally(() => setContractExcelImporting(false));
+  };
+
+  const handleContractPdfImport = () => {
+    if (!contractPdfFile) {
+      alert("PDF 파일을 선택해 주세요.");
+      return;
+    }
+    setContractTemplateError("");
+    setContractPdfImporting(true);
+    const formData = new FormData();
+    formData.append("file", contractPdfFile);
+    fetch("/api/admin/master/contract-template/upload-pdf", { method: "POST", body: formData })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        setContractPdfFile(null);
+        if (contractPdfInputRef.current) contractPdfInputRef.current.value = "";
+        loadContractTemplate();
+        setContractTemplatePdfVersion((v) => v + 1);
+        alert(data.message || "PDF가 그대로 저장되었습니다. 계약서 작성에서 마스터 양식 불러오기 시 이 PDF가 적용됩니다.");
+      })
+      .catch((e) => setContractTemplateError(e.message || "PDF 저장 실패"))
+      .finally(() => setContractPdfImporting(false));
+  };
 
   const handleExcelFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -412,6 +508,125 @@ export default function MasterAdminPage() {
             {orderSubmitLoading ? "저장 중..." : "기본 품목 등록"}
           </button>
         </div>
+      </section>
+
+      {/* 계약서 양식 */}
+      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-base font-semibold text-gray-800">계약서 양식</h2>
+        <p className="mb-4 text-sm text-gray-600">
+          계약서 제목과 본문 양식을 등록하면 계약서 작성 페이지에서 &quot;마스터 양식 불러오기&quot;로 불러와 사용할 수 있습니다. 본문은 서명 페이지에 그대로 표시됩니다. <strong>엑셀 계약서(인테리어 계약서(공)-oro.xls 등) 또는 PDF 파일을 넣으면 자동으로 제목·본문이 채워집니다.</strong>
+        </p>
+        {contractTemplateLoading ? (
+          <p className="text-sm text-gray-500">불러오는 중...</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+              <p className="mb-2 text-sm font-medium text-blue-900">엑셀 파일로 양식 불러오기</p>
+              <input
+                ref={contractExcelInputRef}
+                type="file"
+                accept=".xls,.xlsx"
+                className="hidden"
+                onChange={(e) => setContractExcelFile(e.target.files?.[0] ?? null)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => contractExcelInputRef.current?.click()}
+                  className="rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                >
+                  엑셀 선택 (.xls, .xlsx)
+                </button>
+                {contractExcelFile && <span className="text-sm text-blue-800">{contractExcelFile.name}</span>}
+                <button
+                  type="button"
+                  onClick={handleContractExcelImport}
+                  disabled={contractExcelImporting || !contractExcelFile}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {contractExcelImporting ? "적용 중..." : "엑셀으로 불러오기"}
+                </button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+              <p className="mb-2 text-sm font-medium text-emerald-900">PDF 파일로 양식 불러오기 (PDF 그대로 저장, 순서·볼드 유지)</p>
+              <input
+                ref={contractPdfInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={(e) => setContractPdfFile(e.target.files?.[0] ?? null)}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => contractPdfInputRef.current?.click()}
+                  className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                >
+                  PDF 선택
+                </button>
+                {contractPdfFile && <span className="text-sm text-emerald-800">{contractPdfFile.name}</span>}
+                <button
+                  type="button"
+                  onClick={handleContractPdfImport}
+                  disabled={contractPdfImporting || !contractPdfFile}
+                  className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {contractPdfImporting ? "적용 중..." : "PDF 그대로 저장"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">계약서 제목 (기본값)</label>
+              <input
+                type="text"
+                value={contractTemplateTitle}
+                onChange={(e) => setContractTemplateTitle(e.target.value)}
+                placeholder="예: 인테리어 시공 계약서"
+                className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+            {contractTemplateDocumentPath ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문 (PDF 그대로 저장됨)</label>
+                <p className="mb-2 text-xs text-gray-600">
+                  아래 PDF가 그대로 저장되어 있습니다. 순서·볼드 등 원본 그대로 유지됩니다. 계약서 작성에서 &quot;마스터 양식 불러오기&quot; 시 이 PDF가 사용됩니다. (뷰어에 원본 파일 제목이 깨져 보일 수 있으나, 저장·적용에는 문제 없습니다.)
+                </p>
+                <div className="rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
+                  <iframe
+                    key={contractTemplatePdfVersion}
+                    src={`/api/admin/master/contract-template/document?v=${contractTemplatePdfVersion}`}
+                    title="계약서 PDF"
+                    className="h-[60vh] w-full min-h-[400px]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문</label>
+                <p className="mb-1 text-xs text-gray-500">엑셀 불러오기 시 여기에 채워지거나, 위에서 PDF 그대로 저장하면 PDF가 사용됩니다.</p>
+                <textarea
+                  value={contractTemplateBody}
+                  onChange={(e) => setContractTemplateBody(e.target.value)}
+                  placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요. 줄바꿈이 유지됩니다."
+                  rows={12}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                />
+              </div>
+            )}
+            {contractTemplateError && (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{contractTemplateError}</p>
+            )}
+            <button
+              type="button"
+              onClick={handleContractTemplateSave}
+              disabled={contractTemplateSaving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {contractTemplateSaving ? "저장 중..." : "계약서 양식 저장"}
+            </button>
+          </div>
+        )}
       </section>
 
       {/* 3. 기본 견적 템플릿 등록 */}

@@ -14,6 +14,14 @@ async function getCompanyFromCookie() {
 }
 
 function rowToContract(row: Record<string, unknown>) {
+  let details: Record<string, unknown> | undefined;
+  if (row.details != null && typeof row.details === "string") {
+    try {
+      details = JSON.parse(row.details) as Record<string, unknown>;
+    } catch {
+      details = undefined;
+    }
+  }
   return {
     id: row.id,
     companyId: row.company_id,
@@ -24,6 +32,8 @@ function rowToContract(row: Record<string, unknown>) {
     contact: String(row.contact ?? ""),
     signerEmail: row.signer_email != null ? String(row.signer_email) : undefined,
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
+    body: row.body != null ? String(row.body) : undefined,
+    details: details ?? undefined,
     status: String(row.status ?? "draft"),
     signToken: row.sign_token != null ? String(row.sign_token) : undefined,
     signedAt: row.signed_at != null ? String(row.signed_at) : undefined,
@@ -39,7 +49,7 @@ export async function GET() {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
     const result = await sql`
-      SELECT id, company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, status, sign_token, signed_at, signer_name, signature_data, created_at, updated_at
+      SELECT id, company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, details, status, sign_token, signed_at, signer_name, signature_data, created_at, updated_at
       FROM contracts
       WHERE company_id = ${company.id}
       ORDER BY id DESC
@@ -65,11 +75,14 @@ export async function POST(request: Request) {
       contact,
       signerEmail,
       documentPath,
+      body: bodyText,
+      details: detailsObj,
     } = body;
     const status = "draft";
+    const detailsStr = detailsObj != null ? (typeof detailsObj === "string" ? detailsObj : JSON.stringify(detailsObj)) : null;
     const result = await sql`
-      INSERT INTO contracts (company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, status, updated_at)
-      VALUES (${company.id}, ${consultationId ?? null}, ${estimateId ?? null}, ${title ?? ""}, ${customerName ?? ""}, ${contact ?? ""}, ${signerEmail ?? null}, ${documentPath ?? null}, ${status}, NOW())
+      INSERT INTO contracts (company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, details, status, updated_at)
+      VALUES (${company.id}, ${consultationId ?? null}, ${estimateId ?? null}, ${title ?? ""}, ${customerName ?? ""}, ${contact ?? ""}, ${signerEmail ?? null}, ${documentPath ?? null}, ${bodyText ?? null}, ${detailsStr}, ${status}, NOW())
       RETURNING id
     `;
     const newId = result.rows[0]?.id;

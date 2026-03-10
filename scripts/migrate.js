@@ -157,6 +157,11 @@ async function migrate() {
     await sql`ALTER TABLE company_estimate_templates ADD COLUMN IF NOT EXISTS note TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS is_master BOOLEAN NOT NULL DEFAULT false`;
     console.log("[migrate] companies.is_master OK");
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_path TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_path TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_address TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_reg_no TEXT`;
+    console.log("[migrate] companies logo_path, stamp_path, contractor OK");
     await sql`
       UPDATE companies SET is_master = true
       WHERE id = (SELECT id FROM companies ORDER BY id ASC LIMIT 1)
@@ -285,6 +290,32 @@ async function migrate() {
       )
     `;
     console.log("[migrate] contracts OK");
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS body TEXT`;
+    console.log("[migrate] contracts.body OK");
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS details TEXT`;
+    console.log("[migrate] contracts.details OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS master_contract_template (
+        id INT PRIMARY KEY DEFAULT 1,
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT single_row CHECK (id = 1)
+      )
+    `;
+    await sql`INSERT INTO master_contract_template (id, title, body) VALUES (1, '', '') ON CONFLICT (id) DO NOTHING`;
+    await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_path TEXT`;
+    console.log("[migrate] master_contract_template OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS company_contract_template (
+        company_id INT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+        title TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        document_path TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    console.log("[migrate] company_contract_template OK");
     await sql`
       CREATE TABLE IF NOT EXISTS site_material_list_items (
         id SERIAL PRIMARY KEY,

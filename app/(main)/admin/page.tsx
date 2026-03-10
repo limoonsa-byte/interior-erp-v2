@@ -16,7 +16,7 @@ type DefaultEstimateTemplate = {
   note?: string;
 };
 
-type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates";
+type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates" | "logo-stamp" | "company-contract" | "company-info";
 
 export default function AdminPage() {
   const [pinStatus, setPinStatus] = useState<{ hasPin: boolean } | null>(null);
@@ -55,6 +55,29 @@ export default function AdminPage() {
   const [estimateTemplateError, setEstimateTemplateError] = useState<string | null>(null);
   const [downloadDefaultLoadingId, setDownloadDefaultLoadingId] = useState<number | null>(null);
   const estimateTemplateFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
+  const [companyStampPath, setCompanyStampPath] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [stampFile, setStampFile] = useState<File | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [stampUploading, setStampUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const stampInputRef = useRef<HTMLInputElement>(null);
+
+  const [companyContractTitle, setCompanyContractTitle] = useState("");
+  const [companyContractBody, setCompanyContractBody] = useState("");
+  const [companyContractDocumentPath, setCompanyContractDocumentPath] = useState<string | null>(null);
+  const [companyContractPdfFile, setCompanyContractPdfFile] = useState<File | null>(null);
+  const [companyContractSaving, setCompanyContractSaving] = useState(false);
+  const [companyContractUploading, setCompanyContractUploading] = useState(false);
+  const companyContractPdfInputRef = useRef<HTMLInputElement>(null);
+
+  const [companyInfoName, setCompanyInfoName] = useState("");
+  const [companyInfoAddress, setCompanyInfoAddress] = useState("");
+  const [companyInfoRegNo, setCompanyInfoRegNo] = useState("");
+  const [companyInfoSaving, setCompanyInfoSaving] = useState(false);
+  const [companyInfoMessage, setCompanyInfoMessage] = useState("");
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -154,6 +177,53 @@ export default function AdminPage() {
           else setDefaultEstimateTemplates([]);
         })
         .catch(() => setDefaultEstimateTemplates([]));
+    }
+    if (modal === "logo-stamp") {
+      fetch("/api/company")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.logoPath != null) setCompanyLogoPath(data.logoPath);
+          else setCompanyLogoPath(null);
+          if (data.stampPath != null) setCompanyStampPath(data.stampPath);
+          else setCompanyStampPath(null);
+          setLogoFile(null);
+          setStampFile(null);
+        })
+        .catch(() => {
+          setCompanyLogoPath(null);
+          setCompanyStampPath(null);
+        });
+    }
+    if (modal === "company-contract") {
+      fetch("/api/company/company-contract-template")
+        .then((res) => res.json())
+        .then((data) => {
+          setCompanyContractTitle(data.title ?? "");
+          setCompanyContractBody(data.body ?? "");
+          setCompanyContractDocumentPath(data.documentPath != null ? String(data.documentPath) : null);
+          setCompanyContractPdfFile(null);
+          if (companyContractPdfInputRef.current) companyContractPdfInputRef.current.value = "";
+        })
+        .catch(() => {
+          setCompanyContractTitle("");
+          setCompanyContractBody("");
+          setCompanyContractDocumentPath(null);
+        });
+    }
+    if (modal === "company-info") {
+      fetch("/api/company")
+        .then((res) => res.json())
+        .then((data) => {
+          setCompanyInfoName(data.name ?? "");
+          setCompanyInfoAddress(data.contractorAddress ?? "");
+          setCompanyInfoRegNo(data.contractorRegNo ?? "");
+          setCompanyInfoMessage("");
+        })
+        .catch(() => {
+          setCompanyInfoName("");
+          setCompanyInfoAddress("");
+          setCompanyInfoRegNo("");
+        });
     }
   }, [modal, loadPics]);
 
@@ -491,6 +561,96 @@ export default function AdminPage() {
       .catch(() => alert("삭제 중 오류가 발생했습니다."));
   };
 
+  const handleLogoUpload = () => {
+    if (!logoFile) {
+      alert("로고 이미지를 선택해 주세요.");
+      return;
+    }
+    setLogoUploading(true);
+    const formData = new FormData();
+    formData.append("type", "logo");
+    formData.append("file", logoFile);
+    fetch("/api/company/upload-asset", { method: "POST", body: formData })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.path) {
+          setCompanyLogoPath(data.path);
+          setLogoFile(null);
+          if (logoInputRef.current) logoInputRef.current.value = "";
+          alert("로고가 저장되었습니다.");
+        } else alert(data.error || "업로드 실패");
+      })
+      .catch(() => alert("업로드 실패"))
+      .finally(() => setLogoUploading(false));
+  };
+
+  const handleStampUpload = () => {
+    if (!stampFile) {
+      alert("서명/도장 이미지를 선택해 주세요.");
+      return;
+    }
+    setStampUploading(true);
+    const formData = new FormData();
+    formData.append("type", "stamp");
+    formData.append("file", stampFile);
+    fetch("/api/company/upload-asset", { method: "POST", body: formData })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.path) {
+          setCompanyStampPath(data.path);
+          setStampFile(null);
+          if (stampInputRef.current) stampInputRef.current.value = "";
+          alert("서명/도장이 저장되었습니다.");
+        } else alert(data.error || "업로드 실패");
+      })
+      .catch(() => alert("업로드 실패"))
+      .finally(() => setStampUploading(false));
+  };
+
+  const handleSaveCompanyContract = () => {
+    setCompanyContractSaving(true);
+    const doSave = (docPath: string | null) => {
+      fetch("/api/company/company-contract-template", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: companyContractTitle.trim(),
+          body: companyContractBody.trim(),
+          documentPath: docPath || undefined,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.error) throw new Error(data.error);
+          alert("저장되었습니다. 계약서 작성에서 회사양식 불러오기로 사용할 수 있습니다.");
+          setModal(null);
+        })
+        .catch((e) => alert(e?.message || "저장 실패"))
+        .finally(() => setCompanyContractSaving(false));
+    };
+    if (companyContractPdfFile) {
+      setCompanyContractUploading(true);
+      const formData = new FormData();
+      formData.append("file", companyContractPdfFile);
+      fetch("/api/contracts/upload", { method: "POST", body: formData })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.documentPath) doSave(data.documentPath);
+          else {
+            alert(data.error || "PDF 업로드 실패");
+            setCompanyContractSaving(false);
+          }
+        })
+        .catch(() => {
+          alert("업로드 실패");
+          setCompanyContractSaving(false);
+        })
+        .finally(() => setCompanyContractUploading(false));
+    } else {
+      doSave(companyContractDocumentPath);
+    }
+  };
+
   const handleSaveDrawingApi = () => {
     setDrawingApiMessage("");
     setDrawingApiLoading(true);
@@ -513,6 +673,34 @@ export default function AdminPage() {
       })
       .catch(() => setDrawingApiMessage("오류가 발생했습니다."))
       .finally(() => setDrawingApiLoading(false));
+  };
+
+  const handleSaveCompanyInfo = () => {
+    setCompanyInfoMessage("");
+    setCompanyInfoSaving(true);
+    fetch("/api/company", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: companyInfoName.trim(),
+        contractorAddress: companyInfoAddress.trim() || null,
+        contractorRegNo: companyInfoRegNo.trim() || null,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setCompanyInfoMessage("저장되었습니다.");
+          setTimeout(() => {
+            setModal(null);
+            setCompanyInfoMessage("");
+          }, 1500);
+        } else {
+          setCompanyInfoMessage((data as { error?: string }).error || "저장 실패");
+        }
+      })
+      .catch(() => setCompanyInfoMessage("오류가 발생했습니다."))
+      .finally(() => setCompanyInfoSaving(false));
   };
 
   if (pinStatus === null) {
@@ -573,6 +761,15 @@ export default function AdminPage() {
         <li>
           <button
             type="button"
+            onClick={() => setModal("company-info")}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            회사 정보
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
             onClick={() => setModal("drawing-api")}
             className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
@@ -586,6 +783,24 @@ export default function AdminPage() {
             className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             견적서 관리
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => setModal("logo-stamp")}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            회사 로고 / 서명·도장
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => setModal("company-contract")}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            계약서 양식
           </button>
         </li>
         <li>
@@ -845,6 +1060,86 @@ export default function AdminPage() {
         </div>
       )}
 
+      {/* 회사 정보 모달 */}
+      {modal === "company-info" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">회사 정보</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              회사명, 주소, 사업자번호를 입력하면 계약서 등 문서에 반영됩니다.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">회사명</label>
+                <input
+                  type="text"
+                  value={companyInfoName}
+                  onChange={(e) => setCompanyInfoName(e.target.value)}
+                  placeholder="회사명"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  disabled={companyInfoSaving}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">주소</label>
+                <input
+                  type="text"
+                  value={companyInfoAddress}
+                  onChange={(e) => setCompanyInfoAddress(e.target.value)}
+                  placeholder="회사 주소 (계약서 시공자 주소로 사용)"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  disabled={companyInfoSaving}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">사업자번호</label>
+                <input
+                  type="text"
+                  value={companyInfoRegNo}
+                  onChange={(e) => setCompanyInfoRegNo(e.target.value)}
+                  placeholder="예: 123-45-67890"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  disabled={companyInfoSaving}
+                />
+              </div>
+            </div>
+            {companyInfoMessage && (
+              <p className={`mt-3 text-sm ${companyInfoMessage.includes("저장되었습니다") ? "text-green-600" : "text-red-600"}`}>
+                {companyInfoMessage}
+              </p>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={companyInfoSaving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCompanyInfo}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                disabled={companyInfoSaving}
+              >
+                {companyInfoSaving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 견적서 관리 모달 (커스텀 견적 제목 저장) */}
       {modal === "estimate-templates" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -952,6 +1247,203 @@ export default function AdminPage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 회사 로고 / 서명·도장 모달 */}
+      {modal === "logo-stamp" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">회사 로고 / 서명·도장</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              회사 로고와 서명·도장 이미지를 등록하면 견적서, 계약서 등 문서에 활용할 수 있습니다. (이미지: PNG, JPG, GIF, WebP 2MB 이하)
+            </p>
+            <div className="space-y-6">
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-gray-700">회사 로고</h3>
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="flex-shrink-0">
+                    {companyLogoPath ? (
+                      <img
+                        src={`/api/company/asset/logo?t=${Date.now()}`}
+                        alt="로고"
+                        className="h-20 w-20 rounded border border-gray-200 object-contain bg-gray-50"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400">
+                        없음
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => setLogoFile(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      파일 선택
+                    </button>
+                    {logoFile && <span className="ml-2 text-sm text-gray-600">{logoFile.name}</span>}
+                    <button
+                      type="button"
+                      onClick={handleLogoUpload}
+                      disabled={logoUploading || !logoFile}
+                      className="ml-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {logoUploading ? "업로드 중..." : "업로드"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-gray-700">서명 / 도장</h3>
+                <div className="flex flex-wrap items-start gap-4">
+                  <div className="flex-shrink-0">
+                    {companyStampPath ? (
+                      <img
+                        src={`/api/company/asset/stamp?t=${Date.now()}`}
+                        alt="서명·도장"
+                        className="h-20 w-20 rounded border border-gray-200 object-contain bg-gray-50"
+                      />
+                    ) : (
+                      <div className="flex h-20 w-20 items-center justify-center rounded border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400">
+                        없음
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <input
+                      ref={stampInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                      className="hidden"
+                      onChange={(e) => setStampFile(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => stampInputRef.current?.click()}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      파일 선택
+                    </button>
+                    {stampFile && <span className="ml-2 text-sm text-gray-600">{stampFile.name}</span>}
+                    <button
+                      type="button"
+                      onClick={handleStampUpload}
+                      disabled={stampUploading || !stampFile}
+                      className="ml-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {stampUploading ? "업로드 중..." : "업로드"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 계약서 양식 모달 (회사별) */}
+      {modal === "company-contract" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">계약서 양식</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              우리 회사 전용 계약서 제목·본문을 등록하면 계약서 작성 페이지에서 &quot;회사양식 불러오기&quot;로 불러와 사용할 수 있습니다. 본문은 텍스트로 입력하거나 PDF를 첨부할 수 있습니다.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 제목 (기본값)</label>
+                <input
+                  type="text"
+                  value={companyContractTitle}
+                  onChange={(e) => setCompanyContractTitle(e.target.value)}
+                  placeholder="예: 실내건축공사 표준도급 계약서"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문</label>
+                <textarea
+                  value={companyContractBody}
+                  onChange={(e) => setCompanyContractBody(e.target.value)}
+                  placeholder="계약 조건, 시공 범위 등 본문 내용을 입력하세요. PDF를 첨부하면 서명 시 PDF가 표시됩니다."
+                  rows={8}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700">PDF 첨부 (선택)</label>
+                <input
+                  ref={companyContractPdfInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={(e) => setCompanyContractPdfFile(e.target.files?.[0] ?? null)}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => companyContractPdfInputRef.current?.click()}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    PDF 선택
+                  </button>
+                  {companyContractDocumentPath && !companyContractPdfFile && (
+                    <span className="text-xs text-green-600">현재 PDF 적용됨</span>
+                  )}
+                  {companyContractPdfFile && (
+                    <span className="text-xs text-gray-600">{companyContractPdfFile.name}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={companyContractSaving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCompanyContract}
+                disabled={companyContractSaving || companyContractUploading}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {companyContractSaving || companyContractUploading ? "저장 중..." : "저장"}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,13 +1,19 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { ListChecks, Plus, Trash2, ImageOff, FolderPlus, Printer, Eye, X } from "lucide-react";
 
 type Estimate = {
   id: number;
+  consultationId?: number;
   customerName?: string;
   title?: string;
   estimateDate?: string;
+};
+
+type Consultation = {
+  id: number;
+  status?: string;
 };
 
 type MaterialItem = {
@@ -125,7 +131,9 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export default function MaterialListPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimateListLoading, setEstimateListLoading] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [sections, setSections] = useState<MaterialSection[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
@@ -139,21 +147,41 @@ export default function MaterialListPage() {
   useEffect(() => {
     setEstimateListLoading(true);
     setError(null);
-    fetch("/api/estimates", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setEstimates(data as Estimate[]);
-          if (data.length > 0 && selectedId == null) {
-            setSelectedId((data[0] as Estimate).id);
-          }
+    Promise.all([
+      fetch("/api/estimates", { credentials: "include" }).then((r) => r.json()),
+      fetch("/api/consultations", { credentials: "include" }).then((r) => r.json()),
+    ])
+      .then(([estData, consData]) => {
+        if (Array.isArray(estData)) {
+          setEstimates(estData as Estimate[]);
+          // 기본은 선택 없음 (완료된 항목 보기 체크 후 선택하도록)
         } else {
-          setError((data as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
+          setError((estData as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
         }
+        if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
+        else setConsultations([]);
       })
       .catch(() => setError("견적 목록을 불러올 수 없습니다."))
       .finally(() => setEstimateListLoading(false));
   }, []);
+
+  /** 현장 선택 목록: 완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  const filteredEstimates = useMemo(() => {
+    if (showCompleted) return estimates;
+    return estimates.filter((est) => {
+      if (est.consultationId == null) return true;
+      const c = consultations.find((x) => x.id === est.consultationId);
+      const status = c?.status ?? "";
+      return status !== "완료및정산" && status !== "완료";
+    });
+  }, [estimates, consultations, showCompleted]);
+
+  const estimatesForSelect = useMemo(() => {
+    if (selectedId == null) return filteredEstimates;
+    if (filteredEstimates.some((e) => e.id === selectedId)) return filteredEstimates;
+    const selected = estimates.find((e) => e.id === selectedId);
+    return selected ? [selected, ...filteredEstimates] : filteredEstimates;
+  }, [filteredEstimates, estimates, selectedId]);
 
   const applySectionsFromData = useCallback((data: { sections?: { id?: number | null; title?: string; items?: Record<string, unknown>[] }[] }) => {
     if (data && Array.isArray(data.sections)) {
@@ -400,20 +428,35 @@ export default function MaterialListPage() {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">현장(견적) 선택</label>
+        <div className="flex flex-wrap items-center gap-3 mb-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            완료된 항목 보기
+          </label>
+        </div>
         <select
           value={selectedId ?? ""}
           onChange={(e) => setSelectedId(Number(e.target.value) || null)}
           disabled={estimateListLoading}
           className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white disabled:opacity-50"
         >
-          {estimates.length === 0 && (
+          {estimatesForSelect.length === 0 ? (
             <option value="">{estimateListLoading ? "불러오는 중…" : "견적이 없습니다."}</option>
+          ) : (
+            <>
+              <option value="">선택하세요</option>
+              {estimatesForSelect.map((est) => (
+                <option key={est.id} value={est.id}>
+                  {est.customerName || "고객"} / {est.title || "제목 없음"} ({est.estimateDate || "-"})
+                </option>
+              ))}
+            </>
           )}
-          {estimates.map((est) => (
-            <option key={est.id} value={est.id}>
-              {est.customerName || "고객"} / {est.title || "제목 없음"} ({est.estimateDate || "-"})
-            </option>
-          ))}
         </select>
       </div>
 

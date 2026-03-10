@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
-type EstimateItem = { id: number; title: string | null; customerName?: string; processOrder?: string[] };
+type EstimateItem = { id: number; consultationId?: number; title: string | null; customerName?: string; processOrder?: string[] };
 type EstimateDetailItem = {
   processGroup?: string;
   category?: string;
@@ -21,6 +21,7 @@ type EstimateDetail = {
   processOrder?: string[];
 };
 type PicItem = { id: number; name: string; phone?: string };
+type Consultation = { id: number; status?: string };
 type WorkLogItem = {
   id: number;
   logDate: string;
@@ -82,11 +83,13 @@ function getDefaultDateRange() {
 
 export default function WorkLogPage() {
   const [estimates, setEstimates] = useState<EstimateItem[]>([]);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [pics, setPics] = useState<PicItem[]>([]);
   const [logs, setLogs] = useState<WorkLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCompletedForProject, setShowCompletedForProject] = useState(false);
 
   const [formLogDate, setFormLogDate] = useState("");
   const [formEstimateId, setFormEstimateId] = useState<string>("");
@@ -119,6 +122,26 @@ export default function WorkLogPage() {
 
   const expenseLabelOptions = useMemo(() => [...selectedEstimatePhases], [selectedEstimatePhases]);
 
+  /** 프로젝트(견적) 선택 목록: 완료된 목록 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  const filteredEstimatesForProject = useMemo(() => {
+    if (showCompletedForProject) return estimates;
+    return estimates.filter((est) => {
+      if (est.consultationId == null) return true;
+      const c = consultations.find((x) => x.id === est.consultationId);
+      const status = c?.status ?? "";
+      return status !== "완료및정산" && status !== "완료";
+    });
+  }, [estimates, consultations, showCompletedForProject]);
+
+  /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */
+  const estimatesForProjectSelect = useMemo(() => {
+    if (!formEstimateId) return filteredEstimatesForProject;
+    const id = Number(formEstimateId);
+    if (filteredEstimatesForProject.some((e) => e.id === id)) return filteredEstimatesForProject;
+    const selected = estimates.find((e) => e.id === id);
+    return selected ? [selected, ...filteredEstimatesForProject] : filteredEstimatesForProject;
+  }, [filteredEstimatesForProject, estimates, formEstimateId]);
+
   const getExpenseSelectValue = (rowLabel: string) => {
     if (!rowLabel) return "";
     if (expenseLabelOptions.includes(rowLabel)) return rowLabel;
@@ -149,14 +172,17 @@ export default function WorkLogPage() {
     Promise.all([
       fetch("/api/estimates").then((r) => r.json()),
       fetch("/api/company/pics").then((r) => r.json()),
+      fetch("/api/consultations").then((r) => r.json()),
     ])
-      .then(([est, picList]) => {
+      .then(([est, picList, consList]) => {
         setEstimates(Array.isArray(est) ? est : []);
         setPics(Array.isArray(picList) ? picList : []);
+        setConsultations(Array.isArray(consList) ? consList : []);
       })
       .catch(() => {
         setEstimates([]);
         setPics([]);
+        setConsultations([]);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -396,7 +422,18 @@ export default function WorkLogPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">프로젝트(견적)</label>
+            <div className="mb-1 flex flex-wrap items-center gap-3">
+              <span className="text-xs font-medium text-gray-600">프로젝트(견적)</span>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={showCompletedForProject}
+                  onChange={(e) => setShowCompletedForProject(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                완료된 목록 보기
+              </label>
+            </div>
             <div className="flex items-center gap-2">
               <select
                 value={formEstimateId}
@@ -404,7 +441,7 @@ export default function WorkLogPage() {
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
                 <option value="">선택 안 함</option>
-                {estimates.map((e) => (
+                {estimatesForProjectSelect.map((e) => (
                   <option key={e.id} value={e.id}>
                     {e.title || `견적 #${e.id}`} {e.customerName ? ` (${e.customerName})` : ""}
                   </option>

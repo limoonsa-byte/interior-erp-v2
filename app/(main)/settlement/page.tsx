@@ -30,6 +30,11 @@ type Estimate = {
   profitPercent?: number;
 };
 
+type Consultation = {
+  id: number;
+  status?: string;
+};
+
 type PhaseSubItem = {
   amount: number;
   dateUsed: string;
@@ -90,7 +95,9 @@ function buildPhasesFromEstimate(estimate: Estimate): { phaseName: string; estim
 export default function SettlementPage() {
   const searchParams = useSearchParams();
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimateListLoading, setEstimateListLoading] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [settledAt, setSettledAt] = useState("");
@@ -105,25 +112,46 @@ export default function SettlementPage() {
     return buildPhasesFromEstimate(estimate);
   }, [estimate]);
 
+  /** 프로젝트 선택 목록: 완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  const filteredEstimates = useMemo(() => {
+    if (showCompleted) return estimates;
+    return estimates.filter((est) => {
+      if (est.consultationId == null) return true;
+      const c = consultations.find((x) => x.id === est.consultationId);
+      const status = c?.status ?? "";
+      return status !== "완료및정산" && status !== "완료";
+    });
+  }, [estimates, consultations, showCompleted]);
+
+  /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */
+  const estimatesForSelect = useMemo(() => {
+    if (selectedId == null) return filteredEstimates;
+    if (filteredEstimates.some((e) => e.id === selectedId)) return filteredEstimates;
+    const selected = estimates.find((e) => e.id === selectedId);
+    return selected ? [selected, ...filteredEstimates] : filteredEstimates;
+  }, [filteredEstimates, estimates, selectedId]);
+
   useEffect(() => {
     setEstimateListLoading(true);
     setError(null);
-    fetch("/api/estimates", { credentials: "include" })
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) {
-          setEstimates(data as Estimate[]);
-          const list = data as Estimate[];
+    Promise.all([
+      fetch("/api/estimates", { credentials: "include" }).then((r) => r.json()),
+      fetch("/api/consultations", { credentials: "include" }).then((r) => r.json()),
+    ])
+      .then(([estData, consData]) => {
+        if (Array.isArray(estData)) {
+          setEstimates(estData as Estimate[]);
+          const list = estData as Estimate[];
           const fromUrl = searchParams.get("estimateId");
           const idFromUrl = fromUrl ? parseInt(fromUrl, 10) : NaN;
-          const inList = list.some((e) => e.id === idFromUrl);
-          if (list.length > 0) {
-            if (inList) setSelectedId(idFromUrl);
-            else setSelectedId(list[0].id);
-          }
+          const inList = !Number.isNaN(idFromUrl) && list.some((e) => e.id === idFromUrl);
+          if (inList) setSelectedId(idFromUrl);
+          // URL에 estimateId가 없으면 기본은 선택 없음 (완료된 항목 보기 체크 후 선택하도록)
         } else {
-          setError((data as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
+          setError((estData as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
         }
+        if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
+        else setConsultations([]);
       })
       .catch(() => setError("견적 목록을 불러올 수 없습니다."))
       .finally(() => setEstimateListLoading(false));
@@ -387,15 +415,38 @@ export default function SettlementPage() {
     if (!styleEl) {
       styleEl = document.createElement("style");
       styleEl.id = styleId;
-      styleEl.textContent = "@page { size: portrait; margin: 0.5in; }";
       document.head.appendChild(styleEl);
     }
+    styleEl.textContent = `
+      @page { size: portrait; margin: 0.25in; }
+      @media print {
+        body.settlement-print > *:not(#settlement-print-body) { display: none !important; visibility: hidden !important; }
+        body.settlement-print > #settlement-print-body { display: block !important; visibility: visible !important; }
+      }
+    `;
+
+    const printRoot = document.getElementById("settlement-print-root");
+    const printOnly = printRoot?.querySelector(".settlement-print-only");
+    let wrap: HTMLDivElement | null = null;
+    if (printOnly) {
+      wrap = document.createElement("div");
+      wrap.id = "settlement-print-body";
+      wrap.className = "settlement-print-only";
+      wrap.appendChild(printOnly.cloneNode(true));
+      document.body.appendChild(wrap);
+    }
+
     document.body.classList.add("settlement-print");
-    window.print();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.print();
+      });
+    });
 
     const onAfterPrint = () => {
       document.title = prevTitle;
       document.body.classList.remove("settlement-print");
+      wrap?.remove();
       const el = document.getElementById("settlement-print-style");
       if (el) el.remove();
     };
@@ -414,6 +465,7 @@ export default function SettlementPage() {
 
   return (
     <div className="p-4 sm:p-6" id="settlement-print-root">
+      <div className="settlement-screen-only">
       <h1 className="text-xl font-semibold text-gray-900 mb-2">정산</h1>
       <p className="text-sm text-gray-600 mb-4 no-print">
         프로젝트(견적)를 선택하면 공정별 견적 금액이 나옵니다. 각 공정마다 실제 사용한 금액(내가 쓴 금액)을 입력하고 저장하세요.
@@ -427,20 +479,35 @@ export default function SettlementPage() {
 
       <div className="mb-4 no-print">
         <label className="block text-sm font-medium text-gray-700 mb-1.5">프로젝트(견적) 선택</label>
+        <div className="flex flex-wrap items-center gap-3 mb-1.5">
+          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={showCompleted}
+              onChange={(e) => setShowCompleted(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            완료된 항목 보기
+          </label>
+        </div>
         <select
           value={selectedId ?? ""}
           onChange={(e) => setSelectedId(Number(e.target.value) || null)}
           disabled={estimateListLoading}
           className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white disabled:opacity-50"
         >
-          {estimates.length === 0 && (
+          {estimatesForSelect.length === 0 ? (
             <option value="">{estimateListLoading ? "불러오는 중…" : "견적이 없습니다."}</option>
+          ) : (
+            <>
+              <option value="">선택하세요</option>
+              {estimatesForSelect.map((est) => (
+                <option key={est.id} value={est.id}>
+                  {est.customerName || "고객"} / {est.title} ({est.estimateDate || "-"})
+                </option>
+              ))}
+            </>
           )}
-          {estimates.map((est) => (
-            <option key={est.id} value={est.id}>
-              {est.customerName || "고객"} / {est.title} ({est.estimateDate || "-"})
-            </option>
-          ))}
         </select>
       </div>
 
@@ -776,6 +843,158 @@ export default function SettlementPage() {
           >
             다시 불러오기
           </button>
+        </div>
+      )}
+      </div>
+
+      {!detailLoading && estimate && phaseRows.length > 0 && (
+        <div className="settlement-print-only">
+          <header className="settlement-print-header">
+            <h1 className="settlement-print-title">정산서</h1>
+            <p className="settlement-print-subtitle">{estimate.title}</p>
+            <table className="settlement-print-customer">
+              <tbody>
+                <tr>
+                  <th>고객명</th>
+                  <td>{estimate.customerName || "-"}</td>
+                </tr>
+                <tr>
+                  <th>주소</th>
+                  <td>{estimate.address || "-"}</td>
+                </tr>
+              </tbody>
+            </table>
+          </header>
+
+          <section className="settlement-print-section">
+            <h2 className="settlement-print-section-title">고객결제 현황</h2>
+            <p className="settlement-print-total-line">
+              정산 총금액 (VAT 별도) <strong>{formatNum(settlementTotalAmount)}원</strong>
+            </p>
+            <table className="settlement-print-table settlement-print-table-dark-header">
+              <thead>
+                <tr>
+                  <th>항목</th>
+                  <th>날짜</th>
+                  <th className="text-right">금액</th>
+                  <th>비고</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerPaymentRows
+                  .filter((r) => r.item.trim() || r.amount > 0 || r.date)
+                  .map((row, i) => (
+                    <tr key={i}>
+                      <td>{row.item || "-"}</td>
+                      <td>{row.date || "-"}</td>
+                      <td className="text-right tabular-nums">{formatNum(row.amount)}</td>
+                      <td>{row.memo || ""}</td>
+                    </tr>
+                  ))}
+                <tr className="settlement-print-row-total">
+                  <td>합계</td>
+                  <td />
+                  <td className="text-right tabular-nums font-semibold">{formatNum(customerPaymentRows.reduce((s, r) => s + r.amount, 0))}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="settlement-print-section">
+            <h2 className="settlement-print-section-title">공정별 비용 내역</h2>
+            <table className="settlement-print-table settlement-print-phase-table settlement-print-table-dark-header">
+              <thead>
+                <tr>
+                  <th>공정</th>
+                  <th className="text-right">견적 금액</th>
+                  <th className="text-right">실지출 금액</th>
+                  <th>날짜</th>
+                  <th>내용</th>
+                </tr>
+              </thead>
+              <tbody>
+                {phaseRows.map((row, i) => {
+                  const subSum = (row.subItems || []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
+                  const usedDisplay = row.subItems?.length ? subSum : row.usedAmount;
+                  const subs = (row.subItems || []).sort((a, b) => (a.dateUsed || "").localeCompare(b.dateUsed || ""));
+                  return (
+                    <React.Fragment key={i}>
+                      <tr>
+                        <td className="font-medium">{row.phaseName}</td>
+                        <td className="text-right tabular-nums">{formatNum(row.estimateAmount)}</td>
+                        <td className="text-right tabular-nums">{subs.length <= 1 ? formatNum(usedDisplay) : ""}</td>
+                        <td />
+                        <td />
+                      </tr>
+                      {subs.map((sub, j) => (
+                        <tr key={`${i}-${j}`} className="settlement-print-sub-row">
+                          <td />
+                          <td />
+                          <td className="text-right tabular-nums">{formatNum(sub.amount)}</td>
+                          <td>{sub.dateUsed || "-"}</td>
+                          <td>{sub.content || "-"}</td>
+                        </tr>
+                      ))}
+                      {subs.length > 1 && (
+                        <tr className="settlement-print-sub-row">
+                          <td />
+                          <td />
+                          <td className="text-right tabular-nums font-medium">소계: {formatNum(usedDisplay)}</td>
+                          <td />
+                          <td />
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+                <tr className="settlement-print-row-total">
+                  <td className="font-semibold">합계</td>
+                  <td className="text-right tabular-nums font-semibold">{formatNum(totalEstimate)}</td>
+                  <td className="text-right tabular-nums font-semibold">{formatNum(totalUsed)}</td>
+                  <td />
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section className="settlement-print-section">
+            <h2 className="settlement-print-section-title">정산 요약</h2>
+            <table className="settlement-print-table settlement-print-summary-table">
+              <tbody>
+                <tr>
+                  <td>견적 금액 합계</td>
+                  <td className="text-right tabular-nums">{formatNum(totalEstimate)}원</td>
+                </tr>
+                <tr>
+                  <td>이윤</td>
+                  <td className="text-right tabular-nums">{formatNum(profit)}원</td>
+                </tr>
+                <tr>
+                  <td>공과잡비</td>
+                  <td className="text-right tabular-nums">{formatNum(overhead)}원</td>
+                </tr>
+                <tr className="settlement-print-row-summary-total">
+                  <td className="font-semibold">총금액 (이윤+공과잡비)</td>
+                  <td className="text-right tabular-nums font-semibold">{formatNum(settlementTotalAmount)}원</td>
+                </tr>
+                <tr>
+                  <td>내가 쓴 금액 합계</td>
+                  <td className="text-right tabular-nums">{formatNum(totalUsed)}원</td>
+                </tr>
+                <tr className="settlement-print-row-remaining">
+                  <td className="font-semibold">정산금액 (총금액-지출금액)</td>
+                  <td className="text-right tabular-nums font-semibold">
+                    {formatNum(remainingAmount)}원
+                    {settlementTotalAmount > 0 && (
+                      <span className="ml-1">(이윤률 {remainingPercent.toFixed(1)}%)</span>
+                    )}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
         </div>
       )}
     </div>

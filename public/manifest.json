@@ -1,17 +1,25 @@
 {
   "name": "인테리어 올인원 ERP시스템",
-  "short_name": "인테리어 올인원 ERP시스템",
+  "short_name": "인테리어 올인원",
   "description": "인테리어 업체 올인원 ERP 시스템",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1e293b",
   "icons": [
     {
-      "src": "/next.svg",
+      "src": "/vercel.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
+    },
+    {
+      "src": "/vercel.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ]
 }

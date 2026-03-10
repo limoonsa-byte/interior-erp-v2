@@ -37,6 +37,7 @@ export async function PATCH(
     const {
       customerName,
       contact,
+      email,
       address,
       pyung,
       status,
@@ -87,6 +88,7 @@ export async function PATCH(
         SET
           customer_name = COALESCE(${customerName ?? null}, customer_name),
           contact = COALESCE(${contact ?? null}, contact),
+          email = ${email ?? null},
           address = COALESCE(${address ?? null}, address),
           pyung = COALESCE(${pyung ?? null}, pyung),
           status = COALESCE(${status ?? null}, status),

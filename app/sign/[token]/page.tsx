@@ -10,6 +10,7 @@ type SignInfo = {
   contact: string;
   status: string;
   documentUrl?: string;
+  body?: string;
   alreadySigned?: boolean;
 };
 
@@ -165,25 +166,45 @@ export default function SignPage() {
       <div className="mx-auto max-w-2xl rounded-xl bg-white p-4 shadow-md sm:p-6">
         <h1 className="text-lg font-bold text-gray-900">계약서 서명</h1>
         <p className="mt-1 text-sm text-gray-600">{info.title}</p>
-        {info.documentUrl && (
-          <div className="mt-4">
-            <p className="text-xs font-medium text-gray-700">계약 문서</p>
-            <iframe
-              src={info.documentUrl}
-              title="계약 문서"
-              className="mt-1 h-64 w-full rounded border border-gray-200 sm:h-80"
-            />
+
+        {/* PDF가 있으면 PDF만 표시 (원본 그대로: 순서·볼드·레이아웃 유지). 본문 텍스트는 사용 안 함 */}
+        {info.documentUrl ? (
+          <div className="mt-6">
+            <h2 className="text-sm font-semibold text-gray-800">계약 내용 (PDF 원본 그대로)</h2>
+            <p className="mt-0.5 text-xs text-gray-500">아래 계약서 PDF를 확인한 후 하단에서 서명해 주세요. 업로드된 파일이 그대로 표시됩니다.</p>
+            <div className="mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
+              <iframe
+                src={info.documentUrl}
+                title="계약 문서"
+                className="h-[75vh] w-full min-h-[480px]"
+              />
+            </div>
             <a
               href={info.documentUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-block text-sm text-blue-600 hover:underline"
+              className="mt-2 inline-block text-sm text-blue-600 hover:underline"
             >
               새 창에서 보기
             </a>
           </div>
+        ) : (
+          <div className="mt-6">
+            <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
+            <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명해 주세요.</p>
+            {info.body && info.body.trim() ? (
+              <div className="mt-2 max-h-[50vh] min-h-[120px] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
+                {info.body}
+              </div>
+            ) : (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                이 계약서에는 계약 본문이 등록되지 않았습니다. 필요 시 계약 작성자에게 문의하세요.
+              </div>
+            )}
+          </div>
         )}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+
+        <form onSubmit={handleSubmit} className="mt-8 space-y-4 border-t border-gray-200 pt-6">
           <div>
             <label className="block text-sm font-medium text-gray-700">서명자 이름 *</label>
             <input

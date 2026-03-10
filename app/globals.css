@@ -286,13 +286,70 @@ body {
 }
 
 /* 정산 페이지 인쇄/PDF 전용: 표가 깔끔하게 보이도록 */
+/* 인쇄 전용 정산서 양식: 화면에서는 숨김 */
+.settlement-print-only {
+  display: none !important;
+}
+
 @media print {
   body.settlement-print * {
     visibility: hidden;
   }
   body.settlement-print #settlement-print-root,
-  body.settlement-print #settlement-print-root * {
+  body.settlement-print #settlement-print-root *,
+  body.settlement-print #settlement-print-body,
+  body.settlement-print #settlement-print-body * {
     visibility: visible;
+  }
+  body.settlement-print #settlement-print-root {
+    display: none !important;
+  }
+  body.settlement-print #settlement-print-root .settlement-screen-only {
+    display: none !important;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-only {
+    display: block !important;
+  }
+  body.settlement-print #settlement-print-body {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100%;
+    max-width: 100%;
+    padding: 0.2in 0.25in;
+    background: white !important;
+    font-size: 10px;
+    line-height: 1.3;
+    color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-only {
+    display: block !important;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-section {
+    margin-bottom: 0.5rem;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-section:last-of-type,
+  body.settlement-print #settlement-print-body .settlement-print-summary-table,
+  body.settlement-print #settlement-print-body .settlement-print-row-summary-total,
+  body.settlement-print #settlement-print-body .settlement-print-row-remaining {
+    visibility: visible !important;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-section:last-of-type {
+    display: block !important;
+    margin-top: 0.35rem;
+    page-break-before: avoid;
+    page-break-inside: avoid;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-summary-table {
+    display: table !important;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-summary-table tr {
+    display: table-row !important;
+  }
+  body.settlement-print #settlement-print-body .settlement-print-summary-table td {
+    display: table-cell !important;
   }
   body.settlement-print #settlement-print-root {
     position: absolute;
@@ -305,6 +362,167 @@ body {
     font-size: 11px;
     line-height: 1.35;
     color: #000;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-screen-only {
+    display: none !important;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-only {
+    display: block !important;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-only,
+  body.settlement-print #settlement-print-body {
+    font-size: 10px;
+    color: #000;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-header,
+  body.settlement-print #settlement-print-body .settlement-print-header {
+    text-align: center;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid #ddd;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-title,
+  body.settlement-print #settlement-print-body .settlement-print-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0 0 0.15rem 0;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-subtitle,
+  body.settlement-print #settlement-print-body .settlement-print-subtitle {
+    font-size: 11px;
+    color: #333;
+    margin: 0 0 0.25rem 0;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-meta,
+  body.settlement-print #settlement-print-body .settlement-print-meta {
+    font-size: 10px;
+    color: #555;
+    margin: 0;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-customer,
+  body.settlement-print #settlement-print-body .settlement-print-customer {
+    width: 100%;
+    margin: 0.25rem 0 0 0;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-customer th,
+  body.settlement-print #settlement-print-body .settlement-print-customer th {
+    background: #1e3a5f !important;
+    color: #fff !important;
+    font-weight: 600;
+    text-align: left;
+    padding: 0.2rem 0.35rem;
+    width: 4rem;
+    border: 1px solid #1e3a5f;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-customer td,
+  body.settlement-print #settlement-print-body .settlement-print-customer td {
+    background: #f5f5f5 !important;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid #ddd;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-section,
+  body.settlement-print #settlement-print-body .settlement-print-section {
+    margin-bottom: 0.5rem;
+    page-break-inside: avoid;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-section-title,
+  body.settlement-print #settlement-print-body .settlement-print-section-title {
+    background: #1e3a5f !important;
+    color: #fff !important;
+    font-size: 10px;
+    font-weight: 600;
+    margin: 0 0 0.25rem 0;
+    padding: 0.25rem 0.4rem;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-total-line,
+  body.settlement-print #settlement-print-body .settlement-print-total-line {
+    margin: 0 0 0.25rem 0;
+    font-size: 10px;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-total-line strong,
+  body.settlement-print #settlement-print-body .settlement-print-total-line strong {
+    font-size: 11px;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table,
+  body.settlement-print #settlement-print-body .settlement-print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+    border: 1px solid #ddd;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table th,
+  body.settlement-print #settlement-print-root .settlement-print-table td,
+  body.settlement-print #settlement-print-body .settlement-print-table th,
+  body.settlement-print #settlement-print-body .settlement-print-table td {
+    border: 1px solid #ddd;
+    padding: 0.2rem 0.35rem;
+    text-align: left;
+    vertical-align: middle;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table th.text-right,
+  body.settlement-print #settlement-print-root .settlement-print-table td.text-right,
+  body.settlement-print #settlement-print-body .settlement-print-table th.text-right,
+  body.settlement-print #settlement-print-body .settlement-print-table td.text-right {
+    text-align: right;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table thead th,
+  body.settlement-print #settlement-print-body .settlement-print-table thead th {
+    background: #f0f0f0 !important;
+    font-weight: 600;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table-dark-header thead th,
+  body.settlement-print #settlement-print-body .settlement-print-table-dark-header thead th {
+    background: #1e3a5f !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-table tbody tr:nth-child(even),
+  body.settlement-print #settlement-print-body .settlement-print-table tbody tr:nth-child(even) {
+    background: #fafafa !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-row-total,
+  body.settlement-print #settlement-print-body .settlement-print-row-total {
+    background: #d4edda !important;
+    font-weight: 600;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-sub-row td,
+  body.settlement-print #settlement-print-body .settlement-print-sub-row td {
+    padding-left: 1rem;
+    color: #444;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-summary-table td,
+  body.settlement-print #settlement-print-body .settlement-print-summary-table td {
+    border: 1px solid #ddd;
+    padding: 0.25rem 0.35rem;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-row-summary-total,
+  body.settlement-print #settlement-print-body .settlement-print-row-summary-total {
+    background: #fff3cd !important;
+    font-weight: 600;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body.settlement-print #settlement-print-root .settlement-print-row-remaining,
+  body.settlement-print #settlement-print-body .settlement-print-row-remaining {
+    background: #f8d7da !important;
+    font-weight: 600;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
