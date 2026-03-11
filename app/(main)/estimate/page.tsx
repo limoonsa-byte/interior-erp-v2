@@ -2144,7 +2144,7 @@ export default function EstimatePage() {
   const [loadingConsultations, setLoadingConsultations] = useState(false);
   /** 상담 선택 모달에서 완료 건 보기: 기본 꺼짐 */
   const [showCompletedInModal, setShowCompletedInModal] = useState(false);
-  /** 목록에서 완료 건 보기: 기본 꺼짐 (연결된 상담이 완료인 견적 숨김) */
+  /** 목록에서 완료 건 보기: 기본 꺼짐 (연결된 상담이 완료/완료및정산인 견적 숨김) */
   const [showCompletedInList, setShowCompletedInList] = useState(false);
   /** 목록 필터용 상담 전체 (상담 진행상태로 견적 필터링) */
   const [consultationsForList, setConsultationsForList] = useState<Consultation[]>([]);
@@ -2169,13 +2169,14 @@ export default function EstimatePage() {
       .catch(() => setConsultationsForList([]));
   }, []);
 
-  /** 목록에 표시할 견적 (완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외) */
+  /** 목록에 표시할 견적 (완료 건 보기 꺼짐이면 연결 상담이 완료/완료및정산인 견적 제외) */
   const filteredEstimates = React.useMemo(() => {
     if (showCompletedInList) return estimates;
     return estimates.filter((est) => {
       if (est.consultationId == null) return true;
       const c = consultationsForList.find((x) => x.id === est.consultationId);
-      return c?.status !== "완료";
+      const completed = c?.status === "완료" || c?.status === "완료및정산";
+      return !completed;
     });
   }, [estimates, consultationsForList, showCompletedInList]);
 
@@ -2231,9 +2232,9 @@ export default function EstimatePage() {
     setFormOpen("new");
   };
 
-  /** 모달에 표시할 상담 목록 (완료 건 보기 꺼짐이면 완료 제외) */
+  /** 모달에 표시할 상담 목록 (완료 건 보기 꺼짐이면 완료/완료및정산 제외) */
   const consultationsToShow = React.useMemo(
-    () => consultations.filter((c) => showCompletedInModal || c.status !== "완료"),
+    () => consultations.filter((c) => showCompletedInModal || (c.status !== "완료" && c.status !== "완료및정산")),
     [consultations, showCompletedInModal]
   );
 

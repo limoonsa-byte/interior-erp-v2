@@ -294,6 +294,9 @@ async function migrate() {
     console.log("[migrate] contracts.body OK");
     await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS details TEXT`;
     console.log("[migrate] contracts.details OK");
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signer_address TEXT`;
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signer_resident_number TEXT`;
+    console.log("[migrate] contracts.signer_address, signer_resident_number OK");
     await sql`
       CREATE TABLE IF NOT EXISTS master_contract_template (
         id INT PRIMARY KEY DEFAULT 1,

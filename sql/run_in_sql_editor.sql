@@ -73,3 +73,6 @@ CREATE TABLE IF NOT EXISTS contracts (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+-- 서명 시 주소·주민번호 저장용 (이미 테이블 있으면 아래만 실행)
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signer_address TEXT;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS signer_resident_number TEXT;

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
+import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
 
 type SignInfo = {
   id: number;
@@ -11,8 +12,101 @@ type SignInfo = {
   status: string;
   documentUrl?: string;
   body?: string;
+  details?: Record<string, string> | string | null;
   alreadySigned?: boolean;
 };
+
+/** 계약 details로 표준도급 계약서 요약 1페이지 HTML 생성 (인쇄용과 동일 구조, 도장 포함) */
+function buildSummaryPageHtml(
+  details: Record<string, string> | null,
+  stampUrl: string | null,
+  signer?: { name: string; residentNumber: string; address: string }
+): string {
+  if (!details || typeof details !== "object") return "";
+  const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const raw = Number(String(details.contractAmount ?? "").replace(/\D/g, "")) || 0;
+  const fmtAmt = (n: number) => (n ? n.toLocaleString("ko-KR") : "");
+  const contractAmountFormatted = raw ? raw.toLocaleString("ko-KR") : "-";
+  const downPaymentPercent = String(details.downPaymentPercent ?? "").trim();
+  const balancePercent = String(details.balancePercent ?? "").trim();
+  const downAmtFmt = fmtAmt(downPaymentPercent ? Math.round(raw * Number(downPaymentPercent) / 100) : 0);
+  const balanceAmtFmt = fmtAmt(balancePercent ? Math.round(raw * Number(balancePercent) / 100) : 0);
+  let interimList: Array<{ percent: string; daysAfter: string }>;
+  try {
+    const rawPayments = details.interimPayments;
+    if (rawPayments != null && typeof rawPayments === "string" && rawPayments.trim()) {
+      const parsed = JSON.parse(rawPayments) as Array<{ percent?: string; daysAfter?: string }>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        interimList = parsed.map((p) => ({ percent: String(p.percent ?? "").trim(), daysAfter: String(p.daysAfter ?? "").trim() }));
+      } else interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
+    } else if (Array.isArray(rawPayments) && rawPayments.length > 0) {
+      interimList = (rawPayments as Array<{ percent?: string; daysAfter?: string }>).map((p) => ({ percent: String(p.percent ?? "").trim(), daysAfter: String(p.daysAfter ?? "").trim() }));
+    } else interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
+  } catch {
+    interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
+  }
+  const interimRows = interimList.map((item, idx) => {
+    const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+    const label = idx === 0 ? "중도금1차" : idx === 1 ? "중도금2차" : idx === 2 ? "중도금3차" : `중도금${idx + 1}차`;
+    return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter)}일후</span></td></tr>`;
+  }).join("");
+  const rowspanMoney = 3 + interimList.length + 1;
+  const sigDisplay = String(details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "").trim();
+  const stampHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp" alt="" />` : "";
+  const stampSigHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp-sig" alt="" />` : `<span class="contract-print-red">(인)</span>`;
+  const clientName = signer?.name?.trim() || String(details.clientName ?? "").trim();
+  const clientAddress = signer?.address?.trim() || String(details.clientAddress ?? "").trim();
+  const clientResidentNumber = signer?.residentNumber?.trim() || String(details.clientResidentNumber ?? "").trim();
+  return (
+    `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
+    `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
+    `<table class="contract-print-main-tbl">` +
+    `<colgroup><col class="contract-print-col-section" /><col class="contract-print-col-label" /><col class="contract-print-col-sub" /><col class="contract-print-col-value2" /><col class="contract-print-col-in" /></colgroup>` +
+    `<tbody>` +
+    `<tr><th rowspan="2" class="contract-print-section-label">계<br/>약<br/>자</th><td class="contract-print-row-label">발주자(수급인)</td><td colspan="2" class="contract-print-value">${esc(clientName)}</td><td class="contract-print-in">(인)</td></tr>` +
+    `<tr><td class="contract-print-row-label">시공자(하수급인)</td><td colspan="2" class="contract-print-value">${esc(details.contractorCompanyName ?? "")}</td><td class="contract-print-in">(인)</td></tr>` +
+    `<tr><th rowspan="4" class="contract-print-section-label">공<br/>사<br/>개<br/>요</th><td class="contract-print-row-label">공 사 명</td><td colspan="3" class="contract-print-value">${esc(details.projectName ?? "")}</td></tr>` +
+    `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(details.projectPlace ?? "")}</td></tr>` +
+    `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(details.projectStartDate ?? "")}</td></tr>` +
+    `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(details.projectEndDate ?? "")}</td></tr>` +
+    `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPaymentPercent)}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
+    interimRows +
+    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balancePercent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
+    `</tbody></table>` +
+    (stampHtml ? stampHtml : "") +
+    `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
+    `<div class="contract-print-signatures">` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line">성명 : ${esc(clientName)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="contract-print-red">(인)</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(details.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(details.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line">성명 : ${esc(sigDisplay)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${stampSigHtml}</p></div>` +
+    `</div></div>`
+  );
+}
+
+const A4_WIDTH = 793;
+
+function ContractSummaryScaled({ info, token, signer }: { info: SignInfo; token: string; signer: { name: string; residentNumber: string; address: string } }) {
+  const details =
+    info.details == null
+      ? null
+      : typeof info.details === "string"
+        ? (() => { try { return JSON.parse(info.details as string) as Record<string, string>; } catch { return null; } })()
+        : (info.details as Record<string, string>);
+  const stampUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/api/contracts/stamp/${info.id}?token=${encodeURIComponent(token)}`
+      : null;
+  const summaryHtml = buildSummaryPageHtml(details, stampUrl, signer);
+
+  if (!summaryHtml) return null;
+
+  return (
+    <div
+      className="contract-sign-summary mb-4"
+      dangerouslySetInnerHTML={{ __html: summaryHtml }}
+    />
+  );
+}
 
 export default function SignPage() {
   const params = useParams();
@@ -21,6 +115,8 @@ export default function SignPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [signerName, setSignerName] = useState("");
+  const [signerAddress, setSignerAddress] = useState("");
+  const [signerResidentNumber, setSignerResidentNumber] = useState("");
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -51,28 +147,38 @@ export default function SignPage() {
     if (!canvas || !info || info.alreadySigned) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.strokeStyle = "#000";
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
+
+    function resize() {
+      if (!canvas || !ctx) return;
+      const dpr = window.devicePixelRatio || 1;
+      const r = canvas.getBoundingClientRect();
+      canvas.width = r.width * dpr;
+      canvas.height = r.height * dpr;
+      ctx.scale(dpr, dpr);
+      ctx.strokeStyle = "#000";
+      ctx.lineWidth = 2;
+      ctx.lineCap = "round";
+    }
+    resize();
+
+    const getPos = (e: MouseEvent | TouchEvent) => {
+      const r = canvas.getBoundingClientRect();
+      const clientX = "touches" in e ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      const clientY = "touches" in e ? e.touches[0].clientY : (e as MouseEvent).clientY;
+      return { x: clientX - r.left, y: clientY - r.top };
+    };
 
     const start = (e: MouseEvent | TouchEvent) => {
       e.preventDefault();
       isDrawing.current = true;
-      const x = "touches" in e ? e.touches[0].clientX - rect.left : (e as MouseEvent).clientX - rect.left;
-      const y = "touches" in e ? e.touches[0].clientY - rect.top : (e as MouseEvent).clientY - rect.top;
+      const { x, y } = getPos(e);
       ctx.beginPath();
       ctx.moveTo(x, y);
     };
     const move = (e: MouseEvent | TouchEvent) => {
       e.preventDefault();
       if (!isDrawing.current) return;
-      const x = "touches" in e ? e.touches[0].clientX - rect.left : (e as MouseEvent).clientX - rect.left;
-      const y = "touches" in e ? e.touches[0].clientY - rect.top : (e as MouseEvent).clientY - rect.top;
+      const { x, y } = getPos(e);
       ctx.lineTo(x, y);
       ctx.stroke();
     };
@@ -88,6 +194,7 @@ export default function SignPage() {
     canvas.addEventListener("touchstart", start, { passive: false });
     canvas.addEventListener("touchmove", move, { passive: false });
     canvas.addEventListener("touchend", end);
+    window.addEventListener("resize", resize);
     return () => {
       canvas.removeEventListener("mousedown", start);
       canvas.removeEventListener("mousemove", move);
@@ -96,20 +203,38 @@ export default function SignPage() {
       canvas.removeEventListener("touchstart", start);
       canvas.removeEventListener("touchmove", move);
       canvas.removeEventListener("touchend", end);
+      window.removeEventListener("resize", resize);
     };
   }, [info?.id, info?.alreadySigned]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !signerName.trim()) {
-      alert("이름을 입력해 주세요.");
+      alert("서명자 이름을 입력해 주세요.");
+      return;
+    }
+    if (!signerResidentNumber.trim()) {
+      alert("주민번호를 입력해 주세요.");
+      return;
+    }
+    if (!signerAddress.trim()) {
+      alert("주소를 입력해 주세요.");
+      return;
+    }
+    if (!signatureData) {
+      alert("서명을 그려 주세요.");
       return;
     }
     setSubmitting(true);
     fetch(`/api/contracts/sign/${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ signerName: signerName.trim(), signatureData }),
+      body: JSON.stringify({
+        signerName: signerName.trim(),
+        signerAddress: signerAddress.trim() || undefined,
+        signerResidentNumber: signerResidentNumber.trim() || undefined,
+        signatureData,
+      }),
     })
       .then((res) => res.json())
       .then((data) => {
@@ -163,20 +288,22 @@ export default function SignPage() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-8 px-4">
-      <div className="mx-auto max-w-2xl rounded-xl bg-white p-4 shadow-md sm:p-6">
+      <div className="mx-auto max-w-4xl rounded-xl bg-white p-4 shadow-md sm:p-6">
         <h1 className="text-lg font-bold text-gray-900">계약서 서명</h1>
         <p className="mt-1 text-sm text-gray-600">{info.title}</p>
 
-        {/* PDF가 있으면 PDF만 표시 (원본 그대로: 순서·볼드·레이아웃 유지). 본문 텍스트는 사용 안 함 */}
+        {/* PDF가 있으면: 요약 1페이지(표준도급) 맨 앞 + PDF 페이지 이미지 세로로 (인쇄 미리보기처럼) */}
         {info.documentUrl ? (
           <div className="mt-6">
             <h2 className="text-sm font-semibold text-gray-800">계약 내용 (PDF 원본 그대로)</h2>
-            <p className="mt-0.5 text-xs text-gray-500">아래 계약서 PDF를 확인한 후 하단에서 서명해 주세요. 업로드된 파일이 그대로 표시됩니다.</p>
-            <div className="mt-2 rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
-              <iframe
-                src={info.documentUrl}
-                title="계약 문서"
-                className="h-[75vh] w-full min-h-[480px]"
+            <p className="mt-0.5 text-xs text-gray-500">아래 계약서를 확인한 후 하단에서 서명해 주세요.</p>
+            <div className="mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4">
+              {/* 제일 앞장: 표준도급 계약서 요약 1페이지 */}
+              <ContractSummaryScaled info={info} token={token} signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }} />
+              <PdfToA4Images
+                documentUrl={info.documentUrl}
+                className="space-y-4"
+                fullWidth
               />
             </div>
             <a
@@ -213,6 +340,30 @@ export default function SignPage() {
               onChange={(e) => setSignerName(e.target.value)}
               className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"
               placeholder="성함을 입력하세요"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">주민번호 *</label>
+            <input
+              type="text"
+              value={signerResidentNumber}
+              onChange={(e) => setSignerResidentNumber(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              placeholder="주민등록번호를 입력하세요"
+              autoComplete="off"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">주소 *</label>
+            <input
+              type="text"
+              value={signerAddress}
+              onChange={(e) => setSignerAddress(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              placeholder="주소를 입력하세요"
+              autoComplete="street-address"
               required
             />
           </div>

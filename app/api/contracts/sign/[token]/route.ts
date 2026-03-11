@@ -10,6 +10,7 @@ function rowToSignInfo(row: Record<string, unknown>, includeBody: boolean) {
     status: String(row.status ?? "sent"),
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
     body: includeBody && row.body != null ? String(row.body) : undefined,
+    details: row.details != null ? row.details : undefined,
   };
 }
 
@@ -21,7 +22,7 @@ export async function GET(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const result = await sql`
-      SELECT id, title, customer_name, contact, status, document_path, body
+      SELECT id, title, customer_name, contact, status, document_path, body, details
       FROM contracts
       WHERE sign_token = ${token}
     `;
@@ -46,7 +47,7 @@ export async function POST(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { signerName, signatureData } = body;
+    const { signerName, signerAddress, signerResidentNumber, signatureData } = body;
     if (!signerName || typeof signerName !== "string" || !signerName.trim()) return NextResponse.json({ error: "서명자 이름을 입력해 주세요." }, { status: 400 });
     const result = await sql`
       SELECT id, status FROM contracts WHERE sign_token = ${token}
@@ -54,9 +55,11 @@ export async function POST(
     if (result.rows.length === 0) return NextResponse.json({ error: "유효하지 않거나 만료된 링크입니다." }, { status: 404 });
     if (result.rows[0].status === "signed") return NextResponse.json({ error: "이미 서명이 완료된 계약입니다." }, { status: 400 });
     const sigData = signatureData != null ? String(signatureData) : null;
+    const addr = signerAddress != null ? String(signerAddress).trim() : null;
+    const rrn = signerResidentNumber != null ? String(signerResidentNumber).trim() : null;
     await sql`
       UPDATE contracts
-      SET status = ${"signed"}, signed_at = NOW(), signer_name = ${signerName.trim()}, signature_data = ${sigData}, updated_at = NOW()
+      SET status = ${"signed"}, signed_at = NOW(), signer_name = ${signerName.trim()}, signer_address = ${addr}, signer_resident_number = ${rrn}, signature_data = ${sigData}, updated_at = NOW()
       WHERE sign_token = ${token}
     `;
     return NextResponse.json({ message: "서명이 완료되었습니다." }, { status: 200 });

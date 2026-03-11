@@ -1,0 +1,106 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+
+const A4_WIDTH_PX = 595;
+
+type PdfToA4ImagesProps = {
+  /** 계약 문서 path (예: contracts/master-template.pdf) — documentUrl 없을 때 사용 */
+  documentPath?: string;
+  /** PDF 직접 URL (서명 링크 등) — 있으면 이걸 사용하고 documentPath 무시 */
+  documentUrl?: string;
+  className?: string;
+  /** true이면 maxWidth 제한 없이 컨테이너 폭 전체 사용 */
+  fullWidth?: boolean;
+  /** 이미지 로드 완료 시 호출 (미리보기/인쇄에서 재사용) */
+  onPagesLoaded?: (dataUrls: string[]) => void;
+};
+
+export function PdfToA4Images({ documentPath = "", documentUrl, className = "", fullWidth = false, onPagesLoaded }: PdfToA4ImagesProps) {
+  const [pageImages, setPageImages] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const effectiveUrl = documentUrl || (documentPath.trim() ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/company/contract-document?path=${encodeURIComponent(documentPath)}` : "");
+
+  useEffect(() => {
+    if (!effectiveUrl || typeof window === "undefined") {
+      setPageImages([]);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const pdfjsLib = await import("pdfjs-dist");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lib = pdfjsLib as any;
+        if (typeof window !== "undefined" && lib.GlobalWorkerOptions) {
+          lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${lib.version || "5.4.296"}/build/pdf.worker.min.mjs`;
+        }
+        const loadingTask = lib.getDocument({ url: effectiveUrl });
+        const pdf = await loadingTask.promise;
+        if (cancelled) return;
+        const numPages = pdf.numPages;
+        const scale = 2;
+        const images: string[] = [];
+        for (let i = 1; i <= numPages; i++) {
+          if (cancelled) break;
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          const renderTask = page.render({ canvasContext: ctx, viewport });
+          await (renderTask.promise || Promise.resolve());
+          images.push(canvas.toDataURL("image/png"));
+        }
+        if (!cancelled) setPageImages(images);
+        if (!cancelled && onPagesLoaded && images.length > 0) onPagesLoaded(images);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "PDF 로드 실패");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveUrl]);
+
+  if (loading) {
+    return (
+      <div className={`flex items-center justify-center py-12 text-gray-500 ${className}`}>
+        PDF를 이미지로 변환 중…
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className={`rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 ${className}`}>
+        {error}
+      </div>
+    );
+  }
+  if (pageImages.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={`space-y-4 ${className}`}>
+      {pageImages.map((dataUrl, i) => (
+        <img
+          key={i}
+          src={dataUrl}
+          alt={`계약 문서 ${i + 1}페이지`}
+          className="w-full border border-gray-200 bg-white shadow-sm"
+          style={fullWidth ? undefined : { maxWidth: A4_WIDTH_PX }}
+        />
+      ))}
+    </div>
+  );
+}

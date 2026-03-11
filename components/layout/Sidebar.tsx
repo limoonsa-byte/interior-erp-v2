@@ -21,7 +21,6 @@ import {
   ExternalLink,
   ListChecks,
   Signature,
-  Smartphone,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
@@ -37,7 +36,6 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/chat", label: "채팅", icon: MessageCircle },
-  { href: "/add-to-home", label: "바탕화면에 추가", icon: Smartphone },
   { href: "/admin", label: "관리", icon: Settings },
 ];
 
