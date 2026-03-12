@@ -443,13 +443,13 @@ function ContractForm({
       `<p class="contract-print-sig-title">발주자(수급인)</p>` +
       `<p class="contract-print-sig-line">주소 : ${esc(clientAddress || "")}</p>` +
       `<p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber || "")}</p>` +
-      `<p class="contract-print-sig-line">성명 : ${esc(clientName || "")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="contract-print-red">(인)</span></p>` +
+      `<p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName || "")}<span class="contract-print-in-fixed contract-print-red">(인)</span></p>` +
       `</div>` +
       `<div class="contract-print-sig-block">` +
       `<p class="contract-print-sig-title">시공자(하수급인)</p>` +
       `<p class="contract-print-sig-line">주소 : ${esc(contractorAddress || "")}</p>` +
       `<p class="contract-print-sig-line">상호 : ${esc(contractorCompanyName || "")}</p>` +
-      `<p class="contract-print-sig-line">성명 : ${esc(sigDisplay || "")} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : `<span class="contract-print-red">(인)</span>`}</p>` +
+      `<p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay || "")}<span class="contract-print-in-fixed">${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : `<span class="contract-print-red">(인)</span>`}</span></p>` +
       `</div>` +
       `</div></div>`;
     const docSection =

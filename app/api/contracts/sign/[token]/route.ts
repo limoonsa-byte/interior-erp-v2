@@ -1,5 +1,60 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
+import { buildContractPdf } from "@/lib/buildContractPdf";
+
+function getTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+  });
+}
+
+async function sendSignedContractEmail(
+  to: string,
+  title: string,
+  contractId: number,
+  token: string,
+  pdfBytes: Uint8Array,
+  fromEmail?: string | null
+) {
+  const transporter = getTransporter();
+  if (!transporter) {
+    console.error("SMTP 설정이 없어 이메일을 보낼 수 없습니다.");
+    return;
+  }
+  const from = fromEmail || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@localhost";
+  const subject = title ? `[계약서 서명 완료] ${title}` : "계약서 서명 완료";
+  const safeFileName = (title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
+  const text = `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`;
+  const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;">` +
+    `<h2 style="color:#1a73e8;">계약서 서명이 완료되었습니다</h2>` +
+    `<p><strong>계약서 제목:</strong> ${title}</p>` +
+    `<p>첨부된 PDF 파일을 확인해 주세요.</p>` +
+    `<p style="color:#666;font-size:12px;">본 메일은 자동 발송된 메일입니다.</p>` +
+    `</body></html>`;
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text,
+    html,
+    attachments: [
+      {
+        filename: `${safeFileName}.pdf`,
+        content: Buffer.from(pdfBytes),
+        contentType: "application/pdf",
+      },
+    ],
+  });
+}
 
 function rowToSignInfo(row: Record<string, unknown>, includeBody: boolean) {
   return {
@@ -47,21 +102,60 @@ export async function POST(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { signerName, signerAddress, signerResidentNumber, signatureData } = body;
+    const { signerName, signerAddress, signerResidentNumber, signatureData, signerEmail } = body;
     if (!signerName || typeof signerName !== "string" || !signerName.trim()) return NextResponse.json({ error: "서명자 이름을 입력해 주세요." }, { status: 400 });
     const result = await sql`
-      SELECT id, status FROM contracts WHERE sign_token = ${token}
+      SELECT id, title, status, company_id, document_path, details FROM contracts WHERE sign_token = ${token}
     `;
     if (result.rows.length === 0) return NextResponse.json({ error: "유효하지 않거나 만료된 링크입니다." }, { status: 404 });
     if (result.rows[0].status === "signed") return NextResponse.json({ error: "이미 서명이 완료된 계약입니다." }, { status: 400 });
+    const contractId = result.rows[0].id;
+    const contractTitle = String(result.rows[0].title ?? "");
+    const companyId = Number(result.rows[0].company_id);
+    const documentPath = result.rows[0].document_path != null ? String(result.rows[0].document_path) : null;
+    let contractDetails: Record<string, string> | null = null;
+    try {
+      contractDetails = result.rows[0].details != null
+        ? (typeof result.rows[0].details === "string" ? JSON.parse(result.rows[0].details as string) : result.rows[0].details as Record<string, string>)
+        : null;
+    } catch { contractDetails = null; }
     const sigData = signatureData != null ? String(signatureData) : null;
     const addr = signerAddress != null ? String(signerAddress).trim() : null;
     const rrn = signerResidentNumber != null ? String(signerResidentNumber).trim() : null;
+    const email = signerEmail != null ? String(signerEmail).trim() : null;
     await sql`
       UPDATE contracts
       SET status = ${"signed"}, signed_at = NOW(), signer_name = ${signerName.trim()}, signer_address = ${addr}, signer_resident_number = ${rrn}, signature_data = ${sigData}, updated_at = NOW()
       WHERE sign_token = ${token}
     `;
+    if (email) {
+      await sql`UPDATE contracts SET signer_email = ${email}, updated_at = NOW() WHERE id = ${contractId}`;
+    }
+    try {
+      const companyRow = await sql`SELECT company_email FROM companies WHERE id = ${companyId}`;
+      const companyEmail = companyRow.rows.length > 0 && companyRow.rows[0].company_email
+        ? String(companyRow.rows[0].company_email).trim()
+        : null;
+      if (email || companyEmail) {
+        const pdfBytes = await buildContractPdf({
+          details: contractDetails,
+          signerName: signerName.trim(),
+          signerAddress: addr || "",
+          signerResidentNumber: rrn || "",
+          signatureDataUrl: sigData,
+          companyId,
+          documentPath,
+        });
+        if (email) {
+          await sendSignedContractEmail(email, contractTitle, contractId, token, pdfBytes, companyEmail);
+        }
+        if (companyEmail && companyEmail !== email) {
+          await sendSignedContractEmail(companyEmail, contractTitle, contractId, token, pdfBytes, companyEmail);
+        }
+      }
+    } catch (emailErr) {
+      console.error("서명 완료 이메일 발송 실패:", emailErr);
+    }
     return NextResponse.json({ message: "서명이 완료되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("contracts sign POST error:", error);

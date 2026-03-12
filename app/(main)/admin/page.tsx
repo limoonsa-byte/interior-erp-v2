@@ -76,6 +76,7 @@ export default function AdminPage() {
   const [companyInfoName, setCompanyInfoName] = useState("");
   const [companyInfoAddress, setCompanyInfoAddress] = useState("");
   const [companyInfoRegNo, setCompanyInfoRegNo] = useState("");
+  const [companyInfoEmail, setCompanyInfoEmail] = useState("");
   const [companyInfoSaving, setCompanyInfoSaving] = useState(false);
   const [companyInfoMessage, setCompanyInfoMessage] = useState("");
 
@@ -217,12 +218,14 @@ export default function AdminPage() {
           setCompanyInfoName(data.name ?? "");
           setCompanyInfoAddress(data.contractorAddress ?? "");
           setCompanyInfoRegNo(data.contractorRegNo ?? "");
+          setCompanyInfoEmail(data.companyEmail ?? "");
           setCompanyInfoMessage("");
         })
         .catch(() => {
           setCompanyInfoName("");
           setCompanyInfoAddress("");
           setCompanyInfoRegNo("");
+          setCompanyInfoEmail("");
         });
     }
   }, [modal, loadPics]);
@@ -685,6 +688,7 @@ export default function AdminPage() {
         name: companyInfoName.trim(),
         contractorAddress: companyInfoAddress.trim() || null,
         contractorRegNo: companyInfoRegNo.trim() || null,
+        companyEmail: companyInfoEmail.trim() || null,
       }),
     })
       .then(async (res) => {
@@ -1108,6 +1112,17 @@ export default function AdminPage() {
                   value={companyInfoRegNo}
                   onChange={(e) => setCompanyInfoRegNo(e.target.value)}
                   placeholder="예: 123-45-67890"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  disabled={companyInfoSaving}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">회사 이메일</label>
+                <input
+                  type="email"
+                  value={companyInfoEmail}
+                  onChange={(e) => setCompanyInfoEmail(e.target.value)}
+                  placeholder="예: info@company.com"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                   disabled={companyInfoSaving}
                 />

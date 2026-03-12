@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:open": "concurrently \"next dev\" \"node scripts/open-browser.js\"",
     "build": "node scripts/migrate.js && next build",
     "start": "next start",
     "lint": "eslint",
@@ -33,6 +34,9 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "concurrently": "^9.1.2",
+    "open": "^10.1.0",
+    "wait-on": "^8.0.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^25",
     "@types/nodemailer": "^7.0.11",

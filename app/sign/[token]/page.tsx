@@ -16,7 +16,7 @@ type SignInfo = {
   alreadySigned?: boolean;
 };
 
-/** 계약 details로 표준도급 계약서 요약 1페이지 HTML 생성 (인쇄용과 동일 구조, 도장 포함) */
+/** 계약 details로 표준도급 계약서 요약 1페이지 HTML 생성 (인쇄용과 동일 구조, 도장 포함). 서명은 표 밖 레이어로 따로 겹침 */
 function buildSummaryPageHtml(
   details: Record<string, string> | null,
   stampUrl: string | null,
@@ -77,15 +77,25 @@ function buildSummaryPageHtml(
     (stampHtml ? stampHtml : "") +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line">성명 : ${esc(clientName)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="contract-print-red">(인)</span></p></div>` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(details.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(details.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line">성명 : ${esc(sigDisplay)} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;${stampSigHtml}</p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName)}<span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(details.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(details.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay)}<span class="contract-print-in-fixed contract-print-red">${stampSigHtml}</span></p></div>` +
     `</div></div>`
   );
 }
 
 const A4_WIDTH = 793;
 
-function ContractSummaryScaled({ info, token, signer }: { info: SignInfo; token: string; signer: { name: string; residentNumber: string; address: string } }) {
+function ContractSummaryScaled({
+  info,
+  token,
+  signer,
+  signatureData,
+}: {
+  info: SignInfo;
+  token: string;
+  signer: { name: string; residentNumber: string; address: string };
+  signatureData?: string | null;
+}) {
   const details =
     info.details == null
       ? null
@@ -98,13 +108,62 @@ function ContractSummaryScaled({ info, token, signer }: { info: SignInfo; token:
       : null;
   const summaryHtml = buildSummaryPageHtml(details, stampUrl, signer);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sig1Ref = useRef<HTMLImageElement>(null);
+  const sig2Ref = useRef<HTMLImageElement>(null);
+
+  const hasSignature = !!signatureData && signatureData.startsWith("data:");
+
+  useEffect(() => {
+    if (!hasSignature || !containerRef.current) return;
+    const container = containerRef.current;
+    const inElements = container.querySelectorAll<HTMLElement>(".contract-print-in-fixed");
+    const tableInCells = container.querySelectorAll<HTMLElement>(".contract-print-in");
+    const containerRect = container.getBoundingClientRect();
+
+    if (tableInCells.length > 0 && sig1Ref.current) {
+      const cellRect = tableInCells[0].getBoundingClientRect();
+      const cx = cellRect.left + cellRect.width / 2 - containerRect.left;
+      const cy = cellRect.top + cellRect.height / 2 - containerRect.top;
+      sig1Ref.current.style.left = `${cx}px`;
+      sig1Ref.current.style.top = `${cy}px`;
+      sig1Ref.current.style.transform = "translate(-50%, -50%)";
+    }
+
+    if (inElements.length > 0 && sig2Ref.current) {
+      const inRect = inElements[0].getBoundingClientRect();
+      const cx = inRect.left + inRect.width / 2 - containerRect.left;
+      const cy = inRect.top + inRect.height / 2 - containerRect.top;
+      sig2Ref.current.style.left = `${cx}px`;
+      sig2Ref.current.style.top = `${cy}px`;
+      sig2Ref.current.style.transform = "translate(-50%, -50%)";
+    }
+  });
+
   if (!summaryHtml) return null;
 
   return (
-    <div
-      className="contract-sign-summary mb-4"
-      dangerouslySetInnerHTML={{ __html: summaryHtml }}
-    />
+    <div ref={containerRef} className="contract-sign-summary contract-sign-summary-with-overlays mb-4">
+      <div dangerouslySetInnerHTML={{ __html: summaryHtml }} />
+      {hasSignature && (
+        <>
+          <img
+            ref={sig1Ref}
+            src={signatureData!}
+            className="contract-print-signature-overlay"
+            alt=""
+            aria-hidden
+          />
+          <img
+            ref={sig2Ref}
+            src={signatureData!}
+            className="contract-print-signature-overlay"
+            alt=""
+            aria-hidden
+          />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -118,6 +177,7 @@ export default function SignPage() {
   const [signerAddress, setSignerAddress] = useState("");
   const [signerResidentNumber, setSignerResidentNumber] = useState("");
   const [signatureData, setSignatureData] = useState<string | null>(null);
+  const [signerEmail, setSignerEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -233,6 +293,7 @@ export default function SignPage() {
         signerName: signerName.trim(),
         signerAddress: signerAddress.trim() || undefined,
         signerResidentNumber: signerResidentNumber.trim() || undefined,
+        signerEmail: signerEmail.trim() || undefined,
         signatureData,
       }),
     })
@@ -299,7 +360,12 @@ export default function SignPage() {
             <p className="mt-0.5 text-xs text-gray-500">아래 계약서를 확인한 후 하단에서 서명해 주세요.</p>
             <div className="mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4">
               {/* 제일 앞장: 표준도급 계약서 요약 1페이지 */}
-              <ContractSummaryScaled info={info} token={token} signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }} />
+              <ContractSummaryScaled
+                info={info}
+                token={token}
+                signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
+                signatureData={signatureData}
+              />
               <PdfToA4Images
                 documentUrl={info.documentUrl}
                 className="space-y-4"
@@ -369,15 +435,25 @@ export default function SignPage() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">서명 (아래 칸에 그려 주세요)</label>
-            <div className="mt-1 rounded border-2 border-dashed border-gray-300 bg-gray-50">
+            <div className="mx-auto mt-1 max-w-[480px] rounded border-2 border-dashed border-gray-300 bg-gray-50">
               <canvas
                 ref={canvasRef}
-                className="block h-32 w-full touch-none sm:h-40"
+                className="block h-[216px] w-full touch-none sm:h-[240px]"
                 style={{ touchAction: "none" }}
               />
             </div>
           </div>
           <p className="text-xs text-gray-500">서명일: {new Date().toLocaleDateString("ko-KR")}</p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">계약서 받을 이메일 (선택)</label>
+            <input
+              type="email"
+              value={signerEmail}
+              onChange={(e) => setSignerEmail(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"
+              placeholder="서명 완료 후 계약서를 받을 이메일 주소"
+            />
+          </div>
           <button
             type="submit"
             disabled={submitting}

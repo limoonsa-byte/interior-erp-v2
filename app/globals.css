@@ -44,7 +44,7 @@ body {
     display: none !important;
   }
   /* 인쇄/PDF 저장 시 사진(이미지) 제외 — 계약서 인쇄용 이미지는 예외 */
-  img:not(.contract-print-stamp):not(.contract-print-stamp-sig):not(.contract-print-doc-img),
+  img:not(.contract-print-stamp):not(.contract-print-stamp-sig):not(.contract-print-doc-img):not(.contract-print-signature-overlay),
   picture {
     display: none !important;
   }
@@ -71,9 +71,10 @@ body {
   display: none !important;
 }
 
-/* 서명 화면: 요약 페이지 = 인쇄 미리보기와 동일한 스타일 */
+/* 서명 화면: 요약 페이지 = 인쇄 미리보기와 동일한 스타일. 표는 그대로, 서명/도장은 레이어로 위에 겹침 */
 .contract-sign-summary {
   width: 100%;
+  position: relative;
 }
 .contract-sign-summary .contract-print-summary {
   padding: 0.5in 0.4in !important;
@@ -174,6 +175,16 @@ body {
 .contract-sign-summary .contract-print-sig-line {
   margin: 0;
 }
+.contract-sign-summary .contract-print-sig-line-name {
+  position: relative;
+  padding-right: 11em;
+}
+.contract-sign-summary .contract-print-in-fixed {
+  position: absolute;
+  right: 10em;
+  top: 0;
+  white-space: nowrap;
+}
 /* 서명 화면 요약: 도장 위치 = 인쇄 미리보기와 동일 */
 .contract-sign-summary .contract-print-stamp {
   display: block !important;
@@ -193,6 +204,15 @@ body {
   object-fit: contain;
   vertical-align: middle;
   margin-left: 4px;
+}
+/* 발주자 서명: JS로 (인) 중심에 맞춰 배치, CSS는 공통 스타일만 */
+.contract-sign-summary .contract-print-signature-overlay {
+  position: absolute !important;
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* 견적 미리보기 품목 열: 가로로 표시(세로 한 글자씩 안 나오게) */
@@ -408,6 +428,16 @@ body {
   }
   #contract-print-only .contract-print-sig-line {
     margin: 0;
+  }
+  #contract-print-only .contract-print-sig-line-name {
+    position: relative;
+    padding-right: 11em;
+  }
+  #contract-print-only .contract-print-in-fixed {
+    position: absolute;
+    right: 10em;
+    top: 0;
+    white-space: nowrap;
   }
   /* 페이지1 기준 position context — 도장이 표 밖으로 살짝 나가도 보이게 */
   #contract-print-only .contract-print-page1 {

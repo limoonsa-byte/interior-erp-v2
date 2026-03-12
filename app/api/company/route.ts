@@ -15,7 +15,7 @@ export async function GET() {
     const company = JSON.parse(cookie.value) as { id: number; code: string; name: string };
     
     const { rows } = await sql`
-      SELECT id, code, name, drawing_list_api_url, logo_path, stamp_path, contractor_address, contractor_reg_no
+      SELECT id, code, name, drawing_list_api_url, logo_path, stamp_path, contractor_address, contractor_reg_no, company_email
       FROM companies
       WHERE id = ${company.id}
     `;
@@ -33,6 +33,7 @@ export async function GET() {
       stampPath: rows[0].stamp_path ?? null,
       contractorAddress: rows[0].contractor_address ?? null,
       contractorRegNo: rows[0].contractor_reg_no ?? null,
+      companyEmail: rows[0].company_email ?? null,
     });
   } catch (error) {
     console.error("회사 정보 조회 실패:", error);
@@ -53,18 +54,19 @@ export async function PATCH(req: NextRequest) {
     const company = JSON.parse(cookie.value) as { id: number; code: string; name: string };
     const body = await req.json();
     const cur = await sql`
-      SELECT name, drawing_list_api_url, contractor_address, contractor_reg_no FROM companies WHERE id = ${company.id}
+      SELECT name, drawing_list_api_url, contractor_address, contractor_reg_no, company_email FROM companies WHERE id = ${company.id}
     `;
     if (cur.rows.length === 0) return NextResponse.json({ error: "회사를 찾을 수 없습니다." }, { status: 404 });
-    const row = cur.rows[0] as { name: string | null; drawing_list_api_url: string | null; contractor_address: string | null; contractor_reg_no: string | null };
+    const row = cur.rows[0] as { name: string | null; drawing_list_api_url: string | null; contractor_address: string | null; contractor_reg_no: string | null; company_email: string | null };
     const name = body.name !== undefined ? String(body.name).trim() || row.name : row.name;
     const drawingListApiUrl = body.drawingListApiUrl !== undefined ? body.drawingListApiUrl : row.drawing_list_api_url;
     const contractorAddress = body.contractorAddress !== undefined ? body.contractorAddress : row.contractor_address;
     const contractorRegNo = body.contractorRegNo !== undefined ? body.contractorRegNo : row.contractor_reg_no;
+    const companyEmail = body.companyEmail !== undefined ? body.companyEmail : row.company_email;
 
     await sql`
       UPDATE companies
-      SET name = ${name}, drawing_list_api_url = ${drawingListApiUrl}, contractor_address = ${contractorAddress}, contractor_reg_no = ${contractorRegNo}
+      SET name = ${name}, drawing_list_api_url = ${drawingListApiUrl}, contractor_address = ${contractorAddress}, contractor_reg_no = ${contractorRegNo}, company_email = ${companyEmail}
       WHERE id = ${company.id}
     `;
 

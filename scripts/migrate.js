@@ -161,7 +161,8 @@ async function migrate() {
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_path TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_address TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_reg_no TEXT`;
-    console.log("[migrate] companies logo_path, stamp_path, contractor OK");
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_email TEXT`;
+    console.log("[migrate] companies logo_path, stamp_path, contractor, email OK");
     await sql`
       UPDATE companies SET is_master = true
       WHERE id = (SELECT id FROM companies ORDER BY id ASC LIMIT 1)
