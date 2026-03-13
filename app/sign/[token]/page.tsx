@@ -342,6 +342,11 @@ export default function SignPage() {
         <div className="rounded-lg bg-white p-6 text-center shadow-md max-w-md">
           <h1 className="text-lg font-semibold text-green-700">서명이 완료되었습니다.</h1>
           <p className="mt-2 text-gray-600">계약서 서명이 정상적으로 접수되었습니다.</p>
+          {signerEmail.trim() && (
+            <p className="mt-2 text-sm text-blue-600">
+              {signerEmail.trim()} 으로 계약서가 발송되었습니다.
+            </p>
+          )}
         </div>
       </div>
     );

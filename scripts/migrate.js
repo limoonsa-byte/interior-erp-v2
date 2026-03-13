@@ -162,7 +162,13 @@ async function migrate() {
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_address TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_reg_no TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_email TEXT`;
-    console.log("[migrate] companies logo_path, stamp_path, contractor, email OK");
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_host TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_port TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_user TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_pass TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_oauth_provider TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS smtp_oauth_refresh_token TEXT`;
+    console.log("[migrate] companies logo_path, stamp_path, contractor, email, smtp OK");
     await sql`
       UPDATE companies SET is_master = true
       WHERE id = (SELECT id FROM companies ORDER BY id ASC LIMIT 1)
@@ -366,6 +372,29 @@ async function migrate() {
       )
     `;
     console.log("[migrate] company_order_template OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS master_smtp_config (
+        id INT PRIMARY KEY DEFAULT 1,
+        smtp_oauth_provider TEXT,
+        smtp_oauth_refresh_token TEXT,
+        smtp_user TEXT,
+        smtp_host TEXT,
+        smtp_port TEXT,
+        smtp_pass TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT master_smtp_config_single CHECK (id = 1)
+      )
+    `;
+    await sql`INSERT INTO master_smtp_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+    console.log("[migrate] master_smtp_config OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS oauth_pending_state (
+        state_token TEXT PRIMARY KEY,
+        company_id INT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL
+      )
+    `;
+    console.log("[migrate] oauth_pending_state OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

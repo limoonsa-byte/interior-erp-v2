@@ -1,4 +1,5 @@
-import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import { PDFDocument, rgb } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
 import { readFile } from "fs/promises";
 import path from "path";
 
@@ -16,6 +17,19 @@ interface BuildContractPdfOptions {
 
 function fmtAmt(n: number) {
   return n ? n.toLocaleString("ko-KR") : "";
+}
+
+let fontCache: { regular: Buffer; bold: Buffer } | null = null;
+
+async function loadFonts() {
+  if (fontCache) return fontCache;
+  const fontsDir = path.join(process.cwd(), "fonts");
+  const [regular, bold] = await Promise.all([
+    readFile(path.join(fontsDir, "NanumGothic-Regular.ttf")),
+    readFile(path.join(fontsDir, "NanumGothic-Bold.ttf")),
+  ]);
+  fontCache = { regular, bold };
+  return fontCache;
 }
 
 async function loadStampImage(companyId: number): Promise<Buffer | null> {
@@ -53,11 +67,14 @@ export async function buildContractPdf(opts: BuildContractPdfOptions): Promise<U
   const { details, signerName, signerAddress, signerResidentNumber, signatureDataUrl, companyId, documentPath } = opts;
 
   const pdfDoc = await PDFDocument.create();
-  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  pdfDoc.registerFontkit(fontkit);
 
-  const W = 595.28; // A4 width
-  const H = 841.89; // A4 height
+  const fontData = await loadFonts();
+  const font = await pdfDoc.embedFont(fontData.regular);
+  const fontBold = await pdfDoc.embedFont(fontData.bold);
+
+  const W = 595.28;
+  const H = 841.89;
   const M = 50;
 
   const page = pdfDoc.addPage([W, H]);
@@ -68,87 +85,102 @@ export async function buildContractPdf(opts: BuildContractPdfOptions): Promise<U
     page.drawText(text, { x, y: yPos, size, font: bold ? fontBold : font, color: rgb(0, 0, 0) });
   };
 
-  const drawRedText = (text: string, x: number, yPos: number, size: number) => {
-    page.drawText(text, { x, y: yPos, size, font, color: rgb(0.8, 0, 0) });
-  };
-
-  // Title
-  const titleText = "Contract Summary";
-  drawText(titleText, W / 2 - 60, y, 16, true);
-  y -= 30;
+  drawText("실내건축공사 표준도급 계약서", M + 120, y, 16, true);
+  y -= 36;
 
   if (details && typeof details === "object") {
     const raw = Number(String(details.contractAmount ?? "").replace(/\D/g, "")) || 0;
     const downPct = String(details.downPaymentPercent ?? "").trim();
     const balPct = String(details.balancePercent ?? "").trim();
+    const clientName = signerName || String(details.clientName ?? "");
 
     const lines: Array<[string, string]> = [
-      ["Customer", signerName || String(details.clientName ?? "")],
-      ["Contractor", String(details.contractorCompanyName ?? "")],
-      ["Project", String(details.projectName ?? "")],
-      ["Location", String(details.projectPlace ?? "")],
-      ["Start Date", String(details.projectStartDate ?? "")],
-      ["End Date", String(details.projectEndDate ?? "")],
-      ["Contract Amount", raw ? `${raw.toLocaleString("ko-KR")} won` : "-"],
-      ["Down Payment", downPct ? `${fmtAmt(Math.round(raw * Number(downPct) / 100))} won (${downPct}%)` : "-"],
-      ["Balance", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))} won (${balPct}%)` : "-"],
+      ["발주자(수급인)", clientName],
+      ["시공자(하수급인)", String(details.contractorCompanyName ?? "")],
+      ["공사명", String(details.projectName ?? "")],
+      ["공사장소", String(details.projectPlace ?? "")],
+      ["착공", String(details.projectStartDate ?? "")],
+      ["준공", String(details.projectEndDate ?? "")],
+      ["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 (부가세별도)` : "-"],
+      ["선금", downPct ? `${fmtAmt(Math.round(raw * Number(downPct) / 100))}원 (${downPct}%)` : "-"],
     ];
 
+    let interimList: Array<{ percent: string; daysAfter: string }>;
+    try {
+      const rawP = details.interimPayments;
+      if (rawP && typeof rawP === "string" && rawP.trim()) {
+        const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
+        interimList = Array.isArray(parsed) && parsed.length > 0
+          ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
+          : [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
+      } else interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
+    } catch { interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }]; }
+
+    for (const item of interimList) {
+      const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+      lines.push(["중도금", `${amt}원 (${item.percent}%) - 공사로부터 ${item.daysAfter}일후`]);
+    }
+
+    lines.push(["잔금", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))}원 (${balPct}%)` : "-"]);
+
     for (const [label, value] of lines) {
-      drawText(label + ":", M, y, 10, true);
+      drawText(label, M, y, 10, true);
       drawText(value, M + 120, y, 10);
       y -= 18;
     }
 
-    y -= 10;
+    y -= 14;
+    drawText("발주자(수급인, 이하 \"갑\"이라한다)와 시공자(하수급인, 이하 \"을\"이라 한다)는", M, y, 9);
+    y -= 14;
+    drawText("상기와 같이 계약을 체결하고 전자계약으로 작성한다.", M, y, 9);
+    y -= 24;
 
-    // Signer info
-    drawText("--- Signer ---", M, y, 10, true);
+    drawText("[ 발주자(수급인) ]", M, y, 10, true);
     y -= 18;
-    drawText("Name: " + signerName, M, y, 10);
+    drawText(`주소 : ${signerAddress}`, M, y, 10);
     y -= 18;
-    drawText("Address: " + signerAddress, M, y, 10);
+    drawText(`주민번호 : ${signerResidentNumber}`, M, y, 10);
     y -= 18;
+    drawText(`성명 : ${clientName}  (인)`, M, y, 10);
+    const signerNameY = y;
+    y -= 28;
 
-    // Contractor info
-    y -= 10;
-    drawText("--- Contractor ---", M, y, 10, true);
+    const sigDisplay = String(details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "").trim();
+    drawText("[ 시공자(하수급인) ]", W / 2, y, 10, true);
     y -= 18;
-    drawText("Company: " + String(details.contractorCompanyName ?? ""), M, y, 10);
+    drawText(`주소 : ${String(details.contractorAddress ?? "")}`, W / 2, y, 10);
     y -= 18;
-    drawText("Address: " + String(details.contractorAddress ?? ""), M, y, 10);
+    drawText(`상호 : ${String(details.contractorCompanyName ?? "")}`, W / 2, y, 10);
     y -= 18;
-    drawText("Name: " + String(details.contractorSignature ?? details.contractorName ?? ""), M, y, 10);
+    drawText(`성명 : ${sigDisplay}  (인)`, W / 2, y, 10);
+    const contractorNameY = y;
     y -= 30;
-  }
 
-  // Embed stamp
-  const stampBuf = await loadStampImage(companyId);
-  if (stampBuf) {
-    try {
-      const isPng = stampBuf[0] === 0x89 && stampBuf[1] === 0x50;
-      const stampImg = isPng
-        ? await pdfDoc.embedPng(stampBuf)
-        : await pdfDoc.embedJpg(stampBuf);
-      page.drawImage(stampImg, { x: W - M - 80, y: y + 10, width: 70, height: 70 });
-    } catch { /* ignore */ }
-  }
-
-  // Embed signature
-  if (signatureDataUrl) {
-    const parsed = parseSignatureDataUrl(signatureDataUrl);
-    if (parsed) {
+    const stampBuf = await loadStampImage(companyId);
+    if (stampBuf) {
       try {
-        const sigImg = parsed.type === "png"
-          ? await pdfDoc.embedPng(parsed.bytes)
-          : await pdfDoc.embedJpg(parsed.bytes);
-        page.drawImage(sigImg, { x: M + 60, y: y + 10, width: 100, height: 60 });
-        page.drawImage(sigImg, { x: W / 2 + 20, y: y + 10, width: 100, height: 60 });
+        const isPng = stampBuf[0] === 0x89 && stampBuf[1] === 0x50;
+        const stampImg = isPng
+          ? await pdfDoc.embedPng(stampBuf)
+          : await pdfDoc.embedJpg(stampBuf);
+        page.drawImage(stampImg, { x: W / 2 + 200, y: contractorNameY - 20, width: 60, height: 60 });
       } catch { /* ignore */ }
+    }
+
+    if (signatureDataUrl) {
+      const parsed = parseSignatureDataUrl(signatureDataUrl);
+      if (parsed) {
+        try {
+          const sigImg = parsed.type === "png"
+            ? await pdfDoc.embedPng(parsed.bytes)
+            : await pdfDoc.embedJpg(parsed.bytes);
+          page.drawImage(sigImg, { x: M + 150, y: signerNameY - 20, width: 80, height: 50 });
+          page.drawImage(sigImg, { x: M + 150, y: contractorNameY - 20, width: 80, height: 50 });
+        } catch { /* ignore */ }
+      }
     }
   }
 
-  // Merge uploaded document PDF
   if (documentPath && documentPath.toLowerCase().endsWith(".pdf")) {
     const docBuf = await loadDocumentPdf(documentPath);
     if (docBuf) {

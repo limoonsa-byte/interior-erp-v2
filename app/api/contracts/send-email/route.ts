@@ -1,6 +1,8 @@
+import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
+import { buildContractPdf } from "@/lib/buildContractPdf";
+import { getTransporter } from "@/lib/smtp";
 import { cookies } from "next/headers";
-import nodemailer from "nodemailer";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -13,45 +15,59 @@ async function getCompanyFromCookie() {
   }
 }
 
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-}
-
 export async function POST(request: Request) {
   try {
     const company = await getCompanyFromCookie();
-    if (!company) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
-    const body = await request.json();
-    const { to, signUrl, title } = body;
-    if (!to || typeof to !== "string" || !to.trim()) return NextResponse.json({ error: "수신 이메일을 입력해 주세요." }, { status: 400 });
-    if (!signUrl || typeof signUrl !== "string") return NextResponse.json({ error: "서명 링크가 없습니다." }, { status: 400 });
-    const transporter = getTransporter();
-    if (!transporter) return NextResponse.json({ error: "이메일 발송이 설정되지 않았습니다. SMTP 환경변수를 확인해 주세요." }, { status: 503 });
-    const from = process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@localhost";
-    const subject = title ? `[계약서 서명 요청] ${title}` : "계약서 서명 요청";
-    const text = `아래 링크에서 계약서를 확인하고 서명해 주세요.\n\n${signUrl}`;
-    const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;"><p>아래 링크에서 계약서를 확인하고 서명해 주세요.</p><p><a href="${signUrl}">서명 페이지로 이동</a></p><p style="color:#666;font-size:12px;">${signUrl}</p></body></html>`;
-    await transporter.sendMail({
-      from,
-      to: to.trim(),
-      subject,
-      text,
-      html,
+    if (!company) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { contractId, email } = await request.json();
+    if (!contractId || !email) return NextResponse.json({ error: "contractId와 email은 필수입니다." }, { status: 400 });
+
+    const companyId = company.id;
+    const result = await sql`
+      SELECT id, title, status, company_id, document_path, details, signer_name, signer_address, signer_resident_number, signature_data, sign_token
+      FROM contracts WHERE id = ${contractId} AND company_id = ${companyId}
+    `;
+    if (result.rows.length === 0) return NextResponse.json({ error: "계약서를 찾을 수 없습니다." }, { status: 404 });
+
+    const c = result.rows[0];
+    if (c.status !== "signed") return NextResponse.json({ error: "서명 완료된 계약서만 이메일 발송이 가능합니다." }, { status: 400 });
+
+    const smtp = await getTransporter(companyId);
+    if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail로 연결해 주세요." }, { status: 500 });
+
+    let contractDetails: Record<string, string> | null = null;
+    try {
+      contractDetails = c.details != null
+        ? (typeof c.details === "string" ? JSON.parse(c.details as string) : c.details as Record<string, string>)
+        : null;
+    } catch { contractDetails = null; }
+
+    const pdfBytes = await buildContractPdf({
+      details: contractDetails,
+      signerName: String(c.signer_name ?? ""),
+      signerAddress: String(c.signer_address ?? ""),
+      signerResidentNumber: String(c.signer_resident_number ?? ""),
+      signatureDataUrl: c.signature_data ? String(c.signature_data) : null,
+      companyId,
+      documentPath: c.document_path ? String(c.document_path) : null,
     });
-    return NextResponse.json({ message: "이메일이 발송되었습니다." }, { status: 200 });
+
+    const title = String(c.title ?? "계약서");
+    const safeFileName = title.replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
+
+    await smtp.transporter.sendMail({
+      from: smtp.from,
+      to: String(email).trim(),
+      subject: `[계약서 서명 완료] ${title}`,
+      text: `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`,
+      html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><h2 style="color:#1a73e8;">계약서 서명이 완료되었습니다</h2><p><strong>계약서 제목:</strong> ${title}</p><p>첨부된 PDF 파일을 확인해 주세요.</p><p style="color:#666;font-size:12px;">본 메일은 자동 발송된 메일입니다.</p></body></html>`,
+      attachments: [{ filename: `${safeFileName}.pdf`, content: Buffer.from(pdfBytes), contentType: "application/pdf" }],
+    });
+
+    return NextResponse.json({ message: "이메일이 발송되었습니다." });
   } catch (error) {
-    console.error("contracts send-email error:", error);
-    const msg = error instanceof Error ? error.message : "발송 실패";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("계약서 이메일 발송 실패:", error);
+    return NextResponse.json({ error: "이메일 발송에 실패했습니다." }, { status: 500 });
   }
 }

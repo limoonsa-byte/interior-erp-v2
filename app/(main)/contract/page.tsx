@@ -1,7 +1,106 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
+
+function SignedContractSummary({ contract }: { contract: Contract }) {
+  const d = contract.details as Record<string, string> | null;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const sig1Ref = useRef<HTMLImageElement>(null);
+  const sig2Ref = useRef<HTMLImageElement>(null);
+
+  const hasSignature = !!contract.signatureData && contract.signatureData.startsWith("data:");
+
+  useEffect(() => {
+    if (!hasSignature || !containerRef.current) return;
+    const container = containerRef.current;
+    const inElements = container.querySelectorAll<HTMLElement>(".contract-print-in-fixed");
+    const tableInCells = container.querySelectorAll<HTMLElement>(".contract-print-in");
+    const containerRect = container.getBoundingClientRect();
+    if (tableInCells.length > 0 && sig1Ref.current) {
+      const cellRect = tableInCells[0].getBoundingClientRect();
+      const cx = cellRect.left + cellRect.width / 2 - containerRect.left;
+      const cy = cellRect.top + cellRect.height / 2 - containerRect.top;
+      sig1Ref.current.style.left = `${cx}px`;
+      sig1Ref.current.style.top = `${cy}px`;
+      sig1Ref.current.style.transform = "translate(-50%, -50%)";
+    }
+    if (inElements.length > 0 && sig2Ref.current) {
+      const inRect = inElements[0].getBoundingClientRect();
+      const cx = inRect.left + inRect.width / 2 - containerRect.left;
+      const cy = inRect.top + inRect.height / 2 - containerRect.top;
+      sig2Ref.current.style.left = `${cx}px`;
+      sig2Ref.current.style.top = `${cy}px`;
+      sig2Ref.current.style.transform = "translate(-50%, -50%)";
+    }
+  });
+
+  if (!d || typeof d !== "object") return null;
+  const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const raw = Number(String(d.contractAmount ?? "").replace(/\D/g, "")) || 0;
+  const fmtAmt = (n: number) => (n ? n.toLocaleString("ko-KR") : "");
+  const contractAmountFormatted = raw ? raw.toLocaleString("ko-KR") : "-";
+  const downPct = String(d.downPaymentPercent ?? "").trim();
+  const balPct = String(d.balancePercent ?? "").trim();
+  const downAmtFmt = fmtAmt(downPct ? Math.round(raw * Number(downPct) / 100) : 0);
+  const balanceAmtFmt = fmtAmt(balPct ? Math.round(raw * Number(balPct) / 100) : 0);
+  let interimList: Array<{ percent: string; daysAfter: string }>;
+  try {
+    const rawP = d.interimPayments;
+    if (rawP && typeof rawP === "string" && rawP.trim()) {
+      const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
+      interimList = Array.isArray(parsed) && parsed.length > 0
+        ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
+        : [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }];
+    } else interimList = [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }];
+  } catch { interimList = [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }]; }
+  const interimRows = interimList.map((item, idx) => {
+    const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+    const label = idx === 0 ? "중도금1차" : `중도금${idx + 1}차`;
+    return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter)}일후</span></td></tr>`;
+  }).join("");
+  const rowspanMoney = 3 + interimList.length + 1;
+  const clientName = contract.signerName || String(d.clientName ?? "");
+  const sigDisplay = String(d.contractorSignature ?? d.contractorName ?? d.contractorSignatureDirect ?? "").trim();
+  const clientAddr = contract.signerAddress || String(d.clientAddress ?? d.client_address ?? "").trim();
+  const clientRrn = contract.signerResidentNumber || String(d.clientResidentNumber ?? d.client_resident_number ?? "").trim();
+  const stampHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp" alt="" onerror="this.style.display='none'" />`;
+  const stampSigHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp-sig" alt="" onerror="this.parentElement.innerHTML='<span class=contract-print-red>(인)</span>'" />`;
+  const html =
+    `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
+    `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
+    `<table class="contract-print-main-tbl">` +
+    `<colgroup><col class="contract-print-col-section" /><col class="contract-print-col-label" /><col class="contract-print-col-sub" /><col class="contract-print-col-value2" /><col class="contract-print-col-in" /></colgroup>` +
+    `<tbody>` +
+    `<tr><th rowspan="2" class="contract-print-section-label">계<br/>약<br/>자</th><td class="contract-print-row-label">발주자(수급인)</td><td colspan="2" class="contract-print-value">${esc(clientName)}</td><td class="contract-print-in">(인)</td></tr>` +
+    `<tr><td class="contract-print-row-label">시공자(하수급인)</td><td colspan="2" class="contract-print-value">${esc(d.contractorCompanyName ?? "")}</td><td class="contract-print-in">(인)</td></tr>` +
+    `<tr><th rowspan="4" class="contract-print-section-label">공<br/>사<br/>개<br/>요</th><td class="contract-print-row-label">공 사 명</td><td colspan="3" class="contract-print-value">${esc(d.projectName ?? "")}</td></tr>` +
+    `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(d.projectPlace ?? "")}</td></tr>` +
+    `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(d.projectStartDate ?? "")}</td></tr>` +
+    `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(d.projectEndDate ?? "")}</td></tr>` +
+    `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPct)}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
+    interimRows +
+    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balPct)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
+    `</tbody></table>` +
+    stampHtml +
+    `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
+    `<div class="contract-print-signatures">` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddr)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientRrn)}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName)}<span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(d.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(d.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay)}<span class="contract-print-in-fixed">${stampSigHtml}</span></p></div>` +
+    `</div></div>`;
+  return (
+    <div ref={containerRef} className="contract-sign-summary" style={{ position: "relative" }}>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+      {hasSignature && (
+        <>
+          <img ref={sig1Ref} src={contract.signatureData!} className="contract-print-signature-overlay" alt="" aria-hidden />
+          <img ref={sig2Ref} src={contract.signatureData!} className="contract-print-signature-overlay" alt="" aria-hidden />
+        </>
+      )}
+    </div>
+  );
+}
 
 type Contract = {
   id: number;
@@ -19,6 +118,8 @@ type Contract = {
   signToken?: string;
   signedAt?: string;
   signerName?: string;
+  signerAddress?: string;
+  signerResidentNumber?: string;
   signatureData?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -851,7 +952,6 @@ function ContractForm({
 export default function ContractPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [formOpen, setFormOpen] = useState<"new" | number | null>(null);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceType, setSourceType] = useState<"consultation" | "estimate">("consultation");
   const [consultations, setConsultations] = useState<Consultation[]>([]);
@@ -860,6 +960,10 @@ export default function ContractPage() {
   const [preFill, setPreFill] = useState<{ customerName: string; contact: string; consultationId?: number; estimateId?: number; estimateTitle?: string; address?: string; pyung?: number | string; estimateContractAmount?: number } | null>(null);
   const [sendModal, setSendModal] = useState<{ id: number; signUrl: string; title?: string } | null>(null);
   const [sendEmail, setSendEmail] = useState("");
+  const [signViewContract, setSignViewContract] = useState<Contract | null>(null);
+  const [emailModal, setEmailModal] = useState<Contract | null>(null);
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
 
   const load = () => {
     fetch("/api/contracts")
@@ -873,9 +977,8 @@ export default function ContractPage() {
   }, []);
 
   const filteredContracts = useMemo(() => {
-    if (showCompleted) return contracts;
-    return contracts.filter((c) => c.status !== "signed");
-  }, [contracts, showCompleted]);
+    return contracts;
+  }, [contracts]);
 
   /** 견적 선택 모달에 표시할 견적 (상담미팅 관리에서 완료된 항목 제외) */
   const estimatesToShowInModal = useMemo(() => {
@@ -1095,17 +1198,6 @@ export default function ContractPage() {
       ) : (
         <>
           <p className="text-sm text-gray-500">저장된 계약 목록입니다. 서명 요청 링크를 발송하거나 완료 건을 확인할 수 있습니다.</p>
-          <div className="mb-2 flex items-center gap-3">
-            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={showCompleted}
-                onChange={(e) => setShowCompleted(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              완료 건 보기
-            </label>
-          </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full min-w-[520px] text-left text-sm">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
@@ -1122,9 +1214,7 @@ export default function ContractPage() {
                 {filteredContracts.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-gray-500">
-                      {contracts.length === 0
-                        ? "저장된 계약이 없습니다. \"신규 계약\"으로 작성해 보세요."
-                        : "표시할 계약이 없습니다. '완료 건 보기'를 켜 보세요."}
+                      저장된 계약이 없습니다. &quot;신규 계약&quot;으로 작성해 보세요.
                     </td>
                   </tr>
                 ) : (
@@ -1145,6 +1235,25 @@ export default function ContractPage() {
                             >
                               수정
                             </button>
+                          )}
+                          {c.status === "signed" && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setSignViewContract(c)}
+                                className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
+                              >
+                                계약서 보기
+                              </button>
+                              <span className="text-gray-300">|</span>
+                              <button
+                                type="button"
+                                onClick={() => { setEmailModal(c); setEmailTo(c.signerEmail || ""); }}
+                                className="rounded px-2 py-1 text-green-600 hover:underline active:bg-green-50"
+                              >
+                                이메일 보내기
+                              </button>
+                            </>
                           )}
                           {(c.status === "draft" || c.status === "sent") && (
                             <>
@@ -1180,6 +1289,101 @@ export default function ContractPage() {
             </table>
           </div>
         </>
+      )}
+
+      {signViewContract && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
+            <div className="sticky top-0 z-20 flex items-center justify-between bg-white px-5 pt-5 pb-3 border-b border-gray-100">
+              <h2 className="text-base font-semibold text-gray-900">계약서 보기</h2>
+              <button type="button" onClick={() => setSignViewContract(null)} className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+            <div className="p-5 relative z-0">
+              <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+                <div><span className="font-medium text-gray-500">제목: </span>{signViewContract.title || "-"}</div>
+                <div><span className="font-medium text-gray-500">고객명: </span>{signViewContract.customerName || "-"}</div>
+                <div><span className="font-medium text-gray-500">연락처: </span>{signViewContract.contact || "-"}</div>
+                <div><span className="font-medium text-gray-500">서명자: </span>{signViewContract.signerName || "-"}</div>
+                <div><span className="font-medium text-gray-500">서명일: </span>{signViewContract.signedAt ? new Date(signViewContract.signedAt).toLocaleDateString("ko-KR") : "-"}</div>
+                <div><span className="font-medium text-gray-500">이메일: </span>{signViewContract.signerEmail || "-"}</div>
+              </div>
+
+              {signViewContract.details && (
+                <div className="contract-sign-summary mb-4">
+                  <SignedContractSummary contract={signViewContract} />
+                </div>
+              )}
+
+              {signViewContract.documentPath && (
+                <div className="mb-4">
+                  <PdfToA4Images
+                    documentUrl={`/api/company/contract-document?path=${encodeURIComponent(signViewContract.documentPath)}`}
+                    className="space-y-4"
+                    fullWidth
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {emailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <h2 className="text-base font-semibold text-gray-900 mb-4">계약서 이메일 보내기</h2>
+            <p className="text-sm text-gray-600 mb-1">계약서: {emailModal.title}</p>
+            <p className="text-sm text-gray-600 mb-4">고객: {emailModal.customerName}</p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">받는 이메일 주소</label>
+            <input
+              type="email"
+              value={emailTo}
+              onChange={(e) => setEmailTo(e.target.value)}
+              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+              placeholder="이메일 주소를 입력하세요"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setEmailModal(null); setEmailTo(""); }}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={emailSending || !emailTo.trim()}
+                onClick={async () => {
+                  setEmailSending(true);
+                  try {
+                    const res = await fetch("/api/contracts/send-email", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ contractId: emailModal.id, email: emailTo.trim() }),
+                    });
+                    if (res.ok) {
+                      alert("이메일이 발송되었습니다.");
+                      setEmailModal(null);
+                      setEmailTo("");
+                    } else {
+                      const d = await res.json();
+                      alert(d.error || "이메일 발송에 실패했습니다.");
+                    }
+                  } catch {
+                    alert("이메일 발송에 실패했습니다.");
+                  } finally {
+                    setEmailSending(false);
+                  }
+                }}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {emailSending ? "발송 중..." : "발송"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

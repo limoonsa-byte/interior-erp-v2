@@ -1,36 +1,22 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { buildContractPdf } from "@/lib/buildContractPdf";
-
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    auth: { user, pass },
-  });
-}
+import { getTransporter } from "@/lib/smtp";
 
 async function sendSignedContractEmail(
+  companyId: number,
   to: string,
   title: string,
-  contractId: number,
-  token: string,
-  pdfBytes: Uint8Array,
-  fromEmail?: string | null
+  _contractId: number,
+  _token: string,
+  pdfBytes: Uint8Array
 ) {
-  const transporter = getTransporter();
-  if (!transporter) {
+  const result = await getTransporter(companyId);
+  if (!result) {
     console.error("SMTP 설정이 없어 이메일을 보낼 수 없습니다.");
     return;
   }
-  const from = fromEmail || process.env.MAIL_FROM || process.env.SMTP_USER || "noreply@localhost";
+  const { transporter, from } = result;
   const subject = title ? `[계약서 서명 완료] ${title}` : "계약서 서명 완료";
   const safeFileName = (title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
   const text = `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`;
@@ -147,10 +133,10 @@ export async function POST(
           documentPath,
         });
         if (email) {
-          await sendSignedContractEmail(email, contractTitle, contractId, token, pdfBytes, companyEmail);
+          await sendSignedContractEmail(companyId, email, contractTitle, contractId, token, pdfBytes);
         }
         if (companyEmail && companyEmail !== email) {
-          await sendSignedContractEmail(companyEmail, contractTitle, contractId, token, pdfBytes, companyEmail);
+          await sendSignedContractEmail(companyId, companyEmail, contractTitle, contractId, token, pdfBytes);
         }
       }
     } catch (emailErr) {

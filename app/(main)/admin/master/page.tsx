@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
 
 type DefaultTemplate = {
@@ -148,6 +148,43 @@ export default function MasterAdminPage() {
   const contractPdfInputRef = useRef<HTMLInputElement>(null);
   const [contractPdfFile, setContractPdfFile] = useState<File | null>(null);
   const [contractPdfImporting, setContractPdfImporting] = useState(false);
+  const [masterSmtpConfigured, setMasterSmtpConfigured] = useState(false);
+  const [masterSmtpUser, setMasterSmtpUser] = useState<string | null>(null);
+  const [googleClientIdPaste, setGoogleClientIdPaste] = useState("");
+  const [googleClientSecretPaste, setGoogleClientSecretPaste] = useState("");
+  const [oauthEnvStatus, setOauthEnvStatus] = useState<{
+    hasClientId: boolean;
+    hasClientSecret: boolean;
+    hasAppUrl: boolean;
+    redirectUri: string | null;
+  } | null>(null);
+  const searchParams = useSearchParams();
+
+  const STORAGE_KEY_CLIENT_ID = "master_oauth_google_client_id";
+  const STORAGE_KEY_CLIENT_SECRET = "master_oauth_google_client_secret";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const savedId = localStorage.getItem(STORAGE_KEY_CLIENT_ID);
+      const savedSecret = localStorage.getItem(STORAGE_KEY_CLIENT_SECRET);
+      if (savedId != null) setGoogleClientIdPaste(savedId);
+      if (savedSecret != null) setGoogleClientSecretPaste(savedSecret);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const saveOauthPasteValues = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY_CLIENT_ID, googleClientIdPaste.trim());
+      localStorage.setItem(STORAGE_KEY_CLIENT_SECRET, googleClientSecretPaste.trim());
+      alert("저장되었습니다. 이 기기에서 다시 들어와도 입력값이 유지됩니다.");
+    } catch {
+      alert("저장에 실패했습니다.");
+    }
+  };
+
   useEffect(() => {
     fetch("/api/company/me")
       .then((res) => res.json())
@@ -180,6 +217,71 @@ export default function MasterAdminPage() {
   useEffect(() => {
     if (allowed) loadTemplates();
   }, [allowed]);
+
+  const loadMasterSmtp = () => {
+    fetch("/api/admin/master/smtp")
+      .then((res) => (res.ok ? res.json() : { configured: false }))
+      .then((data) => {
+        setMasterSmtpConfigured(data.configured === true);
+        setMasterSmtpUser(data.user ?? null);
+      })
+      .catch(() => {
+        setMasterSmtpConfigured(false);
+        setMasterSmtpUser(null);
+      });
+  };
+
+  const loadOauthStatus = () => {
+    fetch("/api/admin/master/smtp-oauth/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && typeof data.hasClientId === "boolean") setOauthEnvStatus(data);
+        else setOauthEnvStatus(null);
+      })
+      .catch(() => setOauthEnvStatus(null));
+  };
+
+  useEffect(() => {
+    if (allowed) {
+      loadMasterSmtp();
+      loadOauthStatus();
+    }
+  }, [allowed]);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (err && typeof window !== "undefined") {
+      const hint = searchParams.get("hint") ?? "";
+      const messages: Record<string, string> = {
+        smtp_oauth_denied: "Gmail 권한을 허용하지 않았습니다.",
+        smtp_oauth_invalid: "잘못된 요청입니다. 다시 Gmail로 연결을 시도해 주세요.",
+        smtp_oauth_unauthorized: "마스터 권한이 필요합니다. 로그인 상태를 확인해 주세요.",
+        smtp_oauth_not_configured: "Vercel에 GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET을 설정해 주세요.",
+        smtp_oauth_no_refresh:
+          "Google에서 refresh token을 받지 못했습니다. 이미 이 앱을 허용한 적이 있으면 Google이 다시 토큰을 주지 않을 수 있습니다.\n\n해결: Google 계정 → 보안 → Google에 연결된 앱 및 서비스에서 이 앱(인테리어 ERP) 접근을 해제한 뒤, 아래 'Gmail로 연결'을 다시 눌러 주세요.",
+        smtp_oauth_token_error: hint
+          ? `Google 토큰 오류: ${hint}\n\n앱 연결을 해제한 뒤 다시 시도해 보세요.`
+          : "Google 토큰 발급 중 오류가 났습니다. Google에 연결된 앱에서 이 앱을 해제한 뒤 다시 시도해 주세요.",
+        smtp_oauth_db_error: "DB 저장 중 오류가 났습니다. 마이그레이션(/api/admin/migrate)을 실행한 뒤 다시 시도해 주세요.",
+      };
+      const msg = messages[err] || "연결 중 오류가 발생했습니다.";
+      window.history.replaceState({}, "", "/admin/master");
+      alert(msg);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const ok = searchParams.get("smtp_oauth");
+    if (ok === "ok") {
+      if (typeof window !== "undefined" && window.opener) {
+        window.opener.location.reload();
+        window.close();
+        return;
+      }
+      if (typeof window !== "undefined") window.history.replaceState({}, "", "/admin/master");
+      loadMasterSmtp();
+    }
+  }, [searchParams]);
 
   const loadContractTemplate = () => {
     setContractTemplateLoading(true);
@@ -456,6 +558,168 @@ export default function MasterAdminPage() {
         </p>
       </div>
 
+      {/* 마스터 메일(OAuth) */}
+      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-base font-semibold text-gray-800">마스터 메일(OAuth)</h2>
+        <p className="mb-4 text-sm text-gray-600">
+          회사별 이메일 설정이 없을 때 계약서 등 메일을 이 계정으로 대신 발송합니다. Gmail로 연결하면 비밀번호 없이 OAuth로 발송됩니다. 보내는 이는 각 회사(회사명·회사 이메일)로 표시됩니다.
+        </p>
+        <p className="mb-2 text-xs font-medium text-gray-700">Google Cloud Console → 사용자 인증 정보 → OAuth 2.0 클라이언트 ID → 승인된 리디렉션 URI에 아래 주소를 추가하세요.</p>
+        <div className="mb-4 space-y-2">
+          {typeof window !== "undefined" && (() => {
+            const base = (process.env.NEXT_PUBLIC_APP_URL || (window.location.origin === "http://localhost:3000" ? "https://interior-erp-v2.vercel.app" : window.location.origin)).replace(/\/$/, "");
+            return (
+              <>
+                <div className="flex items-center gap-2 rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-800 break-all">
+                  <span className="flex-1 min-w-0">{base}/api/admin/master/smtp-oauth/gmail/callback</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${base}/api/admin/master/smtp-oauth/gmail/callback`;
+                      void navigator.clipboard.writeText(url);
+                      alert("주소가 복사되었습니다. Google Cloud Console에 붙여넣기 하세요.");
+                    }}
+                    className="flex-shrink-0 rounded border border-gray-400 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    복사
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 rounded-lg bg-gray-100 p-3 font-mono text-xs text-gray-800 break-all">
+                  <span className="flex-1 min-w-0">{base}/api/company/smtp-oauth/gmail/callback</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${base}/api/company/smtp-oauth/gmail/callback`;
+                      void navigator.clipboard.writeText(url);
+                      alert("주소가 복사되었습니다. Google Cloud Console에 붙여넣기 하세요.");
+                    }}
+                    className="flex-shrink-0 rounded border border-gray-400 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    복사
+                  </button>
+                </div>
+              </>
+            );
+          })()}
+        </div>
+        {oauthEnvStatus != null && (
+          <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs">
+            <p className="mb-2 font-medium text-gray-700">연결 실패 시 확인 (서버에 설정된 값)</p>
+            <p className="mb-1">
+              GOOGLE_CLIENT_ID: {oauthEnvStatus.hasClientId ? <span className="text-green-600">✓ 설정됨</span> : <span className="text-red-600">✗ 없음 → Vercel 환경 변수에 추가 후 재배포</span>}
+            </p>
+            <p className="mb-1">
+              GOOGLE_CLIENT_SECRET: {oauthEnvStatus.hasClientSecret ? <span className="text-green-600">✓ 설정됨</span> : <span className="text-red-600">✗ 없음 → Vercel 환경 변수에 추가 후 재배포</span>}
+            </p>
+            <p className="mb-1">
+              NEXT_PUBLIC_APP_URL: {oauthEnvStatus.hasAppUrl ? <span className="text-green-600">✓ 설정됨</span> : <span className="text-red-600">✗ 없음</span>}
+              {oauthEnvStatus.redirectUri && <span className="ml-1 text-gray-500">→ 콜백: {oauthEnvStatus.redirectUri}</span>}
+            </p>
+            <p className="mt-2 text-gray-600">위 콜백 주소가 Google Cloud Console → 승인된 리디렉션 URI에 정확히 등록되어 있어야 합니다.</p>
+          </div>
+        )}
+        <p className="mb-2 text-xs font-medium text-gray-700">Vercel 환경 변수에 넣을 값 (Google Cloud Console에서 복사한 뒤 아래에 붙여넣고 [저장] 후 [복사]로 Vercel에 넣기)</p>
+        <p className="mb-2 text-xs text-gray-600">아래에 넣고 [저장]을 누르면 이 기기 브라우저에만 저장되어, 다시 들어와도 입력값이 유지됩니다. Gmail 연결에 실제로 쓰이는 값은 Vercel 프로젝트 설정 → Environment Variables입니다.</p>
+        <p className="mb-2 text-xs text-amber-700">※ 클라이언트 ID 형식: …apps.googleusercontent.com. &quot;master&quot; 같은 글자는 넣으면 안 됩니다.</p>
+        <div className="mb-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="w-32 flex-shrink-0 text-xs text-gray-600">GOOGLE_CLIENT_ID</label>
+            <input
+              type="text"
+              value={googleClientIdPaste}
+              onChange={(e) => setGoogleClientIdPaste(e.target.value)}
+              placeholder="예: 123456789-xxxx.apps.googleusercontent.com"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 font-mono text-xs"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (googleClientIdPaste.trim()) {
+                  void navigator.clipboard.writeText(googleClientIdPaste.trim());
+                  alert("클립보드에 복사되었습니다. Vercel 환경 변수에 붙여넣기 하세요.");
+                }
+              }}
+              className="flex-shrink-0 rounded border border-gray-400 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              복사
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="w-32 flex-shrink-0 text-xs text-gray-600">GOOGLE_CLIENT_SECRET</label>
+            <input
+              type="password"
+              value={googleClientSecretPaste}
+              onChange={(e) => setGoogleClientSecretPaste(e.target.value)}
+              placeholder="Google에서 보안 비밀번호 복사 후 붙여넣기"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 font-mono text-xs"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (googleClientSecretPaste.trim()) {
+                  void navigator.clipboard.writeText(googleClientSecretPaste.trim());
+                  alert("클립보드에 복사되었습니다. Vercel 환경 변수에 붙여넣기 하세요.");
+                }
+              }}
+              className="flex-shrink-0 rounded border border-gray-400 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              복사
+            </button>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={saveOauthPasteValues}
+              className="rounded border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              저장 (이 기기에만 저장)
+            </button>
+          </div>
+        </div>
+        {masterSmtpConfigured ? (
+          <div>
+            <p className="mb-2 text-sm font-medium text-green-700">Gmail 연결됨</p>
+            <p className="mb-2 text-sm text-gray-600">{masterSmtpUser || "해당 계정으로 발송됩니다."}</p>
+            <button
+              type="button"
+              onClick={() => {
+                fetch("/api/admin/master/smtp", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ disconnect: true }),
+                })
+                  .then((res) => {
+                    if (res.ok) {
+                      setMasterSmtpConfigured(false);
+                      setMasterSmtpUser(null);
+                    } else return res.json().then((d) => Promise.reject(new Error((d as { error?: string }).error)));
+                  })
+                  .catch((e) => alert(e instanceof Error ? e.message : "연결 해제 실패"));
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Gmail 연결 해제
+            </button>
+          </div>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={() => {
+                const url = "/api/admin/master/smtp-oauth/gmail/start";
+                window.open(url, "master_gmail_oauth", "width=520,height=640,scrollbars=yes");
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <span className="inline-block flex h-4 w-4 items-center justify-center rounded bg-[#ea4335]/20 text-xs font-bold text-[#ea4335]">G</span>
+              Gmail로 연결 (새 창)
+            </button>
+          </div>
+        )}
+      </section>
+
       {/* 1. 자재 발주 기본 품목 (발주 유형별) */}
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-2 text-base font-semibold text-gray-800">자재 발주 기본 품목(발주 유형별)</h2>
@@ -580,7 +844,7 @@ export default function MasterAdminPage() {
               <label className="mb-1 block text-sm font-medium text-gray-700">계약서 제목 (기본값)</label>
               <input
                 type="text"
-                value={contractTemplateTitle}
+                value={contractTemplateTitle ?? ""}
                 onChange={(e) => setContractTemplateTitle(e.target.value)}
                 placeholder="예: 인테리어 시공 계약서"
                 className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
@@ -606,7 +870,7 @@ export default function MasterAdminPage() {
                 <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문</label>
                 <p className="mb-1 text-xs text-gray-500">엑셀 불러오기 시 여기에 채워지거나, 위에서 PDF 그대로 저장하면 PDF가 사용됩니다.</p>
                 <textarea
-                  value={contractTemplateBody}
+                  value={contractTemplateBody ?? ""}
                   onChange={(e) => setContractTemplateBody(e.target.value)}
                   placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요. 줄바꿈이 유지됩니다."
                   rows={12}
@@ -640,7 +904,7 @@ export default function MasterAdminPage() {
             <label className="mb-1 block text-sm font-medium text-gray-700">템플릿 제목</label>
             <input
               type="text"
-              value={title}
+              value={title ?? ""}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="예: 표준 인테리어 견적"
               className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"

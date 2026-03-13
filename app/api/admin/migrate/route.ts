@@ -77,6 +77,31 @@ export async function POST(request: Request) {
     results.push("schedule_phases 컬럼 확인");
 
     await sql`
+      CREATE TABLE IF NOT EXISTS master_smtp_config (
+        id INT PRIMARY KEY DEFAULT 1,
+        smtp_oauth_provider TEXT,
+        smtp_oauth_refresh_token TEXT,
+        smtp_user TEXT,
+        smtp_host TEXT,
+        smtp_port TEXT,
+        smtp_pass TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT master_smtp_config_single CHECK (id = 1)
+      )
+    `;
+    await sql`INSERT INTO master_smtp_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
+    results.push("master_smtp_config 테이블 확인");
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS oauth_pending_state (
+        state_token TEXT PRIMARY KEY,
+        company_id INT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL
+      )
+    `;
+    results.push("oauth_pending_state 테이블 확인");
+
+    await sql`
       CREATE TABLE IF NOT EXISTS env_backup (
         id INT PRIMARY KEY DEFAULT 1,
         content TEXT,

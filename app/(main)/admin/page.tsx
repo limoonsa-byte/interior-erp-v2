@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
@@ -19,6 +20,7 @@ type DefaultEstimateTemplate = {
 type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates" | "logo-stamp" | "company-contract" | "company-info";
 
 export default function AdminPage() {
+  const searchParams = useSearchParams();
   const [pinStatus, setPinStatus] = useState<{ hasPin: boolean } | null>(null);
   const [pinInput, setPinInput] = useState("");
   const [adminUnlocked, setAdminUnlocked] = useState(false);
@@ -79,6 +81,13 @@ export default function AdminPage() {
   const [companyInfoEmail, setCompanyInfoEmail] = useState("");
   const [companyInfoSaving, setCompanyInfoSaving] = useState(false);
   const [companyInfoMessage, setCompanyInfoMessage] = useState("");
+  const [smtpConfigured, setSmtpConfigured] = useState<boolean | null>(null);
+  const [smtpOauthProvider, setSmtpOauthProvider] = useState<string | null>(null);
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPass, setSmtpPass] = useState("");
+  const [showNaverAppPasswordModal, setShowNaverAppPasswordModal] = useState(false);
+  const [naverAppPasswordInput, setNaverAppPasswordInput] = useState("");
+  const [naverAppPasswordSaving, setNaverAppPasswordSaving] = useState(false);
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -220,15 +229,47 @@ export default function AdminPage() {
           setCompanyInfoRegNo(data.contractorRegNo ?? "");
           setCompanyInfoEmail(data.companyEmail ?? "");
           setCompanyInfoMessage("");
+          setSmtpUser(data.smtpUser ?? "");
+          setSmtpPass("");
+          setSmtpOauthProvider(data.smtpOauthProvider ?? null);
         })
         .catch(() => {
           setCompanyInfoName("");
           setCompanyInfoAddress("");
           setCompanyInfoRegNo("");
           setCompanyInfoEmail("");
+          setSmtpUser("");
+          setSmtpPass("");
+          setSmtpOauthProvider(null);
         });
+      fetch("/api/admin/smtp-status")
+        .then((res) => res.ok ? res.json() : { configured: false })
+        .then((data) => setSmtpConfigured(data.configured === true))
+        .catch(() => setSmtpConfigured(false));
     }
   }, [modal, loadPics]);
+
+  useEffect(() => {
+    const ok = searchParams.get("smtp_oauth");
+    if (ok === "ok") {
+      if (typeof window !== "undefined" && window.opener) {
+        window.opener.location.reload();
+        window.close();
+        return;
+      }
+      setModal("company-info");
+      if (typeof window !== "undefined") window.history.replaceState({}, "", "/admin");
+    }
+    if (ok === "naver_ok") {
+      if (typeof window !== "undefined" && window.opener) {
+        window.history.replaceState({}, "", "/admin");
+        setShowNaverAppPasswordModal(true);
+        return;
+      }
+      setModal("company-info");
+      if (typeof window !== "undefined") window.history.replaceState({}, "", "/admin");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!modal) return;
@@ -689,6 +730,8 @@ export default function AdminPage() {
         contractorAddress: companyInfoAddress.trim() || null,
         contractorRegNo: companyInfoRegNo.trim() || null,
         companyEmail: companyInfoEmail.trim() || null,
+        smtpUser: smtpUser.trim() || null,
+        smtpPass: smtpPass.trim() ? smtpPass : undefined,
       }),
     })
       .then(async (res) => {
@@ -705,6 +748,36 @@ export default function AdminPage() {
       })
       .catch(() => setCompanyInfoMessage("오류가 발생했습니다."))
       .finally(() => setCompanyInfoSaving(false));
+  };
+
+  const handleSaveNaverAppPassword = () => {
+    const pass = naverAppPasswordInput.trim();
+    if (!pass) return;
+    setNaverAppPasswordSaving(true);
+    fetch("/api/company", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ smtpPass: pass }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (typeof window !== "undefined" && window.opener) {
+            window.opener.location.reload();
+            window.close();
+          } else {
+            setShowNaverAppPasswordModal(false);
+            setNaverAppPasswordInput("");
+            setModal("company-info");
+            fetch("/api/company").then((r) => r.json()).then((d) => { setSmtpOauthProvider(d.smtpOauthProvider ?? null); setSmtpUser(d.smtpUser ?? ""); });
+            fetch("/api/admin/smtp-status").then((r) => r.json()).then((d) => setSmtpConfigured(d.configured === true));
+          }
+        } else {
+          alert((data as { error?: string }).error || "저장 실패");
+        }
+      })
+      .catch(() => alert("오류가 발생했습니다."))
+      .finally(() => setNaverAppPasswordSaving(false));
   };
 
   if (pinStatus === null) {
@@ -1149,6 +1222,46 @@ export default function AdminPage() {
                 disabled={companyInfoSaving}
               >
                 {companyInfoSaving ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 네이버 앱 비밀번호 입력 모달 (OAuth 콜백 팝업용) */}
+      {showNaverAppPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="mb-2 text-base font-semibold text-gray-800">네이버 메일 발송 설정</h2>
+            <p className="mb-3 text-sm text-gray-600">메일 발송을 위해 앱 비밀번호를 한 번 입력하세요. 네이버: 메일 환경설정 → POP3·IMAP → 보안 연결에서 발급할 수 있습니다.</p>
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-medium text-gray-600">앱 비밀번호</label>
+              <input
+                type="password"
+                value={naverAppPasswordInput}
+                onChange={(e) => setNaverAppPasswordInput(e.target.value)}
+                placeholder="앱 비밀번호 입력"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                disabled={naverAppPasswordSaving}
+                autoComplete="off"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowNaverAppPasswordModal(false); setNaverAppPasswordInput(""); if (typeof window !== "undefined" && window.opener) window.close(); }}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={naverAppPasswordSaving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveNaverAppPassword}
+                disabled={naverAppPasswordSaving || !naverAppPasswordInput.trim()}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {naverAppPasswordSaving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>
