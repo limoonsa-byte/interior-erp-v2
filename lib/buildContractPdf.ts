@@ -71,13 +71,16 @@ function parseSignatureDataUrl(dataUrl: string): { buf: Buffer; type: "png" | "j
   }
 }
 
+/* ------------------------------------------------------------------ */
+/*  PDF 페이지 생성 (pdfkit) – 테이블+테두리 레이아웃                   */
+/* ------------------------------------------------------------------ */
 function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
   const { details, signerName, signerAddress, signerResidentNumber, signatureDataUrl, companyId } = opts;
   const fonts = getFontPaths();
 
   return new Promise(async (resolve, reject) => {
     try {
-      const doc = new PDFDocumentKit({ size: "A4", margin: 50 });
+      const doc = new PDFDocumentKit({ size: "A4", margins: { top: 40, bottom: 40, left: 40, right: 40 } });
       const chunks: Buffer[] = [];
       doc.on("data", (c: Buffer) => chunks.push(c));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
@@ -86,105 +89,187 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
       doc.registerFont("Regular", fonts.regular);
       doc.registerFont("Bold", fonts.bold);
 
-      const M = 50;
-      const W = 595.28;
+      const PAGE_W = 595.28;
+      const M = 40;
+      const TL = M;
+      const TR = PAGE_W - M;
+      const TW = TR - TL;
 
-      doc.font("Bold").fontSize(16).text("실내건축공사 표준도급 계약서", M, M, { align: "center", width: W - M * 2 });
+      const C1W = 55;
+      const C2W = 110;
+      const C1X = TL;
+      const C2X = C1X + C1W;
+      const C3X = C2X + C2W;
+      const C3W = TW - C1W - C2W;
+      const RH = 25;
+      const PAD = 6;
 
-      let y = M + 36;
+      doc.lineWidth(0.5).strokeColor("#555555");
 
-      const drawLabel = (label: string, value: string, x: number, yPos: number) => {
-        doc.font("Bold").fontSize(10).text(label, x, yPos, { continued: false });
-        doc.font("Regular").fontSize(10).text(value, x + 120, yPos, { continued: false });
+      const drawCellText = (
+        text: string, x: number, y: number, w: number, h: number,
+        bold = false, fontSize = 9, align: "left" | "center" | "right" = "left",
+      ) => {
+        const lines = text.split("\n");
+        const lineH = fontSize * 1.4;
+        const totalH = lineH * lines.length;
+        const startY = y + (h - totalH) / 2 + fontSize * 0.25;
+        doc.font(bold ? "Bold" : "Regular").fontSize(fontSize);
+        for (let i = 0; i < lines.length; i++) {
+          doc.text(lines[i], x + PAD, startY + lineH * i, {
+            width: w - PAD * 2,
+            align,
+            lineBreak: false,
+          });
+        }
       };
 
-      if (details && typeof details === "object") {
-        const raw = Number(String(details.contractAmount ?? "").replace(/\D/g, "")) || 0;
-        const downPct = String(details.downPaymentPercent ?? "").trim();
-        const balPct = String(details.balancePercent ?? "").trim();
-        const clientName = signerName || String(details.clientName ?? "");
+      const cell = (
+        x: number, y: number, w: number, h: number,
+        text: string, bold = false, fontSize = 9, align: "left" | "center" | "right" = "left",
+      ) => {
+        doc.rect(x, y, w, h).stroke();
+        if (text) drawCellText(text, x, y, w, h, bold, fontSize, align);
+      };
 
-        const lines: Array<[string, string]> = [
-          ["발주자(수급인)", clientName],
-          ["시공자(하수급인)", String(details.contractorCompanyName ?? "")],
-          ["공사명", String(details.projectName ?? "")],
-          ["공사장소", String(details.projectPlace ?? "")],
-          ["착공", String(details.projectStartDate ?? "")],
-          ["준공", String(details.projectEndDate ?? "")],
-          ["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 (부가세별도)` : "-"],
-          ["선금", downPct ? `${fmtAmt(Math.round(raw * Number(downPct) / 100))}원 (${downPct}%)` : "-"],
-        ];
+      // ===== 제목 =====
+      let y = M;
+      doc.font("Bold").fontSize(15);
+      doc.text("실내건축공사 표준도급 계약서", TL, y, { width: TW, align: "center" });
+      y += 40;
 
-        let interimList: Array<{ percent: string; daysAfter: string }>;
-        try {
-          const rawP = details.interimPayments;
-          if (rawP && typeof rawP === "string" && rawP.trim()) {
-            const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
-            interimList = Array.isArray(parsed) && parsed.length > 0
-              ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
-              : [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
-          } else interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
-        } catch { interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }]; }
+      if (!details || typeof details !== "object") { doc.end(); return; }
 
-        for (const item of interimList) {
-          const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
-          lines.push(["중도금", `${amt}원 (${item.percent}%) - 공사로부터 ${item.daysAfter}일후`]);
-        }
+      const raw = Number(String(details.contractAmount ?? "").replace(/\D/g, "")) || 0;
+      const downPct = String(details.downPaymentPercent ?? "").trim();
+      const balPct = String(details.balancePercent ?? "").trim();
+      const clientName = signerName || String(details.clientName ?? "");
+      const contractorCompany = String(details.contractorCompanyName ?? "");
 
-        lines.push(["잔금", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))}원 (${balPct}%)` : "-"]);
+      let interimList: Array<{ percent: string; daysAfter: string }>;
+      try {
+        const rawP = details.interimPayments;
+        if (rawP && typeof rawP === "string" && rawP.trim()) {
+          const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
+          interimList = Array.isArray(parsed) && parsed.length > 0
+            ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
+            : [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
+        } else interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
+      } catch { interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }]; }
 
-        for (const [label, value] of lines) {
-          drawLabel(label, value, M, y);
-          y += 18;
-        }
+      const payRows: [string, string][] = [];
+      payRows.push(["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 부가세별도` : "-"]);
+      payRows.push(["선 금", downPct ? `${fmtAmt(Math.round(raw * Number(downPct) / 100))}원 (${downPct} %) 계약이후 바로` : "-"]);
+      interimList.forEach((item, i) => {
+        const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+        const label = interimList.length > 1 ? `중도금${i + 1}차` : "중도금";
+        payRows.push([label, `${amt}원 (${item.percent} %) 공사로부터 ${item.daysAfter}일후`]);
+      });
+      payRows.push(["잔 금", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))}원 (${balPct} %) 공사완료 시` : "-"]);
 
-        y += 14;
-        doc.font("Regular").fontSize(9).text(
-          "발주자(수급인, 이하 \"갑\"이라한다)와 시공자(하수급인, 이하 \"을\"이라 한다)는", M, y
-        );
-        y += 14;
-        doc.font("Regular").fontSize(9).text(
-          "상기와 같이 계약을 체결하고 전자계약으로 작성한다.", M, y
-        );
-        y += 24;
+      // ────────────────────────────────────────
+      //  섹션 1: 계약자 (2행)
+      // ────────────────────────────────────────
+      const s1 = y;
+      cell(C1X, s1, C1W, RH * 2, "계\n약\n자", true, 9, "center");
+      cell(C2X, s1, C2W, RH, "발주자(수급인)", true, 9, "center");
+      doc.rect(C3X, s1, C3W, RH).stroke();
+      drawCellText(clientName, C3X, s1, C3W - 35, RH);
+      drawCellText("(인)", C3X + C3W - 35, s1, 30, RH, false, 9, "right");
 
-        doc.font("Bold").fontSize(10).text("[ 발주자(수급인) ]", M, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`주소 : ${signerAddress}`, M, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`주민번호 : ${signerResidentNumber}`, M, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`성명 : ${clientName}  (인)`, M, y);
-        const signerNameY = y;
-        y += 28;
+      cell(C2X, s1 + RH, C2W, RH, "시공자(하수급인)", true, 9, "center");
+      doc.rect(C3X, s1 + RH, C3W, RH).stroke();
+      drawCellText(contractorCompany, C3X, s1 + RH, C3W - 35, RH);
+      drawCellText("(인)", C3X + C3W - 35, s1 + RH, 30, RH, false, 9, "right");
+      y = s1 + RH * 2;
 
-        const sigDisplay = String(details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "").trim();
-        const rightX = W / 2;
-        doc.font("Bold").fontSize(10).text("[ 시공자(하수급인) ]", rightX, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`주소 : ${String(details.contractorAddress ?? "")}`, rightX, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`상호 : ${String(details.contractorCompanyName ?? "")}`, rightX, y);
-        y += 18;
-        doc.font("Regular").fontSize(10).text(`성명 : ${sigDisplay}  (인)`, rightX, y);
-        const contractorNameY = y;
+      // ────────────────────────────────────────
+      //  섹션 2: 공사개요 (4행)
+      // ────────────────────────────────────────
+      const s2 = y;
+      cell(C1X, s2, C1W, RH * 4, "공\n사\n개\n요", true, 9, "center");
+      cell(C2X, s2, C2W, RH, "공 사 명", true, 9, "center");
+      cell(C3X, s2, C3W, RH, String(details.projectName ?? ""));
 
-        const stampBuf = await loadStampImage(companyId);
-        if (stampBuf) {
+      cell(C2X, s2 + RH, C2W, RH, "공사장소(현장)", true, 9, "center");
+      cell(C3X, s2 + RH, C3W, RH, String(details.projectPlace ?? ""));
+
+      const subW = 55;
+      cell(C2X, s2 + RH * 2, C2W, RH * 2, "공사기간", true, 9, "center");
+      cell(C3X, s2 + RH * 2, subW, RH, "착 공", false, 9, "center");
+      cell(C3X + subW, s2 + RH * 2, C3W - subW, RH, String(details.projectStartDate ?? ""));
+      cell(C3X, s2 + RH * 3, subW, RH, "준 공", false, 9, "center");
+      cell(C3X + subW, s2 + RH * 3, C3W - subW, RH, String(details.projectEndDate ?? ""));
+      y = s2 + RH * 4;
+
+      // ────────────────────────────────────────
+      //  섹션 3: 공사대금 (N행)
+      // ────────────────────────────────────────
+      const s3 = y;
+      const s3n = payRows.length;
+      cell(C1X, s3, C1W, RH * s3n, "공\n사\n대\n금", true, 9, "center");
+      payRows.forEach(([label, value], i) => {
+        cell(C2X, s3 + RH * i, C2W, RH, label, true, 9, "center");
+        cell(C3X, s3 + RH * i, C3W, RH, value);
+      });
+      y = s3 + RH * s3n;
+
+      // ────────────────────────────────────────
+      //  계약 문구
+      // ────────────────────────────────────────
+      y += 20;
+      doc.font("Regular").fontSize(9);
+      doc.text(
+        '발주자(수급인, 이하 "갑"이라한다)와 시공자(하수급인, 이하 "을"이라 한다)는',
+        TL, y, { width: TW },
+      );
+      y += 14;
+      doc.text("상기와 같이 계약을 체결하고 전자계약으로 작성한다.", TL, y, { width: TW });
+      y += 30;
+
+      // ────────────────────────────────────────
+      //  서명 섹션 (좌: 발주자, 우: 시공자)
+      // ────────────────────────────────────────
+      const halfW = TW / 2 - 10;
+      const rX = TL + TW / 2 + 10;
+
+      doc.font("Bold").fontSize(10);
+      doc.text("발주자(수급인)", TL, y, { width: halfW });
+      doc.text("시공자(하수급인)", rX, y, { width: halfW });
+      y += 20;
+
+      doc.font("Regular").fontSize(9);
+      doc.text(`주소 : ${signerAddress}`, TL, y, { width: halfW });
+      doc.text(`주소 : ${String(details.contractorAddress ?? "")}`, rX, y, { width: halfW });
+      y += 16;
+      doc.text(`주민번호 : ${signerResidentNumber}`, TL, y, { width: halfW });
+      doc.text(`상호 : ${contractorCompany}`, rX, y, { width: halfW });
+      y += 16;
+
+      const sigDisplay = String(
+        details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "",
+      ).trim();
+      doc.text(`성명 : ${clientName}  (인)`, TL, y, { width: halfW });
+      doc.text(`성명 : ${sigDisplay}  (인)`, rX, y, { width: halfW });
+      const sigY = y;
+
+      // 서명 이미지
+      if (signatureDataUrl) {
+        const parsed = parseSignatureDataUrl(signatureDataUrl);
+        if (parsed) {
           try {
-            doc.image(stampBuf, rightX + 200, contractorNameY - 10, { width: 60, height: 60 });
-          } catch { /* ignore bad stamp image */ }
+            doc.image(parsed.buf, TL + 110, sigY - 20, { width: 70, height: 45 });
+            doc.image(parsed.buf, rX + 110, sigY - 20, { width: 70, height: 45 });
+          } catch { /* ignore bad image */ }
         }
+      }
 
-        if (signatureDataUrl) {
-          const parsed = parseSignatureDataUrl(signatureDataUrl);
-          if (parsed) {
-            try {
-              doc.image(parsed.buf, M + 150, signerNameY - 5, { width: 80, height: 50 });
-              doc.image(parsed.buf, M + 150, contractorNameY - 5, { width: 80, height: 50 });
-            } catch { /* ignore bad signature image */ }
-          }
-        }
+      // 도장 이미지
+      const stampBuf = await loadStampImage(companyId);
+      if (stampBuf) {
+        try {
+          doc.image(stampBuf, rX + 190, sigY - 25, { width: 55, height: 55 });
+        } catch { /* ignore */ }
       }
 
       doc.end();
@@ -194,6 +279,9 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/*  최종 PDF 생성 (계약서 페이지 + 첨부 문서 병합)                      */
+/* ------------------------------------------------------------------ */
 export async function buildContractPdf(opts: BuildContractPdfOptions): Promise<Uint8Array> {
   const contractPageBuf = await buildContractPage(opts);
 
