@@ -150,6 +150,10 @@ export default function MasterAdminPage() {
   const [contractPdfImporting, setContractPdfImporting] = useState(false);
   const [masterSmtpConfigured, setMasterSmtpConfigured] = useState(false);
   const [masterSmtpUser, setMasterSmtpUser] = useState<string | null>(null);
+  const [masterSmtpProvider, setMasterSmtpProvider] = useState<"google" | "app_password" | null>(null);
+  const [appPasswordEmail, setAppPasswordEmail] = useState("");
+  const [appPasswordValue, setAppPasswordValue] = useState("");
+  const [appPasswordSaving, setAppPasswordSaving] = useState(false);
   const [googleClientIdPaste, setGoogleClientIdPaste] = useState("");
   const [googleClientSecretPaste, setGoogleClientSecretPaste] = useState("");
   const [oauthEnvStatus, setOauthEnvStatus] = useState<{
@@ -224,10 +228,12 @@ export default function MasterAdminPage() {
       .then((data) => {
         setMasterSmtpConfigured(data.configured === true);
         setMasterSmtpUser(data.user ?? null);
+        setMasterSmtpProvider(data.provider === "google" || data.provider === "app_password" ? data.provider : null);
       })
       .catch(() => {
         setMasterSmtpConfigured(false);
         setMasterSmtpUser(null);
+        setMasterSmtpProvider(null);
       });
   };
 
@@ -678,9 +684,59 @@ export default function MasterAdminPage() {
             </button>
           </div>
         </div>
+
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-2 text-sm font-semibold text-amber-800">대안: Gmail 앱 비밀번호로 연결 (OAuth가 안 될 때)</p>
+          <p className="mb-3 text-xs text-amber-800">
+            Google 계정에서 2단계 인증을 켠 뒤, &quot;앱 비밀번호&quot;를 생성해 아래에 넣으면 팝업 없이 바로 연결됩니다. OAuth 화면이 계속 뜨는 경우 이 방법을 사용하세요.
+          </p>
+          <p className="mb-2 text-xs text-gray-600">만드는 방법: Google 계정 → 보안 → 2단계 인증 사용 → 앱 비밀번호 → 앱 선택 &quot;메일&quot; → 생성 후 16자리 비밀번호 복사</p>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={appPasswordEmail}
+              onChange={(e) => setAppPasswordEmail(e.target.value)}
+              placeholder="Gmail 주소 (예: you@gmail.com)"
+              className="min-w-[200px] rounded border border-gray-300 px-2 py-1.5 text-sm"
+              autoComplete="off"
+            />
+            <input
+              type="password"
+              value={appPasswordValue}
+              onChange={(e) => setAppPasswordValue(e.target.value)}
+              placeholder="앱 비밀번호 (16자)"
+              className="min-w-[140px] rounded border border-gray-300 px-2 py-1.5 text-sm font-mono"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              disabled={appPasswordSaving || !appPasswordEmail.trim() || !appPasswordValue.trim()}
+              onClick={() => {
+                setAppPasswordSaving(true);
+                fetch("/api/admin/master/smtp", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ email: appPasswordEmail.trim(), appPassword: appPasswordValue.trim() }),
+                })
+                  .then((res) => {
+                    if (!res.ok) return res.json().then((d) => Promise.reject(new Error((d as { error?: string }).error)));
+                    setAppPasswordValue("");
+                    loadMasterSmtp();
+                    alert("저장되었습니다. Gmail 앱 비밀번호로 연결됨.");
+                  })
+                  .catch((e) => alert(e instanceof Error ? e.message : "저장 실패"))
+                  .finally(() => setAppPasswordSaving(false));
+              }}
+              className="rounded border border-amber-600 bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {appPasswordSaving ? "저장 중…" : "앱 비밀번호로 저장"}
+            </button>
+          </div>
+        </div>
+
         {masterSmtpConfigured ? (
           <div>
-            <p className="mb-2 text-sm font-medium text-green-700">Gmail 연결됨</p>
+            <p className="mb-2 text-sm font-medium text-green-700">Gmail 연결됨{masterSmtpProvider === "app_password" ? " (앱 비밀번호)" : ""}</p>
             <p className="mb-2 text-sm text-gray-600">{masterSmtpUser || "해당 계정으로 발송됩니다."}</p>
             <button
               type="button"
@@ -694,6 +750,7 @@ export default function MasterAdminPage() {
                     if (res.ok) {
                       setMasterSmtpConfigured(false);
                       setMasterSmtpUser(null);
+                      setMasterSmtpProvider(null);
                     } else return res.json().then((d) => Promise.reject(new Error((d as { error?: string }).error)));
                   })
                   .catch((e) => alert(e instanceof Error ? e.message : "연결 해제 실패"));

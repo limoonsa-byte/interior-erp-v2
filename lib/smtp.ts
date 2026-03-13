@@ -81,20 +81,24 @@ export async function getTransporter(companyId?: number | null): Promise<Transpo
     }
   }
 
-  // 마스터 OAuth(DB): master_smtp_config 테이블에 저장된 Gmail
-  let masterRow: { rows: Array<{ smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null }> };
+  // 마스터(DB): master_smtp_config - OAuth 또는 앱 비밀번호
+  let masterRow: { rows: Array<{ smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null; smtp_pass: string | null; smtp_host: string | null; smtp_port: string | null }> };
   try {
     masterRow = await sql`
-      SELECT smtp_oauth_provider, smtp_oauth_refresh_token, smtp_user FROM master_smtp_config WHERE id = 1 LIMIT 1
+      SELECT smtp_oauth_provider, smtp_oauth_refresh_token, smtp_user, smtp_pass, smtp_host, smtp_port FROM master_smtp_config WHERE id = 1 LIMIT 1
     `;
   } catch {
     masterRow = { rows: [] };
   }
   if (masterRow.rows.length > 0) {
-    const m = masterRow.rows[0] as { smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null };
+    const m = masterRow.rows[0] as { smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null; smtp_pass: string | null; smtp_host: string | null; smtp_port: string | null };
     const oauthProvider = m.smtp_oauth_provider?.trim();
     const refreshToken = m.smtp_oauth_refresh_token?.trim();
     const masterUser = m.smtp_user?.trim();
+    const masterPass = m.smtp_pass?.trim();
+    const masterHost = m.smtp_host?.trim() || "smtp.gmail.com";
+    const masterPort = Number(m.smtp_port?.trim()) || 587;
+
     if (oauthProvider === "google" && refreshToken && masterUser) {
       const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
       const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
@@ -140,6 +144,28 @@ export async function getTransporter(companyId?: number | null): Promise<Transpo
           return { transporter, from };
         }
       }
+    }
+
+    if (masterUser && masterPass && (masterHost.includes("gmail") || masterHost.includes("google"))) {
+      const transporter = nodemailer.createTransport({
+        host: masterHost,
+        port: masterPort,
+        secure: masterPort === 465,
+        auth: { user: masterUser, pass: masterPass },
+      });
+      let from = masterUser;
+      if (companyId != null) {
+        const row = await sql`SELECT name, company_email FROM companies WHERE id = ${companyId}`;
+        if (row.rows.length > 0) {
+          const name = (row.rows[0] as { name: string | null }).name?.trim();
+          const companyEmail = (row.rows[0] as { company_email: string | null }).company_email?.trim();
+          const addr = companyEmail && companyEmail.includes("@") ? companyEmail : masterUser;
+          if (name) from = `"${name.replace(/"/g, "'")}" <${addr}>`;
+          else from = addr;
+        }
+      }
+      if (!from || !from.includes("@")) from = process.env.MAIL_FROM?.trim() || masterUser;
+      return { transporter, from };
     }
   }
 
@@ -220,14 +246,16 @@ export async function isSmtpConfigured(companyId?: number | null): Promise<boole
       if (r.smtp_host?.trim() && r.smtp_user?.trim() && r.smtp_pass?.trim()) return true;
     }
   }
-  // 마스터 OAuth(DB)
+  // 마스터(DB): OAuth 또는 앱 비밀번호
   try {
     const masterRow = await sql`
-      SELECT smtp_oauth_provider, smtp_oauth_refresh_token, smtp_user FROM master_smtp_config WHERE id = 1 LIMIT 1
+      SELECT smtp_oauth_provider, smtp_oauth_refresh_token, smtp_user, smtp_pass, smtp_host FROM master_smtp_config WHERE id = 1 LIMIT 1
     `;
     if (masterRow.rows.length > 0) {
-      const m = masterRow.rows[0] as { smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null };
+      const m = masterRow.rows[0] as { smtp_oauth_provider: string | null; smtp_oauth_refresh_token: string | null; smtp_user: string | null; smtp_pass: string | null; smtp_host: string | null };
       if (m.smtp_oauth_provider?.trim() === "google" && m.smtp_oauth_refresh_token?.trim() && m.smtp_user?.trim()) return true;
+      const h = m.smtp_host?.trim() || "";
+      if (m.smtp_user?.trim() && m.smtp_pass?.trim() && (h.includes("gmail") || h.includes("google"))) return true;
     }
   } catch {
     // master_smtp_config 테이블 없을 수 있음

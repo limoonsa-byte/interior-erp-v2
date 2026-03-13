@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     if (c.status !== "signed") return NextResponse.json({ error: "서명 완료된 계약서만 이메일 발송이 가능합니다." }, { status: 400 });
 
     const smtp = await getTransporter(companyId);
-    if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail로 연결해 주세요." }, { status: 500 });
+    if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail 앱 비밀번호로 연결하거나 OAuth로 연결해 주세요." }, { status: 500 });
 
     let contractDetails: Record<string, string> | null = null;
     try {
