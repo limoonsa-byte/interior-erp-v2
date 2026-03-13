@@ -33,7 +33,7 @@ export async function GET() {
   }
   let stateParam: string;
   const stateToken = randomBytes(24).toString("base64url");
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   try {
     await sql`
       INSERT INTO oauth_pending_state (state_token, company_id, expires_at)
