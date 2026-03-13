@@ -291,7 +291,46 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  최종 PDF 생성 (계약서 페이지 + 첨부 문서 병합)                      */
+/*  이미지 기반 PDF 생성 (클라이언트에서 캡처한 이미지 → A4 PDF)          */
+/* ------------------------------------------------------------------ */
+export async function buildContractPdfFromImage(
+  imageDataUrl: string,
+  documentPath: string | null,
+): Promise<Uint8Array> {
+  const pdfDoc = await PDFDocument.create();
+  const A4_W = 595.28;
+  const A4_H = 841.89;
+
+  const match = imageDataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+  if (match) {
+    const imgBuf = Buffer.from(match[2], "base64");
+    const isPng = match[1] === "png";
+    const img = isPng ? await pdfDoc.embedPng(imgBuf) : await pdfDoc.embedJpg(imgBuf);
+    const scale = Math.min(A4_W / img.width, A4_H / img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    const page = pdfDoc.addPage([A4_W, A4_H]);
+    page.drawImage(img, { x: (A4_W - w) / 2, y: A4_H - h, width: w, height: h });
+  } else {
+    pdfDoc.addPage([A4_W, A4_H]);
+  }
+
+  if (documentPath && documentPath.toLowerCase().endsWith(".pdf")) {
+    const docBuf = await loadDocumentPdf(documentPath);
+    if (docBuf) {
+      try {
+        const existingPdf = await PDFDocument.load(docBuf);
+        const pages = await pdfDoc.copyPages(existingPdf, existingPdf.getPageIndices());
+        for (const p of pages) pdfDoc.addPage(p);
+      } catch { /* ignore */ }
+    }
+  }
+
+  return pdfDoc.save();
+}
+
+/* ------------------------------------------------------------------ */
+/*  서버 사이드 PDF 생성 (pdfkit 테이블 레이아웃 – fallback용)           */
 /* ------------------------------------------------------------------ */
 export async function buildContractPdf(opts: BuildContractPdfOptions): Promise<Uint8Array> {
   const contractPageBuf = await buildContractPage(opts);

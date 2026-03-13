@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { buildContractPdf } from "@/lib/buildContractPdf";
+import { buildContractPdf, buildContractPdfFromImage } from "@/lib/buildContractPdf";
 import { getTransporter } from "@/lib/smtp";
 import { cookies } from "next/headers";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { contractId, email } = await request.json();
+    const { contractId, email, summaryImage } = await request.json();
     if (!contractId || !email) return NextResponse.json({ error: "contractId와 email은 필수입니다." }, { status: 400 });
 
     const companyId = company.id;
@@ -36,22 +36,29 @@ export async function POST(request: Request) {
     const smtp = await getTransporter(companyId);
     if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail 앱 비밀번호로 연결하거나 OAuth로 연결해 주세요." }, { status: 500 });
 
-    let contractDetails: Record<string, string> | null = null;
-    try {
-      contractDetails = c.details != null
-        ? (typeof c.details === "string" ? JSON.parse(c.details as string) : c.details as Record<string, string>)
-        : null;
-    } catch { contractDetails = null; }
+    const documentPath = c.document_path ? String(c.document_path) : null;
+    let pdfBytes: Uint8Array;
 
-    const pdfBytes = await buildContractPdf({
-      details: contractDetails,
-      signerName: String(c.signer_name ?? ""),
-      signerAddress: String(c.signer_address ?? ""),
-      signerResidentNumber: String(c.signer_resident_number ?? ""),
-      signatureDataUrl: c.signature_data ? String(c.signature_data) : null,
-      companyId,
-      documentPath: c.document_path ? String(c.document_path) : null,
-    });
+    if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
+      pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath);
+    } else {
+      let contractDetails: Record<string, string> | null = null;
+      try {
+        contractDetails = c.details != null
+          ? (typeof c.details === "string" ? JSON.parse(c.details as string) : c.details as Record<string, string>)
+          : null;
+      } catch { contractDetails = null; }
+
+      pdfBytes = await buildContractPdf({
+        details: contractDetails,
+        signerName: String(c.signer_name ?? ""),
+        signerAddress: String(c.signer_address ?? ""),
+        signerResidentNumber: String(c.signer_resident_number ?? ""),
+        signatureDataUrl: c.signature_data ? String(c.signature_data) : null,
+        companyId,
+        documentPath,
+      });
+    }
 
     const title = String(c.title ?? "계약서");
     const safeFileName = title.replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";

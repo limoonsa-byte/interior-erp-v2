@@ -1358,10 +1358,30 @@ export default function ContractPage() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
+                    let summaryImage: string | undefined;
+                    try {
+                      const html2canvas = (await import("html2canvas")).default;
+                      const offscreen = document.createElement("div");
+                      offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:#fff;z-index:-1;";
+                      document.body.appendChild(offscreen);
+                      const root = await import("react-dom/client");
+                      const container = document.createElement("div");
+                      offscreen.appendChild(container);
+                      const r = root.createRoot(container);
+                      r.render(React.createElement(SignedContractSummary, { contract: emailModal as unknown as Contract }));
+                      await new Promise((res) => setTimeout(res, 500));
+                      const imgs = offscreen.querySelectorAll("img");
+                      await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })));
+                      const canvas = await html2canvas(offscreen, { scale: 2, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794 });
+                      summaryImage = canvas.toDataURL("image/png");
+                      r.unmount();
+                      document.body.removeChild(offscreen);
+                    } catch (e) { console.warn("html2canvas capture failed, fallback to server-side:", e); }
+
                     const res = await fetch("/api/contracts/send-email", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ contractId: emailModal.id, email: emailTo.trim() }),
+                      body: JSON.stringify({ contractId: emailModal.id, email: emailTo.trim(), summaryImage }),
                     });
                     if (res.ok) {
                       alert("이메일이 발송되었습니다.");
