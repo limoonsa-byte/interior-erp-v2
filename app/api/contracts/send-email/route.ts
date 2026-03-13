@@ -67,7 +67,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "이메일이 발송되었습니다." });
   } catch (error) {
-    console.error("계약서 이메일 발송 실패:", error);
-    return NextResponse.json({ error: "이메일 발송에 실패했습니다." }, { status: 500 });
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error("계약서 이메일 발송 실패:", detail, error);
+    return NextResponse.json({ error: `이메일 발송에 실패했습니다: ${detail}` }, { status: 500 });
   }
 }
