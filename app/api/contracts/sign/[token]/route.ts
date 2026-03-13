@@ -117,6 +117,8 @@ export async function POST(
     if (email) {
       await sql`UPDATE contracts SET signer_email = ${email}, updated_at = NOW() WHERE id = ${contractId}`;
     }
+    let emailSent = false;
+    let emailError = "";
     try {
       const companyRow = await sql`SELECT company_email FROM companies WHERE id = ${companyId}`;
       const companyEmail = companyRow.rows.length > 0 && companyRow.rows[0].company_email
@@ -134,15 +136,22 @@ export async function POST(
         });
         if (email) {
           await sendSignedContractEmail(companyId, email, contractTitle, contractId, token, pdfBytes);
+          emailSent = true;
         }
         if (companyEmail && companyEmail !== email) {
           await sendSignedContractEmail(companyId, companyEmail, contractTitle, contractId, token, pdfBytes);
         }
       }
     } catch (emailErr) {
-      console.error("서명 완료 이메일 발송 실패:", emailErr);
+      emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
+      console.error("서명 완료 이메일 발송 실패:", emailError, emailErr);
     }
-    return NextResponse.json({ message: "서명이 완료되었습니다." }, { status: 200 });
+    return NextResponse.json({
+      message: "서명이 완료되었습니다.",
+      emailSent,
+      emailError: emailError || undefined,
+      emailTo: email || undefined,
+    }, { status: 200 });
   } catch (error) {
     console.error("contracts sign POST error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

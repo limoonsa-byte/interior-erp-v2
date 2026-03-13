@@ -301,6 +301,9 @@ export default function SignPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setSubmitted(true);
+        if (data.emailSent === false && data.emailError) {
+          console.error("이메일 발송 실패:", data.emailError);
+        }
       })
       .catch((err) => alert(err?.message || "제출 실패"))
       .finally(() => setSubmitting(false));
