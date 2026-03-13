@@ -10,7 +10,7 @@ const withPWA = require("next-pwa")({
 
 const nextConfig: NextConfig = {
   turbopack: {},
-  serverExternalPackages: ["@pdf-lib/fontkit"],
+  serverExternalPackages: ["@pdf-lib/fontkit", "pdfkit"],
   outputFileTracingIncludes: {
     "/api/**": ["./fonts/**"],
   },
