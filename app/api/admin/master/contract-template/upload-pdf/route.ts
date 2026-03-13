@@ -48,9 +48,16 @@ export async function POST(request: Request) {
     const buf = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buf);
     const documentPath = `contracts/${MASTER_PDF_NAME}`;
+
+    const documentDataB64 = buf.toString("base64");
+
+    try {
+      await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_data TEXT`;
+    } catch { /* column may already exist */ }
+
     await sql`
       UPDATE master_contract_template
-      SET document_path = ${documentPath}, updated_at = NOW()
+      SET document_path = ${documentPath}, document_data = ${documentDataB64}, updated_at = NOW()
       WHERE id = 1
     `;
     return NextResponse.json({ message: "PDF가 그대로 저장되었습니다.", documentPath }, { status: 200 });

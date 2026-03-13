@@ -28,16 +28,27 @@ export async function GET() {
   }
   try {
     const result = await sql`
-      SELECT document_path FROM master_contract_template WHERE id = 1 LIMIT 1
+      SELECT document_path, document_data FROM master_contract_template WHERE id = 1 LIMIT 1
     `;
     const docPath = result.rows[0]?.document_path;
+    const docData = result.rows[0]?.document_data;
     if (!docPath || typeof docPath !== "string") {
       return NextResponse.json({ error: "저장된 PDF가 없습니다." }, { status: 404 });
     }
+
+    let buf: Buffer | null = null;
     const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
     const fileName = docPath.startsWith("contracts/") ? docPath.slice("contracts/".length) : path.basename(docPath);
-    const filePath = path.join(baseDir, fileName);
-    const buf = await readFile(filePath);
+    try {
+      buf = await readFile(path.join(baseDir, fileName));
+    } catch {
+      if (docData && typeof docData === "string") {
+        buf = Buffer.from(docData, "base64");
+      }
+    }
+    if (!buf) {
+      return NextResponse.json({ error: "PDF를 불러올 수 없습니다." }, { status: 404 });
+    }
     let outputBuf: Buffer = buf;
     try {
       const doc = await PDFDocument.load(buf);

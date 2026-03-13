@@ -29,7 +29,20 @@ export async function GET(request: Request) {
   const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
   const filePath = path.join(baseDir, fileName);
   try {
-    let buf = await readFile(filePath);
+    let buf: Buffer;
+    try {
+      buf = await readFile(filePath);
+    } catch {
+      if (fileName === "master-template.pdf") {
+        const { sql } = await import("@vercel/postgres");
+        const r = await sql`SELECT document_data FROM master_contract_template WHERE id = 1 LIMIT 1`;
+        const data = r.rows[0]?.document_data;
+        if (!data || typeof data !== "string") throw new Error("no data");
+        buf = Buffer.from(data, "base64");
+      } else {
+        throw new Error("file not found");
+      }
+    }
     const isPdf = fileName.toLowerCase().endsWith(".pdf");
     if (isPdf && fileName === "master-template.pdf") {
       try {

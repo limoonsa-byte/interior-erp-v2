@@ -41,11 +41,19 @@ async function loadStampImage(companyId: number): Promise<Buffer | null> {
 }
 
 async function loadDocumentPdf(documentPath: string): Promise<Buffer | null> {
+  const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
+  const fileName = documentPath.startsWith("contracts/") ? documentPath.slice("contracts/".length) : path.basename(documentPath);
   try {
-    const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
-    const fileName = documentPath.startsWith("contracts/") ? documentPath.slice("contracts/".length) : path.basename(documentPath);
     return await readFile(path.join(baseDir, fileName));
   } catch {
+    if (fileName === "master-template.pdf") {
+      try {
+        const { sql } = await import("@vercel/postgres");
+        const r = await sql`SELECT document_data FROM master_contract_template WHERE id = 1 LIMIT 1`;
+        const data = r.rows[0]?.document_data;
+        if (data && typeof data === "string") return Buffer.from(data, "base64");
+      } catch { /* ignore */ }
+    }
     return null;
   }
 }

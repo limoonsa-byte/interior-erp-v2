@@ -92,6 +92,9 @@ export async function POST(request: Request) {
     await sql`INSERT INTO master_smtp_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING`;
     results.push("master_smtp_config 테이블 확인");
 
+    await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_data TEXT`;
+    results.push("master_contract_template.document_data 컬럼 확인");
+
     await sql`
       CREATE TABLE IF NOT EXISTS oauth_pending_state (
         state_token TEXT PRIMARY KEY,
