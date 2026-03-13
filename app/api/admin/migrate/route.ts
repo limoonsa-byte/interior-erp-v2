@@ -95,6 +95,10 @@ export async function POST(request: Request) {
     await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_data TEXT`;
     results.push("master_contract_template.document_data 컬럼 확인");
 
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_data TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_data TEXT`;
+    results.push("companies.logo_data, stamp_data 컬럼 확인");
+
     await sql`
       CREATE TABLE IF NOT EXISTS oauth_pending_state (
         state_token TEXT PRIMARY KEY,

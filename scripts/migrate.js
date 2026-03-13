@@ -159,6 +159,8 @@ async function migrate() {
     console.log("[migrate] companies.is_master OK");
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_path TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_path TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_data TEXT`;
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_data TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_address TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS contractor_reg_no TEXT`;
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS company_email TEXT`;

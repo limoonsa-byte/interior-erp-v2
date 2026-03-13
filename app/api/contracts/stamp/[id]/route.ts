@@ -26,10 +26,22 @@ export async function GET(
     const storedPath = String(result.rows[0].path);
     const baseDir = process.env.VERCEL ? path.join("/tmp", "company") : path.join(process.cwd(), "uploads", "company");
     const filePath = path.join(baseDir, storedPath.replace(/^company\//, ""));
-    const buf = await readFile(filePath);
+
+    let buf: Buffer;
+    try {
+      buf = await readFile(filePath);
+    } catch {
+      const dr = await sql`SELECT stamp_data AS d FROM companies WHERE id = ${companyId}`;
+      const b64 = dr.rows[0]?.d;
+      if (!b64 || typeof b64 !== "string") {
+        return NextResponse.json({ error: "파일을 읽을 수 없습니다." }, { status: 404 });
+      }
+      buf = Buffer.from(b64, "base64");
+    }
+
     const ext = path.extname(filePath).toLowerCase();
     const contentType = ext === ".png" ? "image/png" : ext === ".gif" ? "image/gif" : ext === ".webp" ? "image/webp" : "image/jpeg";
-    return new NextResponse(buf, {
+    return new NextResponse(new Uint8Array(buf), {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "private, max-age=3600",

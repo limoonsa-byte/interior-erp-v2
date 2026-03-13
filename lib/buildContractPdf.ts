@@ -30,11 +30,22 @@ function getFontPaths() {
 async function loadStampImage(companyId: number): Promise<Buffer | null> {
   try {
     const { sql } = await import("@vercel/postgres");
-    const result = await sql`SELECT stamp_path AS path FROM companies WHERE id = ${companyId}`;
-    if (result.rows.length === 0 || !result.rows[0].path) return null;
-    const storedPath = String(result.rows[0].path);
-    const baseDir = process.env.VERCEL ? path.join("/tmp", "company") : path.join(process.cwd(), "uploads", "company");
-    return await readFile(path.join(baseDir, storedPath.replace(/^company\//, "")));
+    const result = await sql`SELECT stamp_path AS path, stamp_data AS data FROM companies WHERE id = ${companyId}`;
+    if (result.rows.length === 0) return null;
+    const storedPath = result.rows[0].path;
+    const stampData = result.rows[0].data;
+
+    if (storedPath) {
+      try {
+        const baseDir = process.env.VERCEL ? path.join("/tmp", "company") : path.join(process.cwd(), "uploads", "company");
+        return await readFile(path.join(baseDir, String(storedPath).replace(/^company\//, "")));
+      } catch { /* fall through to DB */ }
+    }
+
+    if (stampData && typeof stampData === "string") {
+      return Buffer.from(stampData, "base64");
+    }
+    return null;
   } catch {
     return null;
   }

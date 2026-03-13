@@ -39,10 +39,15 @@ export async function POST(request: Request) {
     const buf = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buf);
     const storedPath = `company/${company.id}/${fileName}`;
+    const dataB64 = buf.toString("base64");
+
+    try { await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_data TEXT`; } catch { /* */ }
+    try { await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS stamp_data TEXT`; } catch { /* */ }
+
     if (type === "logo") {
-      await sql`UPDATE companies SET logo_path = ${storedPath} WHERE id = ${company.id}`;
+      await sql`UPDATE companies SET logo_path = ${storedPath}, logo_data = ${dataB64} WHERE id = ${company.id}`;
     } else {
-      await sql`UPDATE companies SET stamp_path = ${storedPath} WHERE id = ${company.id}`;
+      await sql`UPDATE companies SET stamp_path = ${storedPath}, stamp_data = ${dataB64} WHERE id = ${company.id}`;
     }
     return NextResponse.json({ path: storedPath }, { status: 200 });
   } catch (error) {
