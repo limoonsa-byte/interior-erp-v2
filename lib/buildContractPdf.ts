@@ -306,8 +306,8 @@ export async function buildContractPdfFromImage(
     const imgBuf = Buffer.from(match[2], "base64");
     const isPng = match[1] === "png";
     const img = isPng ? await pdfDoc.embedPng(imgBuf) : await pdfDoc.embedJpg(imgBuf);
-    const scaleByW = A4_W / img.width;
-    const scale = Math.min(scaleByW, A4_H / img.height);
+    /* 캡처한 이미지 그대로 넣기 (비율 유지, 한 페이지에 맞춤) */
+    const scale = Math.min(A4_W / img.width, A4_H / img.height);
     const w = img.width * scale;
     const h = img.height * scale;
     const page = pdfDoc.addPage([A4_W, A4_H]);

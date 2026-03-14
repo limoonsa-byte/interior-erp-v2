@@ -317,8 +317,8 @@ export default function SignPage() {
         clone.style.width = "100%";
         offscreen.appendChild(clone);
         const imgs = clone.querySelectorAll("img");
-        await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 2000); })));
-        await new Promise((r) => setTimeout(r, 300));
+        await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 3000); })));
+        await new Promise((r) => setTimeout(r, 500));
         const canvas = await html2canvas(offscreen, { scale: 3, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
         summaryImage = canvas.toDataURL("image/png");
       } catch (err) {

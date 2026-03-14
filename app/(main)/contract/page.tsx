@@ -978,25 +978,14 @@ export default function ContractPage() {
   const contractViewSummaryRef = useRef<HTMLDivElement>(null);
   const emailCaptureFromViewRef = useRef<string | null>(null);
 
-  /** 계약서 보기와 동일한 비율/선 두께로 캡처 (고정 794px = A4 너비 기준) */
-  const captureSummaryAtA4Ratio = async (el: HTMLDivElement): Promise<string> => {
+  /** 계약서 보기 1페이지 캡처해서 그대로 넣기만 함. 배치/스케일 올리기/클론 없음. */
+  const captureContractViewPage1AsImage = async (summaryEl: HTMLDivElement): Promise<string> => {
     const html2canvas = (await import("html2canvas")).default;
-    const offscreen = document.createElement("div");
-    offscreen.className = "contract-email-capture-print-style";
-    offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
-    document.body.appendChild(offscreen);
-    const clone = el.cloneNode(true) as HTMLElement;
-    clone.style.width = "100%";
-    offscreen.appendChild(clone);
-    try {
-      const imgs = clone.querySelectorAll("img");
-      await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 2000); })));
-      await new Promise((r) => setTimeout(r, 300));
-      const canvas = await html2canvas(offscreen, { scale: 2, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
-      return canvas.toDataURL("image/png");
-    } finally {
-      if (offscreen.parentNode) document.body.removeChild(offscreen);
-    }
+    const imgs = summaryEl.querySelectorAll("img");
+    await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 3000); })));
+    await new Promise((r) => setTimeout(r, 150));
+    const canvas = await html2canvas(summaryEl, { scale: 1, useCORS: true, backgroundColor: "#ffffff", logging: false });
+    return canvas.toDataURL("image/png");
   };
 
   const load = () => {
@@ -1337,7 +1326,7 @@ export default function ContractPage() {
                     const el = contractViewSummaryRef.current;
                     if (!el || !signViewContract) return;
                     try {
-                      const summaryImage = await captureSummaryAtA4Ratio(el);
+                      const summaryImage = await captureContractViewPage1AsImage(el);
                       const res = await fetch("/api/contracts/pdf-download", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -1370,7 +1359,7 @@ export default function ContractPage() {
                     const el = contractViewSummaryRef.current;
                     if (!el) return;
                     try {
-                      emailCaptureFromViewRef.current = await captureSummaryAtA4Ratio(el);
+                      emailCaptureFromViewRef.current = await captureContractViewPage1AsImage(el);
                       setEmailModal(signViewContract);
                       setEmailTo(signViewContract.signerEmail || "");
                       setSignViewContract(null);
