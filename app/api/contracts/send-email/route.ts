@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const { contractId, email, summaryImage } = await request.json();
+    const { contractId, email, summaryImage, pdfBase64 } = await request.json();
     if (!contractId || !email) return NextResponse.json({ error: "contractId와 email은 필수입니다." }, { status: 400 });
 
     const companyId = company.id;
@@ -39,7 +39,9 @@ export async function POST(request: Request) {
     const documentPath = c.document_path ? String(c.document_path) : null;
     let pdfBytes: Uint8Array;
 
-    if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
+    if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.length > 0) {
+      pdfBytes = new Uint8Array(Buffer.from(pdfBase64, "base64"));
+    } else if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
       pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath);
     } else {
       let contractDetails: Record<string, string> | null = null;

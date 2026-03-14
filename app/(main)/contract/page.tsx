@@ -977,14 +977,55 @@ export default function ContractPage() {
   const [emailSending, setEmailSending] = useState(false);
   const contractViewSummaryRef = useRef<HTMLDivElement>(null);
   const emailCaptureFromViewRef = useRef<string | null>(null);
+  /** 이메일 발송 시 인쇄/PDF와 동일하게 추가 문서 페이지 이미지(data URL) 목록 */
+  const emailDocPagesRef = useRef<string[]>([]);
 
-  /** 계약서 보기 1페이지 캡처해서 그대로 넣기만 함. 배치/스케일 올리기/클론 없음. */
+  /** 인쇄/PDF와 동일하게 1페이지(캡처) + 추가 문서 페이지로 PDF 생성 → base64 */
+  const buildContractPdfForEmail = async (summaryImage: string, docPageDataUrls: string[]): Promise<string> => {
+    const { PDFDocument } = await import("pdf-lib");
+    const A4_W = 595.28;
+    const A4_H = 841.89;
+    const pdfDoc = await PDFDocument.create();
+
+    const addImagePage = (dataUrl: string) => {
+      const match = dataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+      if (!match) return Promise.resolve();
+      const base64 = match[2];
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const isPng = match[1] === "png";
+      return (isPng ? pdfDoc.embedPng(bytes) : pdfDoc.embedJpg(bytes)).then((img) => {
+        const scale = Math.min(A4_W / img.width, A4_H / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const page = pdfDoc.addPage([A4_W, A4_H]);
+        page.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
+      });
+    };
+
+    await addImagePage(summaryImage);
+    for (const url of docPageDataUrls) await addImagePage(url);
+
+    const pdfBytes = await pdfDoc.save();
+    const bytes = new Uint8Array(pdfBytes);
+    let binary = "";
+    const chunk = 8192;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+    }
+    return btoa(binary);
+  };
+
+  /** 계약서 보기 1페이지 캡처해서 그대로 넣기. 배치/클론 없음. 해상도만 기기 비율로(선 흐림 방지). */
   const captureContractViewPage1AsImage = async (summaryEl: HTMLDivElement): Promise<string> => {
     const html2canvas = (await import("html2canvas")).default;
     const imgs = summaryEl.querySelectorAll("img");
     await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 3000); })));
-    await new Promise((r) => setTimeout(r, 150));
-    const canvas = await html2canvas(summaryEl, { scale: 1, useCORS: true, backgroundColor: "#ffffff", logging: false });
+    await new Promise((r) => setTimeout(r, 300));
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const scale = Math.min(2, dpr);
+    const canvas = await html2canvas(summaryEl, { scale, useCORS: true, backgroundColor: "#ffffff", logging: false });
     return canvas.toDataURL("image/png");
   };
 
@@ -1316,38 +1357,40 @@ export default function ContractPage() {
 
       {signViewContract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-          <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
+          <div className="contract-print-same-as-view relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
             <div className="sticky top-0 z-20 flex items-center justify-between bg-white px-5 pt-5 pb-3 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-900">계약서 보기</h2>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={async () => {
-                    const el = contractViewSummaryRef.current;
-                    if (!el || !signViewContract) return;
-                    try {
-                      const summaryImage = await captureContractViewPage1AsImage(el);
-                      const res = await fetch("/api/contracts/pdf-download", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ contractId: signViewContract.id, summaryImage }),
-                      });
-                      if (!res.ok) {
-                        const d = await res.json().catch(() => ({}));
-                        alert(d.error || "PDF 저장에 실패했습니다.");
-                        return;
-                      }
-                      const blob = await res.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `${(signViewContract.title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서"}.pdf`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    } catch (e) {
-                      console.warn("인쇄/PDF 저장 실패:", e);
-                      alert("PDF 저장에 실패했습니다.");
+                  onClick={() => {
+                    if (!signViewContract) return;
+                    const wrap = document.querySelector(".contract-print-same-as-view .p-5");
+                    const existing = document.getElementById("contract-print-pages");
+                    if (existing) existing.remove();
+                    if (wrap) {
+                      const clone = wrap.cloneNode(true) as HTMLElement;
+                      const first = clone.querySelector(":scope > div:first-of-type");
+                      if (first && first.classList.contains("grid") && first.classList.contains("grid-cols-2")) first.remove();
+                      const root = document.createElement("div");
+                      root.id = "contract-print-pages";
+                      root.className = "contract-print-pages-root";
+                      root.appendChild(clone);
+                      document.body.appendChild(root);
                     }
+                    document.body.classList.add("contract-print-pages-mode");
+                    const prevTitle = document.title;
+                    document.title = `${(signViewContract.title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서"}`;
+                    window.print();
+                    const cleanup = () => {
+                      document.title = prevTitle;
+                      document.body.classList.remove("contract-print-pages-mode");
+                      const el = document.getElementById("contract-print-pages");
+                      if (el) el.remove();
+                      window.removeEventListener("afterprint", cleanup);
+                    };
+                    window.addEventListener("afterprint", cleanup);
+                    setTimeout(cleanup, 2000);
                   }}
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
                 >
@@ -1360,6 +1403,12 @@ export default function ContractPage() {
                     if (!el) return;
                     try {
                       emailCaptureFromViewRef.current = await captureContractViewPage1AsImage(el);
+                      emailDocPagesRef.current = [];
+                      const wrapper = document.querySelector(".contract-print-same-as-view .contract-print-doc-pages-wrapper");
+                      if (wrapper) {
+                        const imgs = wrapper.querySelectorAll<HTMLImageElement>("img[src^='data:']");
+                        imgs.forEach((img) => { if (img.src) emailDocPagesRef.current.push(img.src); });
+                      }
                       setEmailModal(signViewContract);
                       setEmailTo(signViewContract.signerEmail || "");
                       setSignViewContract(null);
@@ -1396,7 +1445,7 @@ export default function ContractPage() {
               )}
 
               {signViewContract.documentPath && (
-                <div className="mb-4">
+                <div className="contract-print-doc-pages-wrapper mb-4">
                   <PdfToA4Images
                     documentUrl={`/api/company/contract-document?path=${encodeURIComponent(signViewContract.documentPath)}`}
                     className="space-y-4"
@@ -1439,6 +1488,9 @@ export default function ContractPage() {
                   try {
                     let summaryImage: string | undefined = emailCaptureFromViewRef.current ?? undefined;
                     if (summaryImage) emailCaptureFromViewRef.current = null;
+                    const docPages = [...emailDocPagesRef.current];
+                    emailDocPagesRef.current = [];
+
                     if (!summaryImage) {
                       try {
                         const html2canvas = (await import("html2canvas")).default;
@@ -1462,10 +1514,24 @@ export default function ContractPage() {
                       } catch (e) { console.warn("html2canvas capture failed, fallback to server-side:", e); }
                     }
 
+                    let pdfBase64: string | undefined;
+                    if (summaryImage && (docPages.length > 0 || true)) {
+                      try {
+                        pdfBase64 = await buildContractPdfForEmail(summaryImage, docPages);
+                      } catch (e) {
+                        console.warn("클라이언트 PDF 생성 실패, 서버 빌드로 전달:", e);
+                      }
+                    }
+
                     const res = await fetch("/api/contracts/send-email", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ contractId: emailModal.id, email: emailTo.trim(), summaryImage }),
+                      body: JSON.stringify({
+                        contractId: emailModal.id,
+                        email: emailTo.trim(),
+                        summaryImage: pdfBase64 ? undefined : summaryImage,
+                        pdfBase64,
+                      }),
                     });
                     if (res.ok) {
                       alert("이메일이 발송되었습니다.");

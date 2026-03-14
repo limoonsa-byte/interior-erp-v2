@@ -227,6 +227,9 @@ body {
   width: 56px;
   height: 56px;
   margin-left: 0;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 /* 서명 화면 요약: 도장 위치 = 인쇄 미리보기와 동일 */
 .contract-sign-summary .contract-print-stamp {
@@ -239,6 +242,9 @@ body {
   object-fit: contain;
   z-index: 10;
   pointer-events: none;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 .contract-sign-summary .contract-print-stamp-sig {
   display: inline-block !important;
@@ -247,6 +253,9 @@ body {
   object-fit: contain;
   vertical-align: middle;
   margin-left: 4px;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 /* 발주자 서명: JS로 (인) 중심에 맞춰 배치, CSS는 공통 스타일만 */
 .contract-sign-summary .contract-print-signature-overlay {
@@ -256,6 +265,9 @@ body {
   object-fit: contain;
   pointer-events: none;
   z-index: 10;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* 이메일 캡처 시 인쇄 미리보기와 동일한 깔끔한 레이아웃 적용 */
@@ -516,6 +528,66 @@ body {
   }
   body.printing > *:not(#estimate-print-only) {
     display: none !important;
+  }
+  /* 계약서 인쇄/PDF: body 직계로 복사한 #contract-print-pages만 보이게 → 1페이지+2페이지 이후 모두 출력 */
+  body.contract-print-pages-mode {
+    background: white !important;
+  }
+  body.contract-print-pages-mode > *:not(#contract-print-pages) {
+    display: none !important;
+  }
+  #contract-print-pages {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  #contract-print-pages > * {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  #contract-print-pages .contract-sign-summary {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  #contract-print-pages .contract-print-summary {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  #contract-print-pages .contract-print-doc-pages-wrapper {
+    display: block !important;
+    page-break-before: always;
+    margin-top: 0 !important;
+  }
+  #contract-print-pages .contract-print-doc-pages-wrapper img {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    page-break-after: always;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  #contract-print-pages .contract-print-doc-pages-wrapper img:last-child {
+    page-break-after: auto;
+  }
+  #contract-print-pages .contract-print-signature-overlay,
+  #contract-print-pages .contract-print-stamp,
+  #contract-print-pages .contract-print-stamp-sig {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
   }
   /* 계약서 미리보기 인쇄: 복사본만 보이게 */
   body.contract-printing #contract-print-only {
