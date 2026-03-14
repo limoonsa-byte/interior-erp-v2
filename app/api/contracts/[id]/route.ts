@@ -82,7 +82,7 @@ export async function PATCH(
     const status = String(check.rows[0].status ?? "");
     if (status !== "draft" && status !== "sent") return NextResponse.json({ error: "서명 완료된 계약은 수정할 수 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { title, customerName, contact, signerEmail, documentPath, body: bodyText, consultationId, estimateId, details: detailsObj } = body;
+    const { title, customerName, contact, signerEmail, documentPath, documentData, body: bodyText, consultationId, estimateId, details: detailsObj } = body;
     const cur = await sql`SELECT title, customer_name, contact, signer_email, document_path, body, details, consultation_id, estimate_id FROM contracts WHERE id = ${contractId} AND company_id = ${company.id}`;
     if (cur.rows.length === 0) return NextResponse.json({ error: "계약을 찾을 수 없습니다." }, { status: 404 });
     const r = cur.rows[0] as Record<string, unknown>;
@@ -91,15 +91,25 @@ export async function PATCH(
     const newContact = contact !== undefined ? String(contact) : String(r.contact ?? "");
     const newSignerEmail = signerEmail !== undefined ? (signerEmail === "" ? null : String(signerEmail)) : (r.signer_email != null ? String(r.signer_email) : null);
     const newDocumentPath = documentPath !== undefined ? (documentPath === "" ? null : String(documentPath)) : (r.document_path != null ? String(r.document_path) : null);
+    const newDocumentData = documentData !== undefined ? (documentData === "" ? null : String(documentData)) : undefined;
     const newBody = bodyText !== undefined ? (bodyText === "" ? null : String(bodyText)) : (r.body != null ? String(r.body) : null);
     const newDetails = detailsObj !== undefined ? (detailsObj == null || (typeof detailsObj === "object" && Object.keys(detailsObj).length === 0) ? null : (typeof detailsObj === "string" ? detailsObj : JSON.stringify(detailsObj))) : (r.details != null ? String(r.details) : null);
     const newConsultationId = consultationId !== undefined ? (consultationId == null ? null : Number(consultationId)) : (r.consultation_id != null ? Number(r.consultation_id) : null);
     const newEstimateId = estimateId !== undefined ? (estimateId == null ? null : Number(estimateId)) : (r.estimate_id != null ? Number(r.estimate_id) : null);
-    await sql`
-      UPDATE contracts
-      SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, body = ${newBody}, details = ${newDetails}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
-      WHERE id = ${contractId} AND company_id = ${company.id}
-    `;
+    if (newDocumentData !== undefined) {
+      await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS document_data TEXT`;
+      await sql`
+        UPDATE contracts
+        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, document_data = ${newDocumentData}, body = ${newBody}, details = ${newDetails}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
+        WHERE id = ${contractId} AND company_id = ${company.id}
+      `;
+    } else {
+      await sql`
+        UPDATE contracts
+        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, body = ${newBody}, details = ${newDetails}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
+        WHERE id = ${contractId} AND company_id = ${company.id}
+      `;
+    }
     return NextResponse.json({ message: "수정되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("contracts [id] PATCH error:", error);

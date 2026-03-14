@@ -38,24 +38,53 @@ export async function GET(
       }
     }
     if (!allowed) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
-    const result = await sql`SELECT document_path FROM contracts WHERE id = ${contractId}`;
-    if (result.rows.length === 0 || !result.rows[0].document_path) return NextResponse.json({ error: "문서가 없습니다." }, { status: 404 });
-    const docPath = String(result.rows[0].document_path);
-    const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
-    const fileName = docPath.startsWith("contracts/") ? docPath.slice("contracts/".length) : path.basename(docPath);
-    const filePath = path.join(baseDir, fileName);
-    try {
-      const buf = await readFile(filePath);
-      const contentType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
-      return new NextResponse(buf, {
-        headers: {
-          "Content-Type": contentType,
-          "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}"`,
-        },
-      });
-    } catch {
-      return NextResponse.json({ error: "파일을 읽을 수 없습니다." }, { status: 404 });
+    const result = await sql`SELECT document_path, document_data FROM contracts WHERE id = ${contractId}`;
+    if (result.rows.length === 0) return NextResponse.json({ error: "문서가 없습니다." }, { status: 404 });
+    const docPath = result.rows[0].document_path != null ? String(result.rows[0].document_path) : null;
+    const docDataB64 = result.rows[0].document_data;
+
+    async function getMasterPdfBuffer(): Promise<Buffer | null> {
+      try {
+        const masterRow = await sql`SELECT document_data FROM master_contract_template WHERE id = 1 LIMIT 1`;
+        const masterB64 = masterRow.rows[0]?.document_data;
+        if (masterB64 && typeof masterB64 === "string" && masterB64.length > 0) {
+          return Buffer.from(masterB64, "base64");
+        }
+      } catch { /* ignore */ }
+      return null;
     }
+
+    let buf: Buffer;
+    const fileName = docPath ? (docPath.startsWith("contracts/") ? docPath.slice("contracts/".length) : path.basename(docPath)) : "document.pdf";
+    if (docPath) {
+      const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
+      const filePath = path.join(baseDir, fileName);
+      try {
+        buf = await readFile(filePath);
+      } catch {
+        if (docDataB64 && typeof docDataB64 === "string") {
+          buf = Buffer.from(docDataB64, "base64");
+        } else {
+          const masterBuf = await getMasterPdfBuffer();
+          if (masterBuf) buf = masterBuf;
+          else return NextResponse.json({ error: "파일을 읽을 수 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록해 주세요." }, { status: 404 });
+        }
+      }
+    } else if (docDataB64 && typeof docDataB64 === "string") {
+      buf = Buffer.from(docDataB64, "base64");
+    } else {
+      const masterBuf = await getMasterPdfBuffer();
+      if (masterBuf) buf = masterBuf;
+      else return NextResponse.json({ error: "문서가 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록해 주세요." }, { status: 404 });
+    }
+
+    const contentType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    return new NextResponse(new Uint8Array(buf), {
+      headers: {
+        "Content-Type": contentType,
+        "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}"`,
+      },
+    });
   } catch (error) {
     console.error("contracts document GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

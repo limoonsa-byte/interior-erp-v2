@@ -12,8 +12,16 @@ function SignedContractSummary({ contract }: { contract: Contract }) {
   const hasSignature = !!contract.signatureData && contract.signatureData.startsWith("data:");
 
   useEffect(() => {
-    if (!hasSignature || !containerRef.current) return;
+    if (!containerRef.current) return;
     const container = containerRef.current;
+
+    container.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+      const hide = () => { img.style.display = "none"; };
+      if (img.complete && img.naturalWidth === 0) { hide(); return; }
+      img.addEventListener("error", hide);
+    });
+
+    if (!hasSignature) return;
     const inElements = container.querySelectorAll<HTMLElement>(".contract-print-in-fixed");
     const tableInCells = container.querySelectorAll<HTMLElement>(".contract-print-in");
     const containerRect = container.getBoundingClientRect();
@@ -64,8 +72,8 @@ function SignedContractSummary({ contract }: { contract: Contract }) {
   const sigDisplay = String(d.contractorSignature ?? d.contractorName ?? d.contractorSignatureDirect ?? "").trim();
   const clientAddr = contract.signerAddress || String(d.clientAddress ?? d.client_address ?? "").trim();
   const clientRrn = contract.signerResidentNumber || String(d.clientResidentNumber ?? d.client_resident_number ?? "").trim();
-  const stampHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp" alt="" onerror="this.style.display='none'" />`;
-  const stampSigHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp-sig" alt="" onerror="this.parentElement.innerHTML='<span class=contract-print-red>(인)</span>'" />`;
+  const stampHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp" alt="" onerror="this.remove()" />`;
+  const stampSigHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp-sig" alt="" onerror="this.remove()" />`;
   const html =
     `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
     `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
@@ -86,8 +94,8 @@ function SignedContractSummary({ contract }: { contract: Contract }) {
     stampHtml +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddr)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientRrn)}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName)}<span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(d.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(d.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay)}<span class="contract-print-in-fixed">${stampSigHtml}</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddr)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientRrn)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(d.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(d.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay)}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSigHtml}</span></p></div>` +
     `</div></div>`;
   return (
     <div ref={containerRef} className="contract-sign-summary" style={{ position: "relative" }}>
@@ -401,6 +409,7 @@ function ContractForm({
     setUploading(true);
     const formData = new FormData();
     formData.append("file", file);
+    if (contract?.id) formData.append("contractId", String(contract.id));
     fetch("/api/contracts/upload", { method: "POST", body: formData })
       .then((res) => res.json())
       .then((data) => {
@@ -544,13 +553,13 @@ function ContractForm({
       `<p class="contract-print-sig-title">발주자(수급인)</p>` +
       `<p class="contract-print-sig-line">주소 : ${esc(clientAddress || "")}</p>` +
       `<p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber || "")}</p>` +
-      `<p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName || "")}<span class="contract-print-in-fixed contract-print-red">(인)</span></p>` +
+      `<p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName || "")}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p>` +
       `</div>` +
       `<div class="contract-print-sig-block">` +
       `<p class="contract-print-sig-title">시공자(하수급인)</p>` +
       `<p class="contract-print-sig-line">주소 : ${esc(contractorAddress || "")}</p>` +
       `<p class="contract-print-sig-line">상호 : ${esc(contractorCompanyName || "")}</p>` +
-      `<p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay || "")}<span class="contract-print-in-fixed">${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : `<span class="contract-print-red">(인)</span>`}</span></p>` +
+      `<p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay || "")}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : ""}</span></p>` +
       `</div>` +
       `</div></div>`;
     const docSection =
@@ -740,6 +749,7 @@ function ContractForm({
             <div className="sm:col-span-2 space-y-2">
               <label className="block text-xs font-medium text-gray-600">선금</label>
               <div className="flex flex-wrap items-center gap-1.5">
+                <span className="w-16 shrink-0" />
                 <input type="text" inputMode="numeric" value={downPaymentPercent} onChange={(e) => setDownPaymentPercent(e.target.value)} className="w-14 rounded border border-gray-300 px-2 py-1.5 text-sm text-right" placeholder="30" />
                 <span className="text-sm text-gray-600">% : 계약이후 바로</span>
               </div>
@@ -789,6 +799,7 @@ function ContractForm({
             <div className="sm:col-span-2 space-y-2">
               <label className="block text-xs font-medium text-gray-600">잔금</label>
               <div className="flex flex-wrap items-center gap-1.5">
+                <span className="w-16 shrink-0" />
                 <input type="text" inputMode="numeric" value={balancePercent} onChange={(e) => setBalancePercent(e.target.value)} className="w-14 rounded border border-gray-300 px-2 py-1.5 text-sm text-right" placeholder="30" />
                 <span className="text-sm text-gray-600">% : 공사완료시</span>
               </div>
@@ -964,6 +975,29 @@ export default function ContractPage() {
   const [emailModal, setEmailModal] = useState<Contract | null>(null);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
+  const contractViewSummaryRef = useRef<HTMLDivElement>(null);
+  const emailCaptureFromViewRef = useRef<string | null>(null);
+
+  /** 계약서 보기와 동일한 비율/선 두께로 캡처 (고정 794px = A4 너비 기준) */
+  const captureSummaryAtA4Ratio = async (el: HTMLDivElement): Promise<string> => {
+    const html2canvas = (await import("html2canvas")).default;
+    const offscreen = document.createElement("div");
+    offscreen.className = "contract-email-capture-print-style";
+    offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
+    document.body.appendChild(offscreen);
+    const clone = el.cloneNode(true) as HTMLElement;
+    clone.style.width = "100%";
+    offscreen.appendChild(clone);
+    try {
+      const imgs = clone.querySelectorAll("img");
+      await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 2000); })));
+      await new Promise((r) => setTimeout(r, 300));
+      const canvas = await html2canvas(offscreen, { scale: 2, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
+      return canvas.toDataURL("image/png");
+    } finally {
+      if (offscreen.parentNode) document.body.removeChild(offscreen);
+    }
+  };
 
   const load = () => {
     fetch("/api/contracts")
@@ -1296,9 +1330,65 @@ export default function ContractPage() {
           <div className="relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
             <div className="sticky top-0 z-20 flex items-center justify-between bg-white px-5 pt-5 pb-3 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-900">계약서 보기</h2>
-              <button type="button" onClick={() => setSignViewContract(null)} className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const el = contractViewSummaryRef.current;
+                    if (!el || !signViewContract) return;
+                    try {
+                      const summaryImage = await captureSummaryAtA4Ratio(el);
+                      const res = await fetch("/api/contracts/pdf-download", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ contractId: signViewContract.id, summaryImage }),
+                      });
+                      if (!res.ok) {
+                        const d = await res.json().catch(() => ({}));
+                        alert(d.error || "PDF 저장에 실패했습니다.");
+                        return;
+                      }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${(signViewContract.title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서"}.pdf`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      console.warn("인쇄/PDF 저장 실패:", e);
+                      alert("PDF 저장에 실패했습니다.");
+                    }
+                  }}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  인쇄/PDF 저장
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const el = contractViewSummaryRef.current;
+                    if (!el) return;
+                    try {
+                      emailCaptureFromViewRef.current = await captureSummaryAtA4Ratio(el);
+                      setEmailModal(signViewContract);
+                      setEmailTo(signViewContract.signerEmail || "");
+                      setSignViewContract(null);
+                    } catch (e) {
+                      console.warn("계약서 보기 캡처 실패:", e);
+                      setEmailModal(signViewContract);
+                      setEmailTo(signViewContract.signerEmail || "");
+                      setSignViewContract(null);
+                    }
+                  }}
+                  className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  이메일 보내기
+                </button>
+                <button type="button" onClick={() => setSignViewContract(null)} className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                </button>
+              </div>
             </div>
             <div className="p-5 relative z-0">
               <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
@@ -1311,7 +1401,7 @@ export default function ContractPage() {
               </div>
 
               {signViewContract.details && (
-                <div className="contract-sign-summary mb-4">
+                <div ref={contractViewSummaryRef} className="contract-sign-summary mb-4">
                   <SignedContractSummary contract={signViewContract} />
                 </div>
               )}
@@ -1358,25 +1448,30 @@ export default function ContractPage() {
                 onClick={async () => {
                   setEmailSending(true);
                   try {
-                    let summaryImage: string | undefined;
-                    try {
-                      const html2canvas = (await import("html2canvas")).default;
-                      const offscreen = document.createElement("div");
-                      offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:#fff;z-index:-1;";
-                      document.body.appendChild(offscreen);
-                      const root = await import("react-dom/client");
-                      const container = document.createElement("div");
-                      offscreen.appendChild(container);
-                      const r = root.createRoot(container);
-                      r.render(React.createElement(SignedContractSummary, { contract: emailModal as unknown as Contract }));
-                      await new Promise((res) => setTimeout(res, 500));
-                      const imgs = offscreen.querySelectorAll("img");
-                      await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })));
-                      const canvas = await html2canvas(offscreen, { scale: 2, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794 });
-                      summaryImage = canvas.toDataURL("image/png");
-                      r.unmount();
-                      document.body.removeChild(offscreen);
-                    } catch (e) { console.warn("html2canvas capture failed, fallback to server-side:", e); }
+                    let summaryImage: string | undefined = emailCaptureFromViewRef.current ?? undefined;
+                    if (summaryImage) emailCaptureFromViewRef.current = null;
+                    if (!summaryImage) {
+                      try {
+                        const html2canvas = (await import("html2canvas")).default;
+                        const offscreen = document.createElement("div");
+                        offscreen.className = "contract-email-capture-print-style";
+                        offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
+                        document.body.appendChild(offscreen);
+                        const root = await import("react-dom/client");
+                        const container = document.createElement("div");
+                        offscreen.appendChild(container);
+                        const r = root.createRoot(container);
+                        r.render(React.createElement(SignedContractSummary, { contract: emailModal as unknown as Contract }));
+                        await new Promise((res) => setTimeout(res, 800));
+                        const imgs = offscreen.querySelectorAll("img");
+                        await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 2000); })));
+                        await new Promise((res) => setTimeout(res, 200));
+                        const canvas = await html2canvas(offscreen, { scale: 3, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
+                        summaryImage = canvas.toDataURL("image/png");
+                        r.unmount();
+                        document.body.removeChild(offscreen);
+                      } catch (e) { console.warn("html2canvas capture failed, fallback to server-side:", e); }
+                    }
 
                     const res = await fetch("/api/contracts/send-email", {
                       method: "POST",

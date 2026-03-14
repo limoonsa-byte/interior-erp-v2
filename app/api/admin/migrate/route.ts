@@ -139,6 +139,8 @@ export async function POST(request: Request) {
       )
     `;
     results.push("contracts 테이블 확인");
+    await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS document_data TEXT`;
+    results.push("contracts.document_data 컬럼 확인");
 
     return NextResponse.json({
       message: "마이그레이션 완료",

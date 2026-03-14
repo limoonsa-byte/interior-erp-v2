@@ -53,7 +53,7 @@ function buildSummaryPageHtml(
   const rowspanMoney = 3 + interimList.length + 1;
   const sigDisplay = String(details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "").trim();
   const stampHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp" alt="" />` : "";
-  const stampSigHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp-sig" alt="" />` : `<span class="contract-print-red">(인)</span>`;
+  const stampSigHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp-sig" alt="" onerror="this.remove()" />` : "";
   const clientName = signer?.name?.trim() || String(details.clientName ?? "").trim();
   const clientAddress = signer?.address?.trim() || String(details.clientAddress ?? "").trim();
   const clientResidentNumber = signer?.residentNumber?.trim() || String(details.clientResidentNumber ?? "").trim();
@@ -77,8 +77,8 @@ function buildSummaryPageHtml(
     (stampHtml ? stampHtml : "") +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(clientName)}<span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(details.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(details.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name">성명 : ${esc(sigDisplay)}<span class="contract-print-in-fixed contract-print-red">${stampSigHtml}</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
+    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(details.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(details.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay)}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSigHtml}</span></p></div>` +
     `</div></div>`
   );
 }
@@ -90,11 +90,13 @@ function ContractSummaryScaled({
   token,
   signer,
   signatureData,
+  captureRef,
 }: {
   info: SignInfo;
   token: string;
   signer: { name: string; residentNumber: string; address: string };
   signatureData?: string | null;
+  captureRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const details =
     info.details == null
@@ -113,6 +115,16 @@ function ContractSummaryScaled({
   const sig2Ref = useRef<HTMLImageElement>(null);
 
   const hasSignature = !!signatureData && signatureData.startsWith("data:");
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    container.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+      const hide = () => { img.style.display = "none"; };
+      if (img.complete && img.naturalWidth === 0) hide();
+      else img.addEventListener("error", hide);
+    });
+  }, [summaryHtml]);
 
   useEffect(() => {
     if (!hasSignature || !containerRef.current) return;
@@ -142,8 +154,12 @@ function ContractSummaryScaled({
 
   if (!summaryHtml) return null;
 
+  const setRef = (el: HTMLDivElement | null) => {
+    (containerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    if (captureRef) (captureRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+  };
   return (
-    <div ref={containerRef} className="contract-sign-summary contract-sign-summary-with-overlays mb-4">
+    <div ref={setRef} className="contract-sign-summary contract-sign-summary-with-overlays mb-4">
       <div dangerouslySetInnerHTML={{ __html: summaryHtml }} />
       {hasSignature && (
         <>
@@ -181,6 +197,7 @@ export default function SignPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const summaryCaptureRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
 
   useEffect(() => {
@@ -267,7 +284,7 @@ export default function SignPage() {
     };
   }, [info?.id, info?.alreadySigned]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !signerName.trim()) {
       alert("서명자 이름을 입력해 주세요.");
@@ -286,27 +303,54 @@ export default function SignPage() {
       return;
     }
     setSubmitting(true);
-    fetch(`/api/contracts/sign/${token}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        signerName: signerName.trim(),
-        signerAddress: signerAddress.trim() || undefined,
-        signerResidentNumber: signerResidentNumber.trim() || undefined,
-        signerEmail: signerEmail.trim() || undefined,
-        signatureData,
-      }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setSubmitted(true);
-        if (data.emailSent === false && data.emailError) {
-          console.error("이메일 발송 실패:", data.emailError);
-        }
-      })
-      .catch((err) => alert(err?.message || "제출 실패"))
-      .finally(() => setSubmitting(false));
+    let summaryImage: string | undefined;
+    if (info?.documentUrl && summaryCaptureRef.current) {
+      let offscreen: HTMLDivElement | null = null;
+      try {
+        const html2canvas = (await import("html2canvas")).default;
+        const el = summaryCaptureRef.current;
+        offscreen = document.createElement("div");
+        offscreen.className = "contract-email-capture-print-style";
+        offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
+        document.body.appendChild(offscreen);
+        const clone = el.cloneNode(true) as HTMLElement;
+        clone.style.width = "100%";
+        offscreen.appendChild(clone);
+        const imgs = clone.querySelectorAll("img");
+        await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 2000); })));
+        await new Promise((r) => setTimeout(r, 300));
+        const canvas = await html2canvas(offscreen, { scale: 3, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
+        summaryImage = canvas.toDataURL("image/png");
+      } catch (err) {
+        console.warn("서명 요약 캡처 실패:", err);
+      } finally {
+        if (offscreen?.parentNode) document.body.removeChild(offscreen);
+      }
+    }
+    try {
+      const res = await fetch(`/api/contracts/sign/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signerName: signerName.trim(),
+          signerAddress: signerAddress.trim() || undefined,
+          signerResidentNumber: signerResidentNumber.trim() || undefined,
+          signerEmail: signerEmail.trim() || undefined,
+          signatureData,
+          summaryImage,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setSubmitted(true);
+      if (data.emailSent === false && data.emailError) {
+        console.error("이메일 발송 실패:", data.emailError);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "제출 실패");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) {
@@ -373,6 +417,7 @@ export default function SignPage() {
                 token={token}
                 signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
                 signatureData={signatureData}
+                captureRef={summaryCaptureRef}
               />
               <PdfToA4Images
                 documentUrl={info.documentUrl}

@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { buildContractPdf } from "@/lib/buildContractPdf";
+import { buildContractPdf, buildContractPdfFromImage } from "@/lib/buildContractPdf";
 import { getTransporter } from "@/lib/smtp";
 
 async function sendSignedContractEmail(
@@ -71,8 +71,8 @@ export async function GET(
     const c = result.rows[0];
     if (c.status === "signed") return NextResponse.json({ ...rowToSignInfo(c, true), alreadySigned: true }, { status: 200 });
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-    const documentUrl = c.document_path ? `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}` : undefined;
-    const includeBody = !documentUrl;
+    const documentUrl = `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`;
+    const includeBody = false;
     return NextResponse.json({ ...rowToSignInfo(c, includeBody), documentUrl }, { status: 200 });
   } catch (error) {
     console.error("contracts sign GET error:", error);
@@ -88,7 +88,7 @@ export async function POST(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { signerName, signerAddress, signerResidentNumber, signatureData, signerEmail } = body;
+    const { signerName, signerAddress, signerResidentNumber, signatureData, signerEmail, summaryImage } = body;
     if (!signerName || typeof signerName !== "string" || !signerName.trim()) return NextResponse.json({ error: "서명자 이름을 입력해 주세요." }, { status: 400 });
     const result = await sql`
       SELECT id, title, status, company_id, document_path, details FROM contracts WHERE sign_token = ${token}
@@ -125,15 +125,20 @@ export async function POST(
         ? String(companyRow.rows[0].company_email).trim()
         : null;
       if (email || companyEmail) {
-        const pdfBytes = await buildContractPdf({
-          details: contractDetails,
-          signerName: signerName.trim(),
-          signerAddress: addr || "",
-          signerResidentNumber: rrn || "",
-          signatureDataUrl: sigData,
-          companyId,
-          documentPath,
-        });
+        let pdfBytes: Uint8Array;
+        if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
+          pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath);
+        } else {
+          pdfBytes = await buildContractPdf({
+            details: contractDetails,
+            signerName: signerName.trim(),
+            signerAddress: addr || "",
+            signerResidentNumber: rrn || "",
+            signatureDataUrl: sigData,
+            companyId,
+            documentPath,
+          });
+        }
         if (email) {
           await sendSignedContractEmail(companyId, email, contractTitle, contractId, token, pdfBytes);
           emailSent = true;

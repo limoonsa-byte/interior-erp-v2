@@ -93,7 +93,7 @@ export async function PATCH(req: NextRequest) {
 
     await sql`
       UPDATE companies
-      SET name = ${name}, drawing_list_api_url = ${drawingListApiUrl}, contractor_address = ${contractorAddress}, contractor_reg_no = ${contractorRegNo}, company_email = ${companyEmail}, smtp_host = ${smtpHost}, smtp_port = ${smtpPort}, smtp_user = ${smtpUser}, smtp_pass = ${smtpPass}, smtp_oauth_provider = ${smtpOauthProvider}, smtp_oauth_refresh_token = ${smtpOauthRefreshToken}, updated_at = NOW()
+      SET name = ${name}, drawing_list_api_url = ${drawingListApiUrl}, contractor_address = ${contractorAddress}, contractor_reg_no = ${contractorRegNo}, company_email = ${companyEmail}, smtp_host = ${smtpHost}, smtp_port = ${smtpPort}, smtp_user = ${smtpUser}, smtp_pass = ${smtpPass}, smtp_oauth_provider = ${smtpOauthProvider}, smtp_oauth_refresh_token = ${smtpOauthRefreshToken}
       WHERE id = ${company.id}
     `;
 

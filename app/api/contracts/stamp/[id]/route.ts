@@ -21,25 +21,31 @@ export async function GET(
     `;
     if (row.rows.length === 0) return NextResponse.json({ error: "권한이 없습니다." }, { status: 403 });
     const companyId = Number(row.rows[0].company_id);
-    const result = await sql`SELECT stamp_path AS path FROM companies WHERE id = ${companyId}`;
-    if (result.rows.length === 0 || !result.rows[0].path) return NextResponse.json({ error: "도장 이미지가 없습니다." }, { status: 404 });
-    const storedPath = String(result.rows[0].path);
-    const baseDir = process.env.VERCEL ? path.join("/tmp", "company") : path.join(process.cwd(), "uploads", "company");
-    const filePath = path.join(baseDir, storedPath.replace(/^company\//, ""));
+    const result = await sql`SELECT stamp_path AS path, stamp_data AS data FROM companies WHERE id = ${companyId}`;
+    if (result.rows.length === 0) return NextResponse.json({ error: "도장 이미지가 없습니다." }, { status: 404 });
+    const storedPath = result.rows[0].path != null ? String(result.rows[0].path) : null;
+    const stampDataB64 = result.rows[0].data;
 
     let buf: Buffer;
-    try {
-      buf = await readFile(filePath);
-    } catch {
-      const dr = await sql`SELECT stamp_data AS d FROM companies WHERE id = ${companyId}`;
-      const b64 = dr.rows[0]?.d;
-      if (!b64 || typeof b64 !== "string") {
-        return NextResponse.json({ error: "파일을 읽을 수 없습니다." }, { status: 404 });
+    if (storedPath) {
+      const baseDir = process.env.VERCEL ? path.join("/tmp", "company") : path.join(process.cwd(), "uploads", "company");
+      const filePath = path.join(baseDir, storedPath.replace(/^company\//, ""));
+      try {
+        buf = await readFile(filePath);
+      } catch {
+        if (stampDataB64 && typeof stampDataB64 === "string") {
+          buf = Buffer.from(stampDataB64, "base64");
+        } else {
+          return NextResponse.json({ error: "파일을 읽을 수 없습니다." }, { status: 404 });
+        }
       }
-      buf = Buffer.from(b64, "base64");
+    } else if (stampDataB64 && typeof stampDataB64 === "string") {
+      buf = Buffer.from(stampDataB64, "base64");
+    } else {
+      return NextResponse.json({ error: "도장 이미지가 없습니다." }, { status: 404 });
     }
 
-    const ext = path.extname(filePath).toLowerCase();
+    const ext = storedPath ? path.extname(storedPath).toLowerCase() : ".png";
     const contentType = ext === ".png" ? "image/png" : ext === ".gif" ? "image/gif" : ext === ".webp" ? "image/webp" : "image/jpeg";
     return new NextResponse(new Uint8Array(buf), {
       headers: {

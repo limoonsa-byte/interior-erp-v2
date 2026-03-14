@@ -306,11 +306,12 @@ export async function buildContractPdfFromImage(
     const imgBuf = Buffer.from(match[2], "base64");
     const isPng = match[1] === "png";
     const img = isPng ? await pdfDoc.embedPng(imgBuf) : await pdfDoc.embedJpg(imgBuf);
-    const scale = Math.min(A4_W / img.width, A4_H / img.height);
+    const scaleByW = A4_W / img.width;
+    const scale = Math.min(scaleByW, A4_H / img.height);
     const w = img.width * scale;
     const h = img.height * scale;
     const page = pdfDoc.addPage([A4_W, A4_H]);
-    page.drawImage(img, { x: (A4_W - w) / 2, y: A4_H - h, width: w, height: h });
+    page.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
   } else {
     pdfDoc.addPage([A4_W, A4_H]);
   }

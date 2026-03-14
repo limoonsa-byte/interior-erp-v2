@@ -62,7 +62,14 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
         if (!cancelled) setPageImages(images);
         if (!cancelled && onPagesLoaded && images.length > 0) onPagesLoaded(images);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "PDF 로드 실패");
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const is404 = msg.includes("404") || /retrieving PDF/i.test(msg);
+          const isNetworkError = /failed to fetch|network|load/i.test(msg) || msg === "Failed to fetch";
+          setError(is404 || isNetworkError
+            ? "계약서 PDF를 불러올 수 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록했는지, 또는 계약서 작성에서 해당 계약 PDF를 다시 업로드했는지 확인해 주세요. 위 요약을 확인하고 서명할 수 있습니다."
+            : msg || "PDF 로드 실패");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

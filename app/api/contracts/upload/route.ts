@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { sql } from "@vercel/postgres";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -27,6 +28,8 @@ export async function POST(request: Request) {
     if (file.size > MAX_SIZE) return NextResponse.json({ error: "파일 크기는 10MB 이하여야 합니다." }, { status: 400 });
     const type = file.type?.toLowerCase() || "";
     if (!ALLOWED_TYPES.includes(type) && !type.startsWith("image/")) return NextResponse.json({ error: "PDF 또는 이미지 파일만 업로드 가능합니다." }, { status: 400 });
+    const contractIdRaw = formData.get("contractId");
+    const contractId = contractIdRaw != null ? parseInt(String(contractIdRaw), 10) : null;
     const dir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
     await mkdir(dir, { recursive: true });
     const ext = type === "application/pdf" ? "pdf" : type.replace("image/", "") || "bin";
@@ -35,6 +38,18 @@ export async function POST(request: Request) {
     const buf = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buf);
     const documentPath = `contracts/${safeName}`;
+    if (contractId != null && !Number.isNaN(contractId)) {
+      try {
+        await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS document_data TEXT`;
+        const row = await sql`SELECT id FROM contracts WHERE id = ${contractId} AND company_id = ${company.id}`;
+        if (row.rows.length > 0) {
+          const dataB64 = buf.toString("base64");
+          await sql`UPDATE contracts SET document_path = ${documentPath}, document_data = ${dataB64}, updated_at = NOW() WHERE id = ${contractId} AND company_id = ${company.id}`;
+        }
+      } catch (e) {
+        console.error("contracts upload: save document_data failed", e);
+      }
+    }
     return NextResponse.json({ documentPath }, { status: 200 });
   } catch (error) {
     console.error("contracts upload error:", error);
