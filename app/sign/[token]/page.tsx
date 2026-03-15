@@ -405,50 +405,48 @@ export default function SignPage() {
         <h1 className="text-lg font-bold text-gray-900">계약서 서명</h1>
         <p className="mt-1 text-sm text-gray-600">{info.title}</p>
 
-        {/* PDF가 있으면: 요약 1페이지(표준도급) 맨 앞 + PDF 페이지 이미지 세로로 (인쇄 미리보기처럼) */}
-        {info.documentUrl ? (
-          <div className="mt-6">
-            <h2 className="text-sm font-semibold text-gray-800">계약 내용 (PDF 원본 그대로)</h2>
-            <p className="mt-0.5 text-xs text-gray-500">아래 계약서를 확인한 후 하단에서 서명해 주세요.</p>
-            <div className="mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 p-4">
-              {/* 제일 앞장: 표준도급 계약서 요약 1페이지 */}
-              <ContractSummaryScaled
-                info={info}
-                token={token}
-                signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
-                signatureData={signatureData}
-                captureRef={summaryCaptureRef}
-              />
-              <PdfToA4Images
-                documentUrl={info.documentUrl}
-                className="space-y-4"
-                fullWidth
-              />
-            </div>
-            <a
-              href={info.documentUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 inline-block text-sm text-blue-600 hover:underline"
-            >
-              새 창에서 보기
-            </a>
-          </div>
-        ) : (
-          <div className="mt-6">
-            <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
-            <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명해 주세요.</p>
-            {info.body && info.body.trim() ? (
-              <div className="mt-2 max-h-[50vh] min-h-[120px] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 px-4 py-4 text-sm leading-relaxed text-gray-800 whitespace-pre-wrap">
-                {info.body}
+        {/* 1페이지: 요약(서명란). 2페이지부터: 작성 시 자동 변환된 본문 PDF 또는 업로드된 문서 */}
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
+          <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명해 주세요.</p>
+          <div className="contract-sign-view-pages mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 space-y-4">
+            {/* 1페이지: 표준도급 계약서 요약 + 서명란 */}
+            <ContractSummaryScaled
+              info={info}
+              token={token}
+              signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
+              signatureData={signatureData}
+              captureRef={summaryCaptureRef}
+            />
+            {/* 2페이지부터: 업로드된 PDF만 표시 (본문은 작성 시 자동 PDF 변환 또는 수동 업로드) */}
+            {info.documentUrl ? (
+              <>
+                <PdfToA4Images
+                  documentUrl={info.documentUrl}
+                  className="space-y-4"
+                  fullWidth
+                  pageWrapperClassName="contract-sign-doc-page"
+                />
+                <a
+                  href={info.documentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-block text-sm text-blue-600 hover:underline"
+                >
+                  새 창에서 보기
+                </a>
+              </>
+            ) : info.body?.trim() ? (
+              <div className="rounded border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                본문은 작성자가 <strong>저장</strong>할 때 시스템이 자동으로 PDF로 변환해 넣습니다. 수동으로 인쇄 미리보기·PDF 저장·업로드할 필요 없습니다. 아직 2페이지가 보이지 않는다면 계약 작성자에게 &quot;계약서 저장 한 번 더 해 주세요&quot;라고 문의하세요.
               </div>
             ) : (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                이 계약서에는 계약 본문이 등록되지 않았습니다. 필요 시 계약 작성자에게 문의하세요.
+              <div className="rounded border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                이 계약서에는 계약 본문(2페이지 이후)이 등록되지 않았습니다. 필요 시 계약 작성자에게 문의하세요.
               </div>
             )}
           </div>
-        )}
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4 border-t border-gray-200 pt-6">
           <div>

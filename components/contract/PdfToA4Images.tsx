@@ -14,9 +14,11 @@ type PdfToA4ImagesProps = {
   fullWidth?: boolean;
   /** 이미지 로드 완료 시 호출 (미리보기/인쇄에서 재사용) */
   onPagesLoaded?: (dataUrls: string[]) => void;
+  /** 각 페이지 이미지를 감쌀 div에 붙일 클래스 (서명 화면에서 A4 여백용) */
+  pageWrapperClassName?: string;
 };
 
-export function PdfToA4Images({ documentPath = "", documentUrl, className = "", fullWidth = false, onPagesLoaded }: PdfToA4ImagesProps) {
+export function PdfToA4Images({ documentPath = "", documentUrl, className = "", fullWidth = false, onPagesLoaded, pageWrapperClassName }: PdfToA4ImagesProps) {
   const [pageImages, setPageImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
           const is404 = msg.includes("404") || /retrieving PDF/i.test(msg);
           const isNetworkError = /failed to fetch|network|load/i.test(msg) || msg === "Failed to fetch";
           setError(is404 || isNetworkError
-            ? "계약서 PDF를 불러올 수 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록했는지, 또는 계약서 작성에서 해당 계약 PDF를 다시 업로드했는지 확인해 주세요. 위 요약을 확인하고 서명할 수 있습니다."
+            ? "2페이지 이후 PDF가 아직 없습니다. 본문은 작성자가 계약서를 저장할 때 자동으로 PDF로 넣습니다. 계약 작성자에게 '계약서 저장 한 번 더 해 주세요'라고 요청하시거나, 위 요약을 확인하고 서명할 수 있습니다."
             : msg || "PDF 로드 실패");
         }
       } finally {
@@ -97,17 +99,29 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
     return null;
   }
 
+  const content = pageImages.map((dataUrl, i) => {
+    const img = (
+      <img
+        key={i}
+        src={dataUrl}
+        alt={`계약 문서 ${i + 1}페이지`}
+        className="w-full border border-gray-200 bg-white shadow-sm"
+        style={fullWidth ? undefined : { maxWidth: A4_WIDTH_PX }}
+      />
+    );
+    if (pageWrapperClassName) {
+      return (
+        <div key={i} className={pageWrapperClassName}>
+          {img}
+        </div>
+      );
+    }
+    return img;
+  });
+
   return (
     <div className={`space-y-4 ${className}`}>
-      {pageImages.map((dataUrl, i) => (
-        <img
-          key={i}
-          src={dataUrl}
-          alt={`계약 문서 ${i + 1}페이지`}
-          className="w-full border border-gray-200 bg-white shadow-sm"
-          style={fullWidth ? undefined : { maxWidth: A4_WIDTH_PX }}
-        />
-      ))}
+      {content}
     </div>
   );
 }

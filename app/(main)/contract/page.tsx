@@ -356,15 +356,21 @@ function ContractForm({
         const loadedBody = data.body != null ? String(data.body) : "";
         const loadedDocPath = data.documentPath != null ? String(data.documentPath) : "";
         setTitle(loadedTitle);
-        // 마스터에 PDF가 있으면 본문 텍스트는 넣지 않음 (서명 시 PDF만 표시)
-        setBody(loadedDocPath ? "" : loadedBody);
-        if (loadedDocPath) {
+        // 본문(글로 적은 것)이 있으면 본문 우선, 없을 때만 PDF 사용
+        if (loadedBody.trim() !== "") {
+          setBody(loadedBody);
+          setDocumentPath("");
+          setUploadFileName(null);
+          alert("마스터 관리에서 저장한 계약서 양식(제목·본문)을 불러왔습니다.");
+        } else if (loadedDocPath) {
+          setBody("");
           setDocumentPath(loadedDocPath);
           setUploadFileName("마스터 PDF 적용됨");
-        }
-        if (loadedDocPath || loadedBody.trim()) {
-          alert(loadedDocPath ? "마스터 PDF가 계약 문서로 적용되었습니다. 저장하면 서명 페이지에 PDF 그대로 표시됩니다." : "마스터 관리에서 저장한 계약서 양식(제목·본문)을 불러왔습니다.");
+          alert("마스터 PDF가 계약 문서로 적용되었습니다. 저장하면 서명 페이지에 PDF 그대로 표시됩니다.");
         } else {
+          setBody("");
+          setDocumentPath("");
+          setUploadFileName(null);
           alert("마스터 관리에서 계약서 양식(엑셀/PDF 불러오기)을 등록한 뒤 다시 불러오기를 사용해 주세요.");
         }
       })
@@ -385,17 +391,20 @@ function ContractForm({
         const loadedBody = data.body != null ? String(data.body) : "";
         const loadedDocPath = data.documentPath != null ? String(data.documentPath) : "";
         setTitle(loadedTitle);
-        setBody(loadedDocPath ? "" : loadedBody);
-        if (loadedDocPath) {
-          setDocumentPath(loadedDocPath);
-          setUploadFileName("회사 PDF 적용됨");
-        } else {
+        if (loadedBody.trim() !== "") {
+          setBody(loadedBody);
           setDocumentPath("");
           setUploadFileName(null);
-        }
-        if (loadedDocPath || loadedBody.trim()) {
-          alert(loadedDocPath ? "회사 PDF가 계약 문서로 적용되었습니다." : "관리에서 등록한 회사 계약서 양식(제목·본문)을 불러왔습니다.");
+          alert("관리에서 등록한 회사 계약서 양식(제목·본문)을 불러왔습니다.");
+        } else if (loadedDocPath) {
+          setBody("");
+          setDocumentPath(loadedDocPath);
+          setUploadFileName("회사 PDF 적용됨");
+          alert("회사 PDF가 계약 문서로 적용되었습니다.");
         } else {
+          setBody("");
+          setDocumentPath("");
+          setUploadFileName(null);
           alert("관리 → 계약서 양식에서 제목·본문을 등록한 뒤 다시 불러오기를 사용해 주세요.");
         }
       })
@@ -470,6 +479,27 @@ function ContractForm({
       consultationId: preFill?.consultationId ?? contract?.consultationId,
       estimateId: preFill?.estimateId ?? contract?.estimateId,
     };
+    const doUploadBodyPdf = (contractId: number): Promise<{ documentPath?: string } | void> => {
+      if (!body.trim()) return Promise.resolve();
+      return generateBodyPdf(body)
+        .then((blob) => {
+          const formData = new FormData();
+          formData.append("file", new File([blob], "contract-body.pdf", { type: "application/pdf" }));
+          formData.append("contractId", String(contractId));
+          return fetch("/api/contracts/upload", { method: "POST", body: formData });
+        })
+        .then((res) => res.json().then((data: { error?: string; documentPath?: string }) => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok || data.error) throw new Error(data?.error || "본문 PDF 업로드 실패");
+          return { documentPath: data.documentPath };
+        })
+        .catch((err) => {
+          const msg = err?.message || "";
+          if (msg.includes("업로드") || msg.includes("upload")) throw err;
+          throw new Error("본문 PDF 변환 실패: " + (msg || "알 수 없음"));
+        });
+    };
+
     if (isEdit && contract) {
       fetch(`/api/contracts/${contract.id}`, {
         method: "PATCH",
@@ -479,8 +509,15 @@ function ContractForm({
         .then((res) => {
           if (!res.ok) return res.json().then((d) => Promise.reject(d));
         })
-        .then(() => onSave())
-        .catch((err) => alert(err?.error || "수정 실패"))
+        .then(() => doUploadBodyPdf(contract.id))
+        .then((result) => {
+          if (result?.documentPath) {
+            setDocumentPath(result.documentPath);
+            setUploadFileName("본문에서 자동 생성됨");
+          }
+          onSave();
+        })
+        .catch((err) => alert(err?.error || err?.message || "수정 실패"))
         .finally(() => setSaving(false));
     } else {
       fetch("/api/contracts", {
@@ -489,8 +526,16 @@ function ContractForm({
         body: JSON.stringify(payload),
       })
         .then((res) => res.json())
-        .then((data) => {
+        .then(async (data) => {
           if (data.error) throw new Error(data.error);
+          const id = data.id as number | undefined;
+          if (id != null && body.trim()) {
+            const result = await doUploadBodyPdf(id);
+            if (result?.documentPath) {
+              setDocumentPath(result.documentPath);
+              setUploadFileName("본문에서 자동 생성됨");
+            }
+          }
           onSave();
         })
         .catch((err) => alert(err?.message || "저장 실패"))
@@ -509,8 +554,8 @@ function ContractForm({
       ? Number(contractAmount.replace(/\D/g, "")).toLocaleString("ko-KR")
       : contractAmount || "-";
 
-  const handlePrint = () => {
-    const printRootId = "contract-print-only";
+  /** 인쇄/미리보기 공통: 1페이지 + 본문 HTML (계약서 작성 인쇄 미리보기와 동일한 구조·간격) */
+  const contractPrintHtml = React.useMemo(() => {
     const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const rawAmount = Number(contractAmount.replace(/\D/g, "")) || 0;
     const fmtAmt = (n: number) => n ? n.toLocaleString("ko-KR") : "";
@@ -521,47 +566,117 @@ function ContractForm({
       const label = idx === 0 ? "중도금1차" : idx === 1 ? "중도금2차" : idx === 2 ? "중도금3차" : `중도금${idx + 1}차`;
       return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent || "")}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter || "")}일후</span></td></tr>`;
     }).join("");
-    const rowspanMoney = 3 + interimPayments.length + 1; /* 계약금액 + 선금 + 중도금들 + 잔금 */
-    const stampSrc = stampUrl || (typeof window !== "undefined" ? `${window.location.origin}/api/company/asset/stamp?t=${Date.now()}` : "");
-    /* 1페이지: 실내건축공사 표준도급 계약서 양식 — 참고 이미지와 동일한 레이아웃 */
+    const rowspanMoney = 3 + interimPayments.length + 1;
+    const stampSrc = stampUrl || (typeof window !== "undefined" ? `${window.location.origin}/api/company/asset/stamp` : "");
+    const page1Title = (title || "실내건축공사 표준도급 계약서").trim() || "실내건축공사 표준도급 계약서";
     const page1 =
       `<div class="contract-print-summary contract-print-page1">` +
-      `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
+      `<div class="contract-print-page1-top">` +
+      `<h1 class="contract-print-title">${esc(page1Title)}</h1>` +
       `<table class="contract-print-main-tbl">` +
       `<colgroup><col class="contract-print-col-section" /><col class="contract-print-col-label" /><col class="contract-print-col-sub" /><col class="contract-print-col-value2" /><col class="contract-print-col-in" /></colgroup>` +
       `<tbody>` +
-      /* 계약자 */
       `<tr><th rowspan="2" class="contract-print-section-label">계<br/>약<br/>자</th><td class="contract-print-row-label">발주자(수급인)</td><td colspan="2" class="contract-print-value">${esc(clientName || "")}</td><td class="contract-print-in">(인)</td></tr>` +
       `<tr><td class="contract-print-row-label">시공자(하수급인)</td><td colspan="2" class="contract-print-value">${esc(contractorCompanyName || "")}</td><td class="contract-print-in">(인)</td></tr>` +
-      /* 공사개요 */
       `<tr><th rowspan="4" class="contract-print-section-label">공<br/>사<br/>개<br/>요</th><td class="contract-print-row-label">공 사 명</td><td colspan="3" class="contract-print-value">${esc(projectName || "")}</td></tr>` +
       `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(projectPlace || "")}</td></tr>` +
       `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(projectStartDate || "")}</td></tr>` +
       `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(projectEndDate || "")}</td></tr>` +
-      /* 공사대금 */
       `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
       `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPaymentPercent || "")}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
       interimRows +
       `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balancePercent || "")}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
       `</tbody></table>` +
       (stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp" alt="" />` : "") +
-      /* 약관 문구 */
+      `</div>` +
       `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
-      /* 서명란 */
       `<div class="contract-print-signatures">` +
-      `<div class="contract-print-sig-block">` +
-      `<p class="contract-print-sig-title">발주자(수급인)</p>` +
-      `<p class="contract-print-sig-line">주소 : ${esc(clientAddress || "")}</p>` +
-      `<p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber || "")}</p>` +
-      `<p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName || "")}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p>` +
-      `</div>` +
-      `<div class="contract-print-sig-block">` +
-      `<p class="contract-print-sig-title">시공자(하수급인)</p>` +
-      `<p class="contract-print-sig-line">주소 : ${esc(contractorAddress || "")}</p>` +
-      `<p class="contract-print-sig-line">상호 : ${esc(contractorCompanyName || "")}</p>` +
-      `<p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay || "")}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : ""}</span></p>` +
-      `</div>` +
+      `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress || "")}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber || "")}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName || "")}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
+      `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(contractorAddress || "")}</p><p class="contract-print-sig-line">상호 : ${esc(contractorCompanyName || "")}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay || "")}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSrc ? `<img src="${stampSrc}" class="contract-print-stamp-sig" alt="" />` : ""}</span></p></div>` +
       `</div></div>`;
+    const bodySection = body.trim()
+      ? `<div class="contract-print-body contract-print-body-from-page2">${body}</div>`
+      : "";
+    return page1 + bodySection;
+  }, [title, clientName, clientAddress, clientResidentNumber, contractorCompanyName, contractorAddress, projectName, projectPlace, projectStartDate, projectEndDate, contractAmountFormatted, downPaymentPercent, balancePercent, interimPayments, body, stampUrl, sigDisplay]);
+
+  /** 본문 HTML을 서명용 PDF(2페이지부터 해당)로 변환. 브라우저 전용. */
+  const generateBodyPdf = async (bodyHtml: string): Promise<Blob> => {
+    const A4_W_PX = 794;
+    const A4_H_PX = 1123;
+    const SCALE = 2;
+    const root = document.createElement("div");
+    root.id = "contract-body-pdf-capture-root";
+    const inner = document.createElement("div");
+    inner.className = "contract-print-body contract-print-body-from-page2";
+    inner.innerHTML = bodyHtml;
+    root.appendChild(inner);
+    document.body.appendChild(root);
+    try {
+      const imgs = inner.querySelectorAll("img");
+      await Promise.all(
+        Array.from(imgs).map(
+          (img) =>
+            img.complete
+              ? Promise.resolve()
+              : new Promise<void>((r) => {
+                  img.onload = () => r();
+                  img.onerror = () => r();
+                  setTimeout(r, 3000);
+                })
+        )
+      );
+      await new Promise((r) => setTimeout(r, 200));
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(inner, {
+        scale: SCALE,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        width: A4_W_PX,
+        windowWidth: A4_W_PX,
+        logging: false,
+      });
+    const fullHeight = Math.max(canvas.height, 1);
+    const chunkHeight = A4_H_PX * SCALE;
+    const { PDFDocument } = await import("pdf-lib");
+    const A4_W_PT = 595.28;
+    const A4_H_PT = 841.89;
+    const pdfDoc = await PDFDocument.create();
+    for (let y = 0; y < fullHeight; y += chunkHeight) {
+      const h = Math.min(chunkHeight, fullHeight - y);
+      const pageCanvas = document.createElement("canvas");
+      pageCanvas.width = canvas.width;
+      pageCanvas.height = h;
+      const ctx = pageCanvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      if (canvas.height > 0) {
+        ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+      }
+      const dataUrl = pageCanvas.toDataURL("image/png");
+      const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const img = await pdfDoc.embedPng(bytes);
+      const scale = Math.min(A4_W_PT / img.width, A4_H_PT / img.height);
+      const w = img.width * scale;
+      const he = img.height * scale;
+      const page = pdfDoc.addPage([A4_W_PT, A4_H_PT]);
+      page.drawImage(img, { x: 0, y: A4_H_PT - he, width: w, height: he });
+    }
+      const pdfBytes = await pdfDoc.save();
+      return new Blob([pdfBytes], { type: "application/pdf" });
+    } finally {
+      root.remove();
+    }
+  };
+
+  const handlePrint = () => {
+    const printRootId = "contract-print-only";
+    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+      if (!contractPrintHtml.includes("contract-print-clause") || !contractPrintHtml.includes("contract-print-signatures") || !contractPrintHtml.includes("발주자(수급인)") || !contractPrintHtml.includes("시공자(하수급인)")) {
+        console.error("[계약서 인쇄] 1페이지 필수 영역(약관 문구·서명란)이 누락되었습니다. 해당 블록을 삭제하지 마세요.");
+      }
+    }
     const docSection =
       documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0
         ? `<div class="contract-print-doc-pages border-t border-gray-200 pt-3"><div class="space-y-4">${pdfPageImages.map((dataUrl, i) => `<img src="${dataUrl}" alt="계약 문서 ${i + 1}페이지" class="contract-print-doc-img w-full border border-gray-200 bg-white shadow-sm" />`).join("")}</div></div>`
@@ -571,7 +686,7 @@ function ContractForm({
     const wrap = document.createElement("div");
     wrap.id = printRootId;
     wrap.className = "contract-print-only-root";
-    wrap.innerHTML = page1 + docSection;
+    wrap.innerHTML = contractPrintHtml + docSection;
     document.body.appendChild(wrap);
     document.body.classList.add("contract-printing");
     const prevTitle = document.title;
@@ -591,25 +706,71 @@ function ContractForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
-      <h2 className="text-base font-semibold text-gray-900">{isEdit ? "계약 수정" : "신규 계약"}</h2>
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={handleLoadTemplate}
-          disabled={loadingTemplate}
-          className="rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
-        >
-          {loadingTemplate ? "불러오는 중..." : "마스터 양식 불러오기"}
-        </button>
-        <button
-          type="button"
-          onClick={handleLoadCompanyTemplate}
-          disabled={loadingCompanyTemplate}
-          className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
-        >
-          {loadingCompanyTemplate ? "불러오는 중..." : "회사양식 불러오기"}
-        </button>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold text-gray-900">{isEdit ? "계약 수정" : "신규 계약"}</h2>
+          <button
+            type="button"
+            onClick={handleLoadTemplate}
+            disabled={loadingTemplate}
+            className="rounded-lg border border-blue-500 bg-white px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+          >
+            {loadingTemplate ? "불러오는 중..." : "마스터 양식 불러오기"}
+          </button>
+          <button
+            type="button"
+            onClick={handleLoadCompanyTemplate}
+            disabled={loadingCompanyTemplate}
+            className="rounded-lg border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+          >
+            {loadingCompanyTemplate ? "불러오는 중..." : "회사양식 불러오기"}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">계약 문서 (PDF 등) — 서명하기 2페이지부터</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="file"
+                accept=".pdf,image/jpeg,image/png,image/jpg"
+                onChange={handleFileChange}
+                disabled={uploading}
+                className="block text-sm text-gray-700 file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-blue-700"
+              />
+              <span className="text-xs text-gray-500">{uploadFileName ?? "선택된 파일 없음"}</span>
+            </div>
+            <p className="mt-0.5 text-xs text-gray-500">본문만 입력하고 <strong>저장</strong>하면, 시스템이 본문을 PDF로 변환해 서명 문서에 자동으로 넣습니다. (직접 PDF 파일을 올려도 됩니다.)</p>
+            {uploading && <p className="mt-0.5 text-xs text-gray-500">업로드 중...</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              title="인쇄 대화상자에서 '머리글 및 바닥글' 해제 시 날짜·URL·페이지 번호가 인쇄되지 않습니다."
+            >
+              인쇄/미리보기
+            </button>
+          </div>
+        </div>
       </div>
+      <p className="text-xs text-gray-500 no-print">
+        인쇄 시 브라우저 인쇄 창에서 &quot;머리글 및 바닥글&quot;을 끄면 날짜·URL·페이지 번호가 나오지 않습니다.
+      </p>
       <div className="grid gap-3 sm:grid-cols-1">
         <div>
           <label className="block text-sm font-medium text-gray-700">계약 제목 * (견적서 제목)</label>
@@ -806,6 +967,15 @@ function ContractForm({
             </div>
           </div>
         </div>
+        {body.trim() ? (
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <label className="mb-2 block text-sm font-medium text-gray-700">계약 본문</label>
+            <div
+              className="prose prose-sm max-w-none rounded border border-gray-100 bg-gray-50/50 p-4 text-gray-900"
+              dangerouslySetInnerHTML={{ __html: body }}
+            />
+          </div>
+        ) : null}
         {documentPath ? (
           <div>
             <p className="mb-2 text-sm font-medium text-gray-700">계약 문서</p>
@@ -821,49 +991,15 @@ function ContractForm({
               </div>
             )}
           </div>
-        ) : (
-          <div>
-            <label className="block text-sm font-medium text-gray-700">계약 문서 (PDF 등)</label>
-            <input
-              type="file"
-              accept=".pdf,image/jpeg,image/png,image/jpg"
-              onChange={handleFileChange}
-              disabled={uploading}
-              className="mt-1 block w-full text-sm text-gray-700 file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-blue-700"
-            />
-            {uploading && <p className="mt-1 text-xs text-gray-500">업로드 중...</p>}
-          </div>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-2 pt-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? "저장 중..." : "저장"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          취소
-        </button>
-        <button
-          type="button"
-          onClick={handlePrint}
-          className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          인쇄/미리보기
-        </button>
+        ) : null}
       </div>
       {previewOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 no-print" role="dialog" aria-modal="true">
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
               <h3 className="text-sm font-semibold text-gray-800">계약서 미리보기</h3>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="hidden text-xs text-gray-500 sm:block">인쇄 시 &quot;머리글 및 바닥글&quot; 해제하면 날짜·URL·페이지 번호가 나오지 않습니다.</p>
                 <button type="button" onClick={handlePrint} className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
                   인쇄 (PDF로 저장 가능)
                 </button>
@@ -872,86 +1008,37 @@ function ContractForm({
                 </button>
               </div>
             </div>
-            <div ref={previewPrintRef} id="contract-preview-print-area" className="overflow-y-auto p-4 text-sm">
-              <div className="space-y-4">
-                <div>
-                  <p className="font-semibold text-gray-900">{title || "(제목 없음)"}</p>
-                </div>
-                <table className="w-full border-collapse border border-gray-300 text-left">
-                  <caption className="text-left font-semibold text-gray-800 py-1">고객</caption>
-                  <tbody>
-                    <tr className="border-b border-gray-200"><th className="w-28 bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">고객명</th><td className="px-2 py-1.5 border border-gray-300">{customerName || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">연락처</th><td className="px-2 py-1.5 border border-gray-300">{contact || "-"}</td></tr>
-                  </tbody>
-                </table>
-                <table className="w-full border-collapse border border-gray-300 text-left">
-                  <caption className="text-left font-semibold text-gray-800 py-1">발주자(수급인)</caption>
-                  <tbody>
-                    <tr className="border-b border-gray-200"><th className="w-28 bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">이름</th><td className="px-2 py-1.5 border border-gray-300">{clientName || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">주소</th><td className="px-2 py-1.5 border border-gray-300">{clientAddress || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">주민번호</th><td className="px-2 py-1.5 border border-gray-300">{clientResidentNumber || "-"}</td></tr>
-                  </tbody>
-                </table>
-                <table className="w-full border-collapse border border-gray-300 text-left">
-                  <caption className="text-left font-semibold text-gray-800 py-1">시공자(하수급인)</caption>
-                  <tbody>
-                    <tr className="border-b border-gray-200"><th className="w-28 bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">상호</th><td className="px-2 py-1.5 border border-gray-300">{contractorCompanyName || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">주소</th><td className="px-2 py-1.5 border border-gray-300">{contractorAddress || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">시공자 서명</th><td className="px-2 py-1.5 border border-gray-300">{sigDisplay || "-"}</td></tr>
-                  </tbody>
-                </table>
-                <table className="w-full border-collapse border border-gray-300 text-left">
-                  <caption className="text-left font-semibold text-gray-800 py-1">공사 정보</caption>
-                  <tbody>
-                    <tr className="border-b border-gray-200"><th className="w-28 bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">공사명</th><td className="px-2 py-1.5 border border-gray-300">{projectName || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">공사장소(면적)</th><td className="px-2 py-1.5 border border-gray-300">{projectPlace || "-"}</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">공사기간</th><td className="px-2 py-1.5 border border-gray-300">{projectStartDate || "-"} ~ {projectEndDate || "-"}</td></tr>
-                  </tbody>
-                </table>
-                <table className="w-full border-collapse border border-gray-300 text-left">
-                  <caption className="text-left font-semibold text-gray-800 py-1">계약금·선금·중도금·잔금</caption>
-                  <tbody>
-                    <tr className="border-b border-gray-200"><th className="w-40 bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">계약금액(VAT 별도)</th><td className="px-2 py-1.5 border border-gray-300">{contractAmountFormatted}원</td></tr>
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">선금</th><td className="px-2 py-1.5 border border-gray-300">{downPaymentPercent || "-"}% (계약이후 바로)</td></tr>
-                    {interimPayments.map((item, idx) => (
-                      <tr key={idx} className="border-b border-gray-200">
-                        <th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">{idx === 0 ? "중도금1차" : idx === 1 ? "중도금2차" : idx === 2 ? "중도금3차" : `중도금${idx + 1}차`}</th>
-                        <td className="px-2 py-1.5 border border-gray-300">{item.percent || "-"}% (공사로부터 {item.daysAfter || "-"}일후)</td>
-                      </tr>
-                    ))}
-                    <tr className="border-b border-gray-200"><th className="bg-gray-50 px-2 py-1.5 border border-gray-300 font-medium">잔금</th><td className="px-2 py-1.5 border border-gray-300">{balancePercent || "-"}% (공사완료시)</td></tr>
-                  </tbody>
-                </table>
-                {documentPath && (
-                  <div className="border-t border-gray-200 pt-3">
-                    {documentPath.toLowerCase().endsWith(".pdf") ? (
-                      pdfPageImages.length > 0 ? (
-                        <div className="space-y-4">
-                          {pdfPageImages.map((dataUrl, i) => (
-                            <img
-                              key={i}
-                              src={dataUrl}
-                              alt={`계약 문서 ${i + 1}페이지`}
-                              className="w-full border border-gray-200 bg-white shadow-sm"
-                              style={{ maxWidth: 595 }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <PdfToA4Images documentPath={documentPath} onPagesLoaded={setPdfPageImages} />
-                      )
-                    ) : (
-                      <div className="rounded border border-gray-200 bg-gray-50 overflow-hidden">
-                        <img
-                          src={`/api/company/contract-document?path=${encodeURIComponent(documentPath)}`}
-                          alt="계약 문서"
-                          className="max-h-[50vh] w-full object-contain"
-                        />
+            <div ref={previewPrintRef} id="contract-preview-print-area" className="contract-preview-print-pages overflow-y-auto p-4 bg-gray-100">
+              <div className="max-w-[210mm] mx-auto bg-white shadow-sm" dangerouslySetInnerHTML={{ __html: contractPrintHtml }} />
+              {documentPath ? (
+                <div className="max-w-[210mm] mx-auto mt-4 bg-white border-t border-gray-200 pt-4">
+                  {documentPath.toLowerCase().endsWith(".pdf") ? (
+                    pdfPageImages.length > 0 ? (
+                      <div className="space-y-4">
+                        {pdfPageImages.map((dataUrl, i) => (
+                          <img
+                            key={i}
+                            src={dataUrl}
+                            alt={`계약 문서 ${i + 1}페이지`}
+                            className="w-full border border-gray-200 bg-white shadow-sm"
+                            style={{ maxWidth: 595 }}
+                          />
+                        ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                    ) : (
+                      <PdfToA4Images documentPath={documentPath} onPagesLoaded={setPdfPageImages} />
+                    )
+                  ) : (
+                    <div className="rounded border border-gray-200 bg-gray-50 overflow-hidden">
+                      <img
+                        src={`/api/company/contract-document?path=${encodeURIComponent(documentPath)}`}
+                        alt="계약 문서"
+                        className="max-h-[50vh] w-full object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1404,10 +1491,16 @@ export default function ContractPage() {
                     try {
                       emailCaptureFromViewRef.current = await captureContractViewPage1AsImage(el);
                       emailDocPagesRef.current = [];
-                      const wrapper = document.querySelector(".contract-print-same-as-view .contract-print-doc-pages-wrapper");
-                      if (wrapper) {
+                      const collectDocPages = () => {
+                        const wrapper = document.querySelector(".contract-print-same-as-view .contract-print-doc-pages-wrapper");
+                        if (!wrapper) return;
                         const imgs = wrapper.querySelectorAll<HTMLImageElement>("img[src^='data:']");
                         imgs.forEach((img) => { if (img.src) emailDocPagesRef.current.push(img.src); });
+                      };
+                      collectDocPages();
+                      if (signViewContract.documentPath && emailDocPagesRef.current.length === 0) {
+                        await new Promise((r) => setTimeout(r, 1500));
+                        collectDocPages();
                       }
                       setEmailModal(signViewContract);
                       setEmailTo(signViewContract.signerEmail || "");
@@ -1514,8 +1607,9 @@ export default function ContractPage() {
                       } catch (e) { console.warn("html2canvas capture failed, fallback to server-side:", e); }
                     }
 
+                    /* 추가 문서가 있으면 클라이언트에서 전체 PDF 생성; 없으면 서버가 summaryImage + documentPath로 2페이지 이후 붙임 */
                     let pdfBase64: string | undefined;
-                    if (summaryImage && (docPages.length > 0 || true)) {
+                    if (summaryImage && docPages.length > 0) {
                       try {
                         pdfBase64 = await buildContractPdfForEmail(summaryImage, docPages);
                       } catch (e) {

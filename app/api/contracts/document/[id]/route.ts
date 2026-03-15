@@ -67,7 +67,7 @@ export async function GET(
         } else {
           const masterBuf = await getMasterPdfBuffer();
           if (masterBuf) buf = masterBuf;
-          else return NextResponse.json({ error: "파일을 읽을 수 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록해 주세요." }, { status: 404 });
+          else return NextResponse.json({ error: "계약 문서를 읽을 수 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
         }
       }
     } else if (docDataB64 && typeof docDataB64 === "string") {
@@ -75,7 +75,7 @@ export async function GET(
     } else {
       const masterBuf = await getMasterPdfBuffer();
       if (masterBuf) buf = masterBuf;
-      else return NextResponse.json({ error: "문서가 없습니다. 마스터 관리에서 계약서 양식 PDF를 등록해 주세요." }, { status: 404 });
+      else return NextResponse.json({ error: "계약 문서가 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
     }
 
     const contentType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";

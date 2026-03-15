@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
+import { ContractRichEditor } from "@/components/admin/ContractRichEditor";
 
 type DefaultTemplate = {
   id: number;
@@ -148,6 +149,9 @@ export default function MasterAdminPage() {
   const contractPdfInputRef = useRef<HTMLInputElement>(null);
   const [contractPdfFile, setContractPdfFile] = useState<File | null>(null);
   const [contractPdfImporting, setContractPdfImporting] = useState(false);
+  const [contractPdfDeleting, setContractPdfDeleting] = useState(false);
+  /** PDF가 있을 때 본문 보기 방식: "pdf" = PDF 뷰어, "text" = 글로 적기(텍스트 편집) */
+  const [contractBodyViewMode, setContractBodyViewMode] = useState<"pdf" | "text">("pdf");
   const [masterSmtpConfigured, setMasterSmtpConfigured] = useState(false);
   const [masterSmtpUser, setMasterSmtpUser] = useState<string | null>(null);
   const [masterSmtpProvider, setMasterSmtpProvider] = useState<"google" | "app_password" | null>(null);
@@ -318,12 +322,22 @@ export default function MasterAdminPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title: contractTemplateTitle, body: contractTemplateBody }),
     })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data: data as { error?: string; message?: string } })))
-      .then(({ ok, data }) => {
-        if (!ok) throw new Error(data.error || "저장 실패");
+      .then((res) => res.json().then((data) => ({ ok: res.ok, status: res.status, data: data as { error?: string; message?: string } })))
+      .then(({ ok, status, data }) => {
+        if (!ok) {
+          const msg = data.error || (status === 403 ? "마스터 권한이 필요합니다. 로그인을 확인하세요." : "저장 실패");
+          setContractTemplateError(msg);
+          alert(msg);
+          return;
+        }
         alert("계약서 양식이 저장되었습니다.");
+        loadContractTemplate();
       })
-      .catch((e) => setContractTemplateError(e instanceof Error ? e.message : "저장 실패"))
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : "저장 실패";
+        setContractTemplateError(msg);
+        alert(`저장 실패: ${msg}`);
+      })
       .finally(() => setContractTemplateSaving(false));
   };
 
@@ -370,6 +384,24 @@ export default function MasterAdminPage() {
       })
       .catch((e) => setContractTemplateError(e.message || "PDF 저장 실패"))
       .finally(() => setContractPdfImporting(false));
+  };
+
+  const handleContractPdfDelete = () => {
+    if (!contractTemplateDocumentPath) return;
+    if (!confirm("저장된 마스터 계약서 PDF를 삭제할까요? 계약서 작성에서 마스터 양식 불러오기 시 PDF가 더 이상 적용되지 않습니다.")) return;
+    setContractTemplateError("");
+    setContractPdfDeleting(true);
+    fetch("/api/admin/master/contract-template/delete-pdf", { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) throw new Error(data.error);
+        loadContractTemplate();
+        setContractTemplatePdfVersion((v) => v + 1);
+        setContractBodyViewMode("text");
+        alert(data.message || "PDF가 삭제되었습니다.");
+      })
+      .catch((e) => setContractTemplateError(e.message || "PDF 삭제 실패"))
+      .finally(() => setContractPdfDeleting(false));
   };
 
   const handleExcelFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -832,7 +864,7 @@ export default function MasterAdminPage() {
       </section>
 
       {/* 계약서 양식 */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section id="contract-template" className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm scroll-mt-4">
         <h2 className="mb-2 text-base font-semibold text-gray-800">계약서 양식</h2>
         <p className="mb-4 text-sm text-gray-600">
           계약서 제목과 본문 양식을 등록하면 계약서 작성 페이지에서 &quot;마스터 양식 불러오기&quot;로 불러와 사용할 수 있습니다. 본문은 서명 페이지에 그대로 표시됩니다. <strong>엑셀 계약서(인테리어 계약서(공)-oro.xls 등) 또는 PDF 파일을 넣으면 자동으로 제목·본문이 채워집니다.</strong>
@@ -895,6 +927,14 @@ export default function MasterAdminPage() {
                 >
                   {contractPdfImporting ? "적용 중..." : "PDF 그대로 저장"}
                 </button>
+                <button
+                  type="button"
+                  onClick={handleContractPdfDelete}
+                  disabled={contractPdfDeleting || !contractTemplateDocumentPath}
+                  className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {contractPdfDeleting ? "삭제 중..." : "PDF 지우기"}
+                </button>
               </div>
             </div>
             <div>
@@ -907,34 +947,100 @@ export default function MasterAdminPage() {
                 className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
             </div>
-            {contractTemplateDocumentPath ? (
+            {(() => {
+              const bodyRaw = contractTemplateBody ?? "";
+              const bodyForEditor =
+                bodyRaw.trim().startsWith("<")
+                  ? bodyRaw
+                  : bodyRaw
+                    ? "<p>" + bodyRaw.replace(/\n/g, "</p><p>") + "</p>"
+                    : "";
+              return contractTemplateDocumentPath ? (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문 (PDF 그대로 저장됨)</label>
-                <p className="mb-2 text-xs text-gray-600">
-                  아래 PDF가 그대로 저장되어 있습니다. 순서·볼드 등 원본 그대로 유지됩니다. 계약서 작성에서 &quot;마스터 양식 불러오기&quot; 시 이 PDF가 사용됩니다. (뷰어에 원본 파일 제목이 깨져 보일 수 있으나, 저장·적용에는 문제 없습니다.)
-                </p>
-                <div className="rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
-                  <iframe
-                    key={contractTemplatePdfVersion}
-                    src={`/api/admin/master/contract-template/document?v=${contractTemplatePdfVersion}`}
-                    title="계약서 PDF"
-                    className="h-[60vh] w-full min-h-[400px]"
-                  />
+                <div className="mb-2 flex items-center justify-between">
+                  <label className="text-sm font-medium text-gray-700">계약서 본문</label>
+                  <div className="flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setContractBodyViewMode("pdf")}
+                      className={`rounded-md px-3 py-1.5 text-sm ${contractBodyViewMode === "pdf" ? "bg-white font-medium shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      PDF 보기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setContractBodyViewMode("text")}
+                      className={`rounded-md px-3 py-1.5 text-sm ${contractBodyViewMode === "text" ? "bg-white font-medium shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      글로 적기
+                    </button>
+                  </div>
                 </div>
+                {contractBodyViewMode === "pdf" ? (
+                  <>
+                    <p className="mb-2 text-xs text-gray-600">
+                      아래 PDF가 그대로 저장되어 있습니다. 순서·볼드 등 원본 그대로 유지됩니다. 계약서 작성에서 &quot;마스터 양식 불러오기&quot; 시 이 PDF가 사용됩니다. (뷰어에 원본 파일 제목이 깨져 보일 수 있으나, 저장·적용에는 문제 없습니다.)
+                    </p>
+                    <div className="rounded-lg border border-gray-200 overflow-hidden bg-gray-100">
+                      <iframe
+                        key={contractTemplatePdfVersion}
+                        src={`/api/admin/master/contract-template/document?v=${contractTemplatePdfVersion}`}
+                        title="계약서 PDF"
+                        className="h-[60vh] w-full min-h-[400px]"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs text-gray-500">본문을 수정할 수 있습니다. 굵게, 정렬, 글자 크기 등을 사용할 수 있습니다. 저장 시 제목·본문이 함께 저장됩니다.</p>
+                      <button
+                        type="button"
+                        onClick={handleContractTemplateSave}
+                        disabled={contractTemplateSaving}
+                        className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {contractTemplateSaving ? "저장 중..." : "글로 적은 본문 저장"}
+                      </button>
+                    </div>
+                    <div className="flex h-[50vh] min-h-[320px] flex-col overflow-hidden rounded-lg">
+                      <ContractRichEditor
+                        value={bodyForEditor}
+                        onChange={setContractTemplateBody}
+                        placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요."
+                        minHeight="280px"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             ) : (
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문</label>
-                <p className="mb-1 text-xs text-gray-500">엑셀 불러오기 시 여기에 채워지거나, 위에서 PDF 그대로 저장하면 PDF가 사용됩니다.</p>
-                <textarea
-                  value={contractTemplateBody ?? ""}
-                  onChange={(e) => setContractTemplateBody(e.target.value)}
-                  placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요. 줄바꿈이 유지됩니다."
-                  rows={12}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
-                />
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">계약서 본문 (글로 적기)</label>
+                    <p className="text-xs text-gray-500">엑셀 불러오기 시 여기에 채워지거나, 위에서 PDF 그대로 저장하면 PDF가 사용됩니다. 굵게, 정렬, 글자 크기 등을 사용할 수 있습니다.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleContractTemplateSave}
+                    disabled={contractTemplateSaving}
+                    className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {contractTemplateSaving ? "저장 중..." : "글로 적은 본문 저장"}
+                  </button>
+                </div>
+                <div className="flex h-[50vh] min-h-[320px] flex-col overflow-hidden rounded-lg">
+                  <ContractRichEditor
+                    value={bodyForEditor}
+                    onChange={setContractTemplateBody}
+                    placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요."
+                    minHeight="280px"
+                  />
+                </div>
               </div>
-            )}
+            );
+            })()}
             {contractTemplateError && (
               <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{contractTemplateError}</p>
             )}

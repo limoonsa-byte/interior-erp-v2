@@ -42,7 +42,7 @@ async function sendSignedContractEmail(
   });
 }
 
-function rowToSignInfo(row: Record<string, unknown>, includeBody: boolean) {
+function rowToSignInfo(row: Record<string, unknown>) {
   return {
     id: row.id,
     title: String(row.title ?? ""),
@@ -50,7 +50,7 @@ function rowToSignInfo(row: Record<string, unknown>, includeBody: boolean) {
     contact: String(row.contact ?? ""),
     status: String(row.status ?? "sent"),
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
-    body: includeBody && row.body != null ? String(row.body) : undefined,
+    body: row.body != null && String(row.body).trim() !== "" ? String(row.body) : undefined,
     details: row.details != null ? row.details : undefined,
   };
 }
@@ -69,11 +69,13 @@ export async function GET(
     `;
     if (result.rows.length === 0) return NextResponse.json({ error: "유효하지 않거나 만료된 링크입니다." }, { status: 404 });
     const c = result.rows[0];
-    if (c.status === "signed") return NextResponse.json({ ...rowToSignInfo(c, true), alreadySigned: true }, { status: 200 });
+    const info = rowToSignInfo(c);
+    if (c.status === "signed") return NextResponse.json({ ...info, alreadySigned: true }, { status: 200 });
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-    const documentUrl = `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`;
-    const includeBody = false;
-    return NextResponse.json({ ...rowToSignInfo(c, includeBody), documentUrl }, { status: 200 });
+    const documentUrl = c.document_path != null && String(c.document_path).trim() !== ""
+      ? `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`
+      : undefined;
+    return NextResponse.json({ ...info, documentUrl }, { status: 200 });
   } catch (error) {
     console.error("contracts sign GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

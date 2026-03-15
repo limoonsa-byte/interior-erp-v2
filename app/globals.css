@@ -38,6 +38,23 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* 계약서 본문 리치 에디터 (관리 → 계약서 양식): 본문만 스크롤, 스크롤바 오른쪽 */
+.contract-rich-editor-content {
+  direction: ltr;
+}
+.contract-rich-editor-content .ProseMirror {
+  min-height: 200px;
+  padding: 0.5rem 0.75rem;
+  outline: none;
+}
+.contract-rich-editor-content .ProseMirror p.is-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
 /* 견적서 미리보기 인쇄: 세로 모드, 머리글·바닥글 끔(Chrome은 여백 0이면 표시 안 함) */
 @media print {
   .no-print {
@@ -51,9 +68,16 @@ body {
   #contract-print-only img {
     display: block !important;
   }
+  /* 2·3·4·5… 페이지 A4 기준 상하좌우 여백 15mm (모든 페이지에 적용) */
   @page {
-    size: portrait;
-    margin: 0;
+    size: A4;
+    margin: 15mm;
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
+    @bottom-right { content: none; }
   }
   /* 인쇄 시 배경색·글자색 유지 (인쇄 대화상자에서 "배경 그래픽" 켜야 함) */
   #estimate-preview-print,
@@ -269,6 +293,185 @@ body {
   outline: none !important;
   box-shadow: none !important;
 }
+
+/* 계약서 서명 화면: 2·3·4·5… 페이지 A4 기준 상하좌우 여백 (글로 불러오든 PDF로 불러오든 동일) */
+.contract-sign-view-pages {
+  padding: 15mm !important;
+  box-sizing: border-box;
+}
+/* PDF 각 페이지마다 상하좌우 15mm 여백 */
+.contract-sign-doc-page {
+  padding: 15mm;
+  background: #fff;
+  box-sizing: border-box;
+}
+.contract-sign-doc-page img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* 계약서 서명 화면: 본문을 인쇄 미리보기처럼 페이지 나누어 표시 (A4 비율, 2페이지부터 구분선) */
+.contract-sign-body-pages {
+  margin-top: 1rem;
+  padding: 15mm;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #111;
+  background: white;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(267mm - 2px),
+    #e5e7eb calc(267mm - 2px),
+    #e5e7eb 267mm
+  );
+  background-attachment: local;
+  background-size: 100% 267mm;
+  background-repeat: repeat-y;
+  box-sizing: border-box;
+}
+.contract-sign-body-pages p {
+  margin: 0 0 0.5em 0;
+}
+.contract-sign-body-pages p:last-child {
+  margin-bottom: 0;
+}
+.contract-sign-body-pages > * + * {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.contract-sign-body-pages > *:first-child {
+  margin-top: 0;
+}
+.contract-sign-body-pages > *:last-child {
+  margin-bottom: 0;
+}
+.contract-sign-body-pages strong {
+  font-weight: 600;
+}
+
+/* 계약서 작성 인쇄 미리보기 모달: 실제 인쇄·서명 화면과 동일한 페이지 간격·여백·본문 스타일 */
+.contract-preview-print-pages {
+  padding: 15mm;
+  box-sizing: border-box;
+}
+.contract-preview-print-pages .contract-print-summary {
+  padding: 0.5in 0.4in !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  page-break-after: always;
+  min-height: 267mm;
+}
+.contract-preview-print-pages .contract-print-page1 {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.contract-preview-print-pages .contract-print-page1-top {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.contract-preview-print-pages .contract-print-title {
+  text-align: center;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0.3in 0 0.4in 0;
+}
+.contract-preview-print-pages .contract-print-main-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #333;
+  font-size: 12px;
+  table-layout: fixed;
+}
+.contract-preview-print-pages .contract-print-body,
+.contract-preview-print-pages .contract-print-body-from-page2 {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 15mm 0;
+  margin-top: 1rem;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(267mm - 2px),
+    #e5e7eb calc(267mm - 2px),
+    #e5e7eb 267mm
+  );
+  background-size: 100% 267mm;
+  background-repeat: repeat-y;
+  box-sizing: border-box;
+}
+.contract-preview-print-pages .contract-print-body p,
+.contract-preview-print-pages .contract-print-body-from-page2 p {
+  margin: 0 0 0.5em 0;
+}
+.contract-preview-print-pages .contract-print-body p:first-child,
+.contract-preview-print-pages .contract-print-body-from-page2 p:first-child {
+  margin-top: 0;
+}
+.contract-preview-print-pages .contract-print-body p:last-child,
+.contract-preview-print-pages .contract-print-body-from-page2 p:last-child {
+  margin-bottom: 0;
+}
+.contract-preview-print-pages .contract-print-body-from-page2 > * + *,
+.contract-preview-print-pages .contract-print-body > * + * {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.contract-preview-print-pages .contract-print-body-from-page2 > *:first-child,
+.contract-preview-print-pages .contract-print-body > *:first-child {
+  margin-top: 0;
+}
+.contract-preview-print-pages .contract-print-body-from-page2 > *:last-child,
+.contract-preview-print-pages .contract-print-body > *:last-child {
+  margin-bottom: 0;
+}
+
+/* 본문만 PDF 변환 시 오프스크린 캡처용 (인쇄 본문과 동일 스타일) */
+#contract-body-pdf-capture-root {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 794px;
+  background: #fff;
+  box-sizing: border-box;
+  z-index: -1;
+}
+#contract-body-pdf-capture-root .contract-print-body-from-page2 {
+  font-size: 11px;
+  line-height: 1.6;
+  padding: 15mm;
+  box-sizing: border-box;
+}
+#contract-body-pdf-capture-root .contract-print-body-from-page2 p {
+  margin: 0 0 0.5em 0;
+}
+#contract-body-pdf-capture-root .contract-print-body-from-page2 p:first-child { margin-top: 0; }
+#contract-body-pdf-capture-root .contract-print-body-from-page2 p:last-child { margin-bottom: 0; }
+#contract-body-pdf-capture-root .contract-print-body-from-page2 > * + * {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+#contract-body-pdf-capture-root .contract-print-body-from-page2 > *:first-child { margin-top: 0; }
+#contract-body-pdf-capture-root .contract-print-body-from-page2 > *:last-child { margin-bottom: 0; }
+
+/* 계약서 표·서명란 등 공통 스타일 (미리보기에서도 인쇄와 동일) */
+.contract-preview-print-pages .contract-print-section-label,
+.contract-preview-print-pages .contract-print-row-label,
+.contract-preview-print-pages .contract-print-sub-label { background: #fafafa; }
+.contract-preview-print-pages .contract-print-section-label { background: #f5f5f5; font-weight: 600; }
+.contract-preview-print-pages .contract-print-main-tbl th,
+.contract-preview-print-pages .contract-print-main-tbl td { border: 1px solid #333; padding: 8px; }
+.contract-preview-print-pages .contract-print-red { color: #c00; font-weight: 600; }
+.contract-preview-print-pages .contract-print-clause { font-size: 11px; line-height: 1.6; padding-top: 0.25in; }
+.contract-preview-print-pages .contract-print-signatures { display: flex; gap: 60px; margin-top: 0.15in; }
+.contract-preview-print-pages .contract-print-sig-block { flex: 1; font-size: 12px; }
+.contract-preview-print-pages .contract-print-stamp { position: absolute; top: 182px; right: 30px; width: 56px; }
 
 /* 이메일 캡처 시 인쇄 미리보기와 동일한 깔끔한 레이아웃 적용 */
 .contract-email-capture-print-style {
@@ -605,16 +808,30 @@ body {
     font-size: 12px;
     box-sizing: border-box;
   }
-  /* 요약 표(1페이지): A4 한 페이지에 공간 배치 */
+  /* 요약 표(1페이지): A4 한 장 높이로 고정, 약관·서명란은 반드시 1페이지 맨 아래(2페이지로 넘어가면 안 됨) */
   #contract-print-only .contract-print-summary {
     padding: 0.5in 0.4in !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
     overflow: hidden !important;
     page-break-after: always;
-    min-height: 100vh;
+    height: 267mm;
+    min-height: 267mm;
+    max-height: 267mm;
     display: flex;
     flex-direction: column;
+  }
+  #contract-print-only .contract-print-page1 {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  /* 1페이지 상단(제목+표+도장): 남는 공간만 쓰고 넘치면 잘림 → 약관·서명란이 1페이지 맨 아래 고정 */
+  #contract-print-only .contract-print-page1-top {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
   /* 1페이지 표준도급 계약서 양식 */
   #contract-print-only .contract-print-page1 .contract-print-title {
@@ -622,6 +839,7 @@ body {
     font-size: 20px;
     font-weight: 700;
     margin: 0.3in 0 0.4in 0;
+    flex-shrink: 0;
   }
   #contract-print-only .contract-print-main-tbl {
     width: 100%;
@@ -680,14 +898,51 @@ body {
   #contract-print-only .contract-print-clause {
     font-size: 11px;
     margin-top: auto;
-    padding-top: 0.5in;
+    padding-top: 0.25in;
     line-height: 1.6;
+  }
+  /* 2페이지 이후 본문: 상하좌우 여백은 @page margin 15mm로 적용됨 */
+  #contract-print-only .contract-print-body,
+  #contract-print-only .contract-print-body-from-page2 {
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 0;
+  }
+  #contract-print-only .contract-print-body-from-page2 {
+    page-break-before: always;
+    break-before: page;
+  }
+  /* 본문 단락 간격: 보통 크기(0.5em). 페이지 상단 여백은 본문 padding 15mm만 적용 */
+  #contract-print-only .contract-print-body p,
+  #contract-print-only .contract-print-body-from-page2 p {
+    margin: 0 0 0.5em 0;
+  }
+  #contract-print-only .contract-print-body p:first-child,
+  #contract-print-only .contract-print-body-from-page2 p:first-child {
+    margin-top: 0;
+  }
+  #contract-print-only .contract-print-body p:last-child,
+  #contract-print-only .contract-print-body-from-page2 p:last-child {
+    margin-bottom: 0;
+  }
+  #contract-print-only .contract-print-body-from-page2 > * + *,
+  #contract-print-only .contract-print-body > * + * {
+    margin-top: 0.5em;
+    margin-bottom: 0.5em;
+  }
+  #contract-print-only .contract-print-body-from-page2 > *:first-child,
+  #contract-print-only .contract-print-body > *:first-child {
+    margin-top: 0;
+  }
+  #contract-print-only .contract-print-body-from-page2 > *:last-child,
+  #contract-print-only .contract-print-body > *:last-child {
+    margin-bottom: 0;
   }
   #contract-print-only .contract-print-signatures {
     display: flex;
     gap: 60px;
-    margin-top: 0.4in;
-    padding: 0 10px 0.3in;
+    margin-top: 0.15in;
+    padding: 0 10px 0.15in;
   }
   #contract-print-only .contract-print-sig-block {
     flex: 1;
