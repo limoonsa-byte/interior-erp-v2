@@ -664,7 +664,7 @@ function ContractForm({
       page.drawImage(img, { x: 0, y: A4_H_PT - he, width: w, height: he });
     }
       const pdfBytes = await pdfDoc.save();
-      return new Blob([pdfBytes], { type: "application/pdf" });
+      return new Blob([pdfBytes as BlobPart], { type: "application/pdf" });
     } finally {
       root.remove();
     }
