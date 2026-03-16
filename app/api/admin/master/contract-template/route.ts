@@ -27,13 +27,24 @@ export async function GET() {
   try {
     await ensureMasterContractTemplateDocumentPath();
     const result = await sql`
-      SELECT title, body, document_path FROM master_contract_template WHERE id = 1 LIMIT 1
+      SELECT title, body, document_path, body_margins FROM master_contract_template WHERE id = 1 LIMIT 1
     `;
-    const row = result.rows[0] as { title: string; body: string; document_path?: string } | undefined;
+    const row = result.rows[0] as { title: string; body: string; document_path?: string; body_margins?: string } | undefined;
+    let bodyMargins = { top: 15, right: 15, bottom: 15, left: 15 };
+    if (row?.body_margins && typeof row.body_margins === "string") {
+      try {
+        const parsed = JSON.parse(row.body_margins) as { top?: number; right?: number; bottom?: number; left?: number };
+        if (parsed && typeof parsed.top === "number") bodyMargins.top = parsed.top;
+        if (typeof parsed.right === "number") bodyMargins.right = parsed.right;
+        if (typeof parsed.bottom === "number") bodyMargins.bottom = parsed.bottom;
+        if (typeof parsed.left === "number") bodyMargins.left = parsed.left;
+      } catch { /* ignore */ }
+    }
     return NextResponse.json({
       title: row?.title ?? "",
       body: row?.body ?? "",
       documentPath: row?.document_path != null ? String(row.document_path) : undefined,
+      bodyMargins,
     });
   } catch (error) {
     console.error("master contract-template GET error:", error);
@@ -51,10 +62,24 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const title = body.title != null ? String(body.title) : "";
     const bodyText = body.body != null ? String(body.body) : "";
+    const bodyMargins = body.bodyMargins;
+    const bodyMarginsStr =
+      bodyMargins != null && typeof bodyMargins === "object"
+        ? JSON.stringify({
+            top: Number(bodyMargins.top) || 15,
+            right: Number(bodyMargins.right) || 15,
+            bottom: Number(bodyMargins.bottom) || 15,
+            left: Number(bodyMargins.left) || 15,
+          })
+        : '{"top":15,"right":15,"bottom":15,"left":15}';
     await sql`
-      UPDATE master_contract_template
-      SET title = ${title}, body = ${bodyText}, updated_at = NOW()
-      WHERE id = 1
+      INSERT INTO master_contract_template (id, title, body, body_margins, updated_at)
+      VALUES (1, ${title}, ${bodyText}, ${bodyMarginsStr}, NOW())
+      ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
+        body = EXCLUDED.body,
+        body_margins = EXCLUDED.body_margins,
+        updated_at = NOW()
     `;
     return NextResponse.json({ message: "저장되었습니다." });
   } catch (error) {

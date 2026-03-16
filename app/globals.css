@@ -351,6 +351,25 @@ body {
   font-weight: 600;
 }
 
+/* A4 페이지 브레이크: SVG 배경이 하단여백+간격+상단여백을 그리므로 투명 처리 */
+.contract-a4-paper-sheet div[data-page-break] {
+  background: transparent !important;
+}
+.contract-a4-paper-sheet .ProseMirror {
+  padding: 0 !important;
+  min-height: auto !important;
+}
+.contract-a4-paper-sheet .contract-rich-editor-content {
+  overflow: visible !important;
+  min-height: 0 !important;
+}
+
+/* A4 용지 스타일 */
+.contract-a4-paper-sheet {
+  position: relative;
+  background-color: #e8e8e8;
+}
+
 /* 계약서 작성 인쇄 미리보기 모달: 실제 인쇄·서명 화면과 동일한 페이지 간격·여백·본문 스타일 */
 .contract-preview-print-pages {
   padding: 15mm;

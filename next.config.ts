@@ -9,8 +9,13 @@ const withPWA = require("next-pwa")({
 });
 
 const nextConfig: NextConfig = {
-  turbopack: {},
-  serverExternalPackages: ["@pdf-lib/fontkit", "pdfkit"],
+  turbopack: {
+    resolveAlias: {
+      // Turbopack이 next-auth를 next/auth로 잘못 해석하는 것 방지
+      "next/auth": "next-auth",
+    },
+  },
+  serverExternalPackages: ["@pdf-lib/fontkit", "pdfkit", "next-auth"],
   outputFileTracingIncludes: {
     "/api/**": ["./fonts/**"],
   },

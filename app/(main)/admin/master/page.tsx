@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
-import { ContractRichEditor } from "@/components/admin/ContractRichEditor";
+
+const ContractRichEditor = dynamic(
+  () => import("@/components/admin/ContractRichEditor").then((m) => m.ContractRichEditor),
+  { ssr: false, loading: () => <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-8 text-center text-sm text-gray-500">본문 편집기 로딩 중…</div> }
+);
 
 type DefaultTemplate = {
   id: number;
@@ -140,6 +145,32 @@ export default function MasterAdminPage() {
   const [contractTemplateBody, setContractTemplateBody] = useState("");
   const [contractTemplateDocumentPath, setContractTemplateDocumentPath] = useState<string | null>(null);
   const [contractTemplatePdfVersion, setContractTemplatePdfVersion] = useState(0);
+  /** 글로 적은 본문 A4 페이지 여백 (mm) */
+  const [bodyMarginTop, setBodyMarginTop] = useState(15);
+  const [bodyMarginRight, setBodyMarginRight] = useState(15);
+  const [bodyMarginBottom, setBodyMarginBottom] = useState(15);
+  const [bodyMarginLeft, setBodyMarginLeft] = useState(15);
+  const PAGE_GAP_MM = 8;
+  const repeatMm = 297 + PAGE_GAP_MM;
+
+  const a4CornersSvg = useMemo(() => {
+    const mT = bodyMarginTop, mR = bodyMarginRight, mB = bodyMarginBottom, mL = bodyMarginLeft;
+    const c = 4, sc = "#c0c0c0", w = 210, h = 297, rH = repeatMm;
+    const p = (d: string) => `<path d='${d}' fill='none' stroke='${sc}' stroke-width='0.3'/>`;
+    const svg = [
+      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${rH}'>`,
+      `<rect x='0' y='0' width='${w}' height='${h}' fill='#fff'/>`,
+      `<rect x='0' y='${h}' width='${w}' height='${PAGE_GAP_MM}' fill='#e8e8e8'/>`,
+      p(`M ${mL - c} ${mT} L ${mL} ${mT} L ${mL} ${mT - c}`),
+      p(`M ${w - mR + c} ${mT} L ${w - mR} ${mT} L ${w - mR} ${mT - c}`),
+      p(`M ${mL - c} ${h - mB} L ${mL} ${h - mB} L ${mL} ${h - mB + c}`),
+      p(`M ${w - mR + c} ${h - mB} L ${w - mR} ${h - mB} L ${w - mR} ${h - mB + c}`),
+      `</svg>`,
+    ].join("");
+    const encoded = svg.replace(/#/g, "%23");
+    return `url("data:image/svg+xml,${encoded}")`;
+  }, [bodyMarginTop, bodyMarginRight, bodyMarginBottom, bodyMarginLeft, repeatMm]);
+
   const [contractTemplateLoading, setContractTemplateLoading] = useState(false);
   const [contractTemplateSaving, setContractTemplateSaving] = useState(false);
   const [contractTemplateError, setContractTemplateError] = useState("");
@@ -304,6 +335,13 @@ export default function MasterAdminPage() {
         setContractTemplateTitle(data.title ?? "");
         setContractTemplateBody(data.body ?? "");
         setContractTemplateDocumentPath(data.documentPath != null ? String(data.documentPath) : null);
+        const m = data.bodyMargins as { top?: number; right?: number; bottom?: number; left?: number } | undefined;
+        if (m) {
+          setBodyMarginTop(typeof m.top === "number" ? m.top : 15);
+          setBodyMarginRight(typeof m.right === "number" ? m.right : 15);
+          setBodyMarginBottom(typeof m.bottom === "number" ? m.bottom : 15);
+          setBodyMarginLeft(typeof m.left === "number" ? m.left : 15);
+        }
         setContractTemplateError("");
       })
       .catch(() => setContractTemplateError("계약서 양식을 불러올 수 없습니다."))
@@ -320,7 +358,11 @@ export default function MasterAdminPage() {
     fetch("/api/admin/master/contract-template", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: contractTemplateTitle, body: contractTemplateBody }),
+      body: JSON.stringify({
+        title: contractTemplateTitle,
+        body: contractTemplateBody,
+        bodyMargins: { top: bodyMarginTop, right: bodyMarginRight, bottom: bodyMarginBottom, left: bodyMarginLeft },
+      }),
     })
       .then((res) => res.json().then((data) => ({ ok: res.ok, status: res.status, data: data as { error?: string; message?: string } })))
       .then(({ ok, status, data }) => {
@@ -993,7 +1035,7 @@ export default function MasterAdminPage() {
                 ) : (
                   <>
                     <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs text-gray-500">본문을 수정할 수 있습니다. 굵게, 정렬, 글자 크기 등을 사용할 수 있습니다. 저장 시 제목·본문이 함께 저장됩니다.</p>
+                      <p className="text-xs text-gray-500">본문을 수정할 수 있습니다. 굵게, 정렬, 글자 크기 등을 사용할 수 있습니다. 저장 시 제목·본문·여백이 함께 저장됩니다.</p>
                       <button
                         type="button"
                         onClick={handleContractTemplateSave}
@@ -1003,14 +1045,94 @@ export default function MasterAdminPage() {
                         {contractTemplateSaving ? "저장 중..." : "글로 적은 본문 저장"}
                       </button>
                     </div>
-                    <div className="flex h-[50vh] min-h-[320px] flex-col overflow-hidden rounded-lg">
-                      <ContractRichEditor
-                        value={bodyForEditor}
-                        onChange={setContractTemplateBody}
-                        placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요."
-                        minHeight="280px"
-                      />
-                    </div>
+                    <ContractRichEditor
+                      value={bodyForEditor}
+                      onChange={setContractTemplateBody}
+                      placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요. A4 페이지(297mm) 단위로 끊어져 인쇄됩니다."
+                      minHeight="280px"
+                      pageContentHeightMm={297 - bodyMarginTop - bodyMarginBottom}
+                      pageGapMm={bodyMarginBottom + PAGE_GAP_MM + bodyMarginTop}
+                      contentWrapper={(toolbar, content) => (
+                        <>
+                          {toolbar}
+                          <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                            <p className="mb-2 text-xs font-medium text-gray-700">본문 페이지 여백 (A4, mm)</p>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <label className="flex items-center gap-1 text-sm text-gray-600">
+                                상
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={bodyMarginTop}
+                                  onChange={(e) => setBodyMarginTop(Number(e.target.value) || 0)}
+                                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1 text-sm text-gray-600">
+                                하
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={bodyMarginBottom}
+                                  onChange={(e) => setBodyMarginBottom(Number(e.target.value) || 0)}
+                                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1 text-sm text-gray-600">
+                                좌
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={bodyMarginLeft}
+                                  onChange={(e) => setBodyMarginLeft(Number(e.target.value) || 0)}
+                                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                                />
+                              </label>
+                              <label className="flex items-center gap-1 text-sm text-gray-600">
+                                우
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={50}
+                                  value={bodyMarginRight}
+                                  onChange={(e) => setBodyMarginRight(Number(e.target.value) || 0)}
+                                  className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                                />
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex max-h-[65vh] min-h-[420px] min-w-0 flex-col">
+                            <div className="min-h-0 flex-1 overflow-y-auto bg-[#e8e8e8] p-4">
+                              <div
+                                className="contract-a4-paper-sheet relative mx-auto"
+                                style={{
+                                  maxWidth: "210mm",
+                                  minHeight: `${297}mm`,
+                                  boxSizing: "border-box",
+                                  paddingTop: `${bodyMarginTop}mm`,
+                                  paddingLeft: `${bodyMarginLeft}mm`,
+                                  paddingRight: `${bodyMarginRight}mm`,
+                                  paddingBottom: `${bodyMarginBottom}mm`,
+                                  backgroundImage: a4CornersSvg,
+                                  backgroundSize: `100% ${repeatMm}mm`,
+                                  backgroundRepeat: "repeat-y",
+                                  backgroundPosition: "0 0",
+                                  "--body-ml": `${bodyMarginLeft}mm`,
+                                  "--body-mr": `${bodyMarginRight}mm`,
+                                  "--body-mt": `${bodyMarginTop}mm`,
+                                  "--body-mb": `${bodyMarginBottom}mm`,
+                                } as React.CSSProperties}
+                              >
+                                {content}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    />
                   </>
                 )}
               </div>
@@ -1030,14 +1152,94 @@ export default function MasterAdminPage() {
                     {contractTemplateSaving ? "저장 중..." : "글로 적은 본문 저장"}
                   </button>
                 </div>
-                <div className="flex h-[50vh] min-h-[320px] flex-col overflow-hidden rounded-lg">
-                  <ContractRichEditor
-                    value={bodyForEditor}
-                    onChange={setContractTemplateBody}
-                    placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요."
-                    minHeight="280px"
-                  />
-                </div>
+                <ContractRichEditor
+                  value={bodyForEditor}
+                  onChange={setContractTemplateBody}
+                  placeholder="계약 조건, 시공 범위, 비용 등 본문 내용을 입력하세요. A4 페이지(297mm) 단위로 끊어져 인쇄됩니다."
+                  minHeight="280px"
+                  pageContentHeightMm={297 - bodyMarginTop - bodyMarginBottom}
+                  pageGapMm={bodyMarginBottom + PAGE_GAP_MM + bodyMarginTop}
+                  contentWrapper={(toolbar, content) => (
+                    <>
+                      {toolbar}
+                      <div className="mb-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                        <p className="mb-2 text-xs font-medium text-gray-700">본문 페이지 여백 (A4, mm)</p>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <label className="flex items-center gap-1 text-sm text-gray-600">
+                            상
+                            <input
+                              type="number"
+                              min={0}
+                              max={50}
+                              value={bodyMarginTop}
+                              onChange={(e) => setBodyMarginTop(Number(e.target.value) || 0)}
+                              className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                            />
+                          </label>
+                          <label className="flex items-center gap-1 text-sm text-gray-600">
+                            하
+                            <input
+                              type="number"
+                              min={0}
+                              max={50}
+                              value={bodyMarginBottom}
+                              onChange={(e) => setBodyMarginBottom(Number(e.target.value) || 0)}
+                              className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                            />
+                          </label>
+                          <label className="flex items-center gap-1 text-sm text-gray-600">
+                            좌
+                            <input
+                              type="number"
+                              min={0}
+                              max={50}
+                              value={bodyMarginLeft}
+                              onChange={(e) => setBodyMarginLeft(Number(e.target.value) || 0)}
+                              className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                            />
+                          </label>
+                          <label className="flex items-center gap-1 text-sm text-gray-600">
+                            우
+                            <input
+                              type="number"
+                              min={0}
+                              max={50}
+                              value={bodyMarginRight}
+                              onChange={(e) => setBodyMarginRight(Number(e.target.value) || 0)}
+                              className="w-14 rounded border border-gray-300 px-1 py-0.5 text-center text-sm"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                      <div className="flex max-h-[65vh] min-h-[420px] min-w-0 flex-col">
+                        <div className="min-h-0 flex-1 overflow-y-auto bg-[#e8e8e8] p-4">
+                          <div
+                            className="contract-a4-paper-sheet relative mx-auto"
+                            style={{
+                              maxWidth: "210mm",
+                              minHeight: `${297}mm`,
+                              boxSizing: "border-box",
+                              paddingTop: `${bodyMarginTop}mm`,
+                              paddingLeft: `${bodyMarginLeft}mm`,
+                              paddingRight: `${bodyMarginRight}mm`,
+                              paddingBottom: `${bodyMarginBottom}mm`,
+                              backgroundImage: a4CornersSvg,
+                              backgroundSize: `100% ${repeatMm}mm`,
+                              backgroundRepeat: "repeat-y",
+                              backgroundPosition: "0 0",
+                              "--body-ml": `${bodyMarginLeft}mm`,
+                              "--body-mr": `${bodyMarginRight}mm`,
+                              "--body-mt": `${bodyMarginTop}mm`,
+                              "--body-mb": `${bodyMarginBottom}mm`,
+                            } as React.CSSProperties}
+                          >
+                            {content}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                />
               </div>
             );
             })()}

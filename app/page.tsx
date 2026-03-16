@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 
 export default async function Home() {
   if (process.env.NODE_ENV === "development") {
-    redirect("/consulting");
+    redirect("/login");
   }
   const session = await getServerSession(authOptions);
   if (session) {

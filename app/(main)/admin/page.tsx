@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
+import { ContractRichEditor } from "@/components/admin/ContractRichEditor";
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
 
@@ -1492,23 +1493,24 @@ export default function AdminPage() {
       {/* 계약서 양식 모달 (회사별) */}
       {modal === "company-contract" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800">계약서 양식</h2>
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
-                aria-label="닫기"
-              >
-                ✕
-              </button>
-            </div>
-            <p className="mb-4 text-sm text-gray-600">
-              우리 회사 전용 계약서 제목·본문을 등록하면 계약서 작성 페이지에서 &quot;회사양식 불러오기&quot;로 불러와 사용할 수 있습니다. 본문은 텍스트로 입력하거나 PDF를 첨부할 수 있습니다.
-            </p>
-            <div className="space-y-4">
-              <div>
+          <div className="flex h-[90vh] max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            {/* 상부 고정: 제목, 설명, 계약서 제목, 본문 라벨 + 에디터(툴바 고정, 본문만 스크롤) */}
+            <div className="flex min-h-0 flex-1 flex-col p-6 pb-0">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-gray-800">계약서 양식</h2>
+                <button
+                  type="button"
+                  onClick={() => setModal(null)}
+                  className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                  aria-label="닫기"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="mt-1 text-sm text-gray-600">
+                우리 회사 전용 계약서 제목·본문을 등록하면 계약서 작성 페이지에서 &quot;회사양식 불러오기&quot;로 불러와 사용할 수 있습니다. 본문은 텍스트로 입력하거나 PDF를 첨부할 수 있습니다.
+              </p>
+              <div className="mt-4">
                 <label className="mb-1 block text-sm font-medium text-gray-700">계약서 제목 (기본값)</label>
                 <input
                   type="text"
@@ -1518,59 +1520,63 @@ export default function AdminPage() {
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">계약서 본문</label>
-                <textarea
-                  value={companyContractBody}
-                  onChange={(e) => setCompanyContractBody(e.target.value)}
-                  placeholder="계약 조건, 시공 범위 등 본문 내용을 입력하세요. PDF를 첨부하면 서명 시 PDF가 표시됩니다."
-                  rows={8}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">PDF 첨부 (선택)</label>
-                <input
-                  ref={companyContractPdfInputRef}
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={(e) => setCompanyContractPdfFile(e.target.files?.[0] ?? null)}
-                />
-                <div className="flex flex-wrap items-center gap-2">
+              {/* PDF 첨부 + 취소/저장을 본문 에디터 쪽(상부)에 배치 */}
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">PDF 첨부 (선택)</label>
+                  <input
+                    ref={companyContractPdfInputRef}
+                    type="file"
+                    accept=".pdf"
+                    className="hidden"
+                    onChange={(e) => setCompanyContractPdfFile(e.target.files?.[0] ?? null)}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => companyContractPdfInputRef.current?.click()}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      PDF 선택
+                    </button>
+                    {companyContractDocumentPath && !companyContractPdfFile && (
+                      <span className="text-xs text-green-600">현재 PDF 적용됨</span>
+                    )}
+                    {companyContractPdfFile && (
+                      <span className="text-xs text-gray-600">{companyContractPdfFile.name}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => companyContractPdfInputRef.current?.click()}
-                    className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    onClick={() => setModal(null)}
+                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    disabled={companyContractSaving}
                   >
-                    PDF 선택
+                    취소
                   </button>
-                  {companyContractDocumentPath && !companyContractPdfFile && (
-                    <span className="text-xs text-green-600">현재 PDF 적용됨</span>
-                  )}
-                  {companyContractPdfFile && (
-                    <span className="text-xs text-gray-600">{companyContractPdfFile.name}</span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleSaveCompanyContract}
+                    disabled={companyContractSaving || companyContractUploading}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {companyContractSaving || companyContractUploading ? "저장 중..." : "저장"}
+                  </button>
                 </div>
               </div>
-            </div>
-            <div className="mt-6 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setModal(null)}
-                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                disabled={companyContractSaving}
-              >
-                취소
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveCompanyContract}
-                disabled={companyContractSaving || companyContractUploading}
-                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-              >
-                {companyContractSaving || companyContractUploading ? "저장 중..." : "저장"}
-              </button>
+              <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden">
+                <label className="mb-1 block shrink-0 text-sm font-medium text-gray-700">계약서 본문</label>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <ContractRichEditor
+                    value={companyContractBody}
+                    onChange={setCompanyContractBody}
+                    placeholder="계약 조건, 시공 범위 등 본문 내용을 입력하세요. PDF를 첨부하면 서명 시 PDF가 표시됩니다."
+                    minHeight="200px"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>

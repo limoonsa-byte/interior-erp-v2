@@ -319,6 +319,7 @@ async function migrate() {
     await sql`INSERT INTO master_contract_template (id, title, body) VALUES (1, '', '') ON CONFLICT (id) DO NOTHING`;
     await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_path TEXT`;
     await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS document_data TEXT`;
+    await sql`ALTER TABLE master_contract_template ADD COLUMN IF NOT EXISTS body_margins TEXT`;
     console.log("[migrate] master_contract_template OK");
     await sql`
       CREATE TABLE IF NOT EXISTS company_contract_template (

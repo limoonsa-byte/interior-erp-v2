@@ -21,13 +21,24 @@ export async function GET() {
     if (!company) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
     await ensureMasterContractTemplateDocumentPath();
     const result = await sql`
-      SELECT title, body, document_path FROM master_contract_template WHERE id = 1 LIMIT 1
+      SELECT title, body, document_path, body_margins FROM master_contract_template WHERE id = 1 LIMIT 1
     `;
-    const row = result.rows[0] as { title: string; body: string | null; document_path?: string } | undefined;
+    const row = result.rows[0] as { title: string; body: string | null; document_path?: string; body_margins?: string } | undefined;
+    let bodyMargins = { top: 15, right: 15, bottom: 15, left: 15 };
+    if (row?.body_margins && typeof row.body_margins === "string") {
+      try {
+        const parsed = JSON.parse(row.body_margins) as { top?: number; right?: number; bottom?: number; left?: number };
+        if (typeof parsed.top === "number") bodyMargins.top = parsed.top;
+        if (typeof parsed.right === "number") bodyMargins.right = parsed.right;
+        if (typeof parsed.bottom === "number") bodyMargins.bottom = parsed.bottom;
+        if (typeof parsed.left === "number") bodyMargins.left = parsed.left;
+      } catch { /* use defaults */ }
+    }
     return NextResponse.json({
       title: row?.title ?? "",
       body: row?.body != null ? String(row.body) : "",
       documentPath: row?.document_path != null ? String(row.document_path) : undefined,
+      bodyMargins,
     });
   } catch (error) {
     console.error("contract-template GET error:", error);
