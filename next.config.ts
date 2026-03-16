@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
       "next/auth": "next-auth",
     },
   },
-  serverExternalPackages: ["@pdf-lib/fontkit", "pdfkit", "next-auth"],
+  serverExternalPackages: ["@pdf-lib/fontkit", "pdfkit"],
   outputFileTracingIncludes: {
     "/api/**": ["./fonts/**"],
   },
