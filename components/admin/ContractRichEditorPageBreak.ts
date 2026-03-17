@@ -85,6 +85,9 @@ export const AutoPageBreak = Extension.create({
             if (!el?.children?.length) return;
             const base = el.getBoundingClientRect().top;
 
+            const scrollParent = el.closest(".overflow-y-auto, [style*='overflow']") as HTMLElement | null;
+            const savedScrollTop = scrollParent?.scrollTop ?? 0;
+
             const pagePx = cPx + gapPx;
 
             let pg = 0;
@@ -112,6 +115,7 @@ export const AutoPageBreak = Extension.create({
                       height: String(wantH),
                     }),
                   );
+                  if (scrollParent) scrollParent.scrollTop = savedScrollTop;
                   return;
                 }
                 pg++;
@@ -127,6 +131,7 @@ export const AutoPageBreak = Extension.create({
                 view.dispatch(
                   state.tr.insert(dPos, pbT.create({ height: String(gap) })),
                 );
+                if (scrollParent) scrollParent.scrollTop = savedScrollTop;
                 return;
               }
 
@@ -164,6 +169,7 @@ export const AutoPageBreak = Extension.create({
                   view.dispatch(
                     state.tr.delete(dPos, dPos + nd.nodeSize),
                   );
+                  if (scrollParent) scrollParent.scrollTop = savedScrollTop;
                   return;
                 }
                 pg++;

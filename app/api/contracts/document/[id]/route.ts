@@ -43,6 +43,25 @@ export async function GET(
     const docPath = result.rows[0].document_path != null ? String(result.rows[0].document_path) : null;
     const docDataB64 = result.rows[0].document_data;
 
+    async function getCompanyPdfBuffer(contractId: number): Promise<Buffer | null> {
+      try {
+        const cRow = await sql`SELECT company_id FROM contracts WHERE id = ${contractId}`;
+        const companyId = cRow.rows[0]?.company_id;
+        if (companyId) {
+          const tplRow = await sql`SELECT document_path FROM company_contract_template WHERE company_id = ${companyId} LIMIT 1`;
+          const tplPath = tplRow.rows[0]?.document_path;
+          if (tplPath && typeof tplPath === "string" && tplPath.trim()) {
+            const tplFileName = tplPath.startsWith("contracts/") ? tplPath.slice("contracts/".length) : path.basename(tplPath);
+            const tplBaseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
+            try {
+              return await readFile(path.join(tplBaseDir, tplFileName));
+            } catch { /* file not found, continue */ }
+          }
+        }
+      } catch { /* ignore */ }
+      return null;
+    }
+
     async function getMasterPdfBuffer(): Promise<Buffer | null> {
       try {
         const masterRow = await sql`SELECT document_data FROM master_contract_template WHERE id = 1 LIMIT 1`;
@@ -65,17 +84,25 @@ export async function GET(
         if (docDataB64 && typeof docDataB64 === "string") {
           buf = Buffer.from(docDataB64, "base64");
         } else {
-          const masterBuf = await getMasterPdfBuffer();
-          if (masterBuf) buf = masterBuf;
-          else return NextResponse.json({ error: "계약 문서를 읽을 수 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
+          const companyBuf = await getCompanyPdfBuffer(contractId);
+          if (companyBuf) buf = companyBuf;
+          else {
+            const masterBuf = await getMasterPdfBuffer();
+            if (masterBuf) buf = masterBuf;
+            else return NextResponse.json({ error: "계약 문서를 읽을 수 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
+          }
         }
       }
     } else if (docDataB64 && typeof docDataB64 === "string") {
       buf = Buffer.from(docDataB64, "base64");
     } else {
-      const masterBuf = await getMasterPdfBuffer();
-      if (masterBuf) buf = masterBuf;
-      else return NextResponse.json({ error: "계약 문서가 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
+      const companyBuf = await getCompanyPdfBuffer(contractId);
+      if (companyBuf) buf = companyBuf;
+      else {
+        const masterBuf = await getMasterPdfBuffer();
+        if (masterBuf) buf = masterBuf;
+        else return NextResponse.json({ error: "계약 문서가 없습니다. 작성자가 계약서를 저장하면 본문이 자동으로 PDF로 반영됩니다." }, { status: 404 });
+      }
     }
 
     const contentType = fileName.toLowerCase().endsWith(".pdf") ? "application/pdf" : fileName.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
