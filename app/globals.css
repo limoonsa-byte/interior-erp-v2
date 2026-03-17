@@ -333,6 +333,7 @@ body {
 }
 .contract-sign-body-pages p {
   margin: 0 0 0.5em 0;
+  min-height: 1em;
 }
 .contract-sign-body-pages p:last-child {
   margin-bottom: 0;
@@ -453,6 +454,7 @@ body {
 .contract-preview-print-pages .contract-print-body p,
 .contract-preview-print-pages .contract-print-body-from-page2 p {
   margin: 0 0 0.5em 0;
+  min-height: 1em;
 }
 .contract-preview-print-pages .contract-print-body p:first-child,
 .contract-preview-print-pages .contract-print-body-from-page2 p:first-child {
@@ -494,6 +496,7 @@ body {
 }
 #contract-body-pdf-capture-root .contract-print-body-from-page2 p {
   margin: 0 0 0.5em 0;
+  min-height: 1em;
 }
 #contract-body-pdf-capture-root .contract-print-body-from-page2 p:first-child { margin-top: 0; }
 #contract-body-pdf-capture-root .contract-print-body-from-page2 p:last-child { margin-bottom: 0; }
@@ -960,6 +963,7 @@ body {
   #contract-print-only .contract-print-body p,
   #contract-print-only .contract-print-body-from-page2 p {
     margin: 0 0 0.5em 0;
+    min-height: 1em;
   }
   #contract-print-only .contract-print-body p:first-child,
   #contract-print-only .contract-print-body-from-page2 p:first-child {
