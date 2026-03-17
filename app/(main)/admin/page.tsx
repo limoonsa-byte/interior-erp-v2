@@ -253,6 +253,12 @@ export default function AdminPage() {
           setCompanyContractDocumentPath(data.documentPath != null ? String(data.documentPath) : null);
           setCompanyContractPdfFile(null);
           if (companyContractPdfInputRef.current) companyContractPdfInputRef.current.value = "";
+          if (data.bodyMargins) {
+            setCompanyContractMarginTop(Number(data.bodyMargins.top) || 15);
+            setCompanyContractMarginRight(Number(data.bodyMargins.right) || 15);
+            setCompanyContractMarginBottom(Number(data.bodyMargins.bottom) || 15);
+            setCompanyContractMarginLeft(Number(data.bodyMargins.left) || 15);
+          }
         })
         .catch(() => {
           setCompanyContractTitle("");
@@ -699,8 +705,9 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: companyContractTitle.trim(),
-          body: companyContractBody.trim(),
+          body: companyContractBody,
           documentPath: docPath || undefined,
+          bodyMargins: { top: companyContractMarginTop, right: companyContractMarginRight, bottom: companyContractMarginBottom, left: companyContractMarginLeft },
         }),
       })
         .then((res) => res.json())

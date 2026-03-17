@@ -429,6 +429,14 @@ function ContractForm({
         const loadedTitle = data.title != null ? String(data.title) : "";
         const loadedBody = data.body != null ? String(data.body) : "";
         const loadedDocPath = data.documentPath != null ? String(data.documentPath) : "";
+        if (data.bodyMargins) {
+          setBodyMargins({
+            top: Number(data.bodyMargins.top) || 15,
+            right: Number(data.bodyMargins.right) || 15,
+            bottom: Number(data.bodyMargins.bottom) || 15,
+            left: Number(data.bodyMargins.left) || 15,
+          });
+        }
         setTitle(loadedTitle);
         if (loadedBody.trim() !== "") {
           setBody(loadedBody);
