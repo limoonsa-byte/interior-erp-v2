@@ -1086,6 +1086,16 @@ body {
     word-break: break-word !important;
     overflow-wrap: break-word !important;
   }
+  /* 계약서 HTML 본문(PDF 없을 때): 2페이지부터 별도 영역 */
+  #contract-print-only .contract-print-body-section {
+    page-break-before: always !important;
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+    box-sizing: border-box !important;
+  }
+  #contract-print-only .contract-print-body-section .contract-print-body-from-page2 {
+    padding: 0 !important;
+  }
   /* 계약서 본문 영역: 인쇄 시 여백 제거해 용지 꽉 채움 */
   #contract-print-only .contract-print-doc-pages {
     padding: 0 !important;

@@ -717,22 +717,27 @@ function ContractForm({
         console.error("[계약서 인쇄] 1페이지 필수 영역(약관 문구·서명란)이 누락되었습니다. 해당 블록을 삭제하지 마세요.");
       }
     }
+    const hasPdfPages = documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0;
     const docSection =
-      documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0
+      hasPdfPages
         ? `<div class="contract-print-doc-pages">${pdfPageImages.map((dataUrl, i) => `<div class="contract-print-doc-page"><img src="${dataUrl}" alt="계약 문서 ${i + 1}페이지" class="contract-print-doc-img" /></div>`).join("")}</div>`
         : documentPath && !documentPath.toLowerCase().endsWith(".pdf")
           ? `<div class="contract-print-doc-pages"><div class="contract-print-doc-page"><div class="rounded border border-gray-200 bg-gray-50 overflow-hidden"><img src="/api/company/contract-document?path=${encodeURIComponent(documentPath)}" alt="계약 문서" class="contract-print-doc-img max-h-[50vh] w-full object-contain" /></div></div></div>`
           : "";
-    // PDF가 있으면 본문은 PDF만 사용(2번 사진과 동일). 1페이지에는 표+서명란만.
-    const usePdfOnly = documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0;
-    let firstPageHtml = contractPrintHtml;
-    if (usePdfOnly) {
-      const div = document.createElement("div");
-      div.innerHTML = contractPrintHtml;
-      const bodyEl = div.querySelector(".contract-print-body.contract-print-body-from-page2");
-      if (bodyEl) bodyEl.remove();
-      firstPageHtml = div.innerHTML;
+    // 1페이지에서 HTML 본문을 분리 → 2페이지부터 별도 영역으로
+    const div = document.createElement("div");
+    div.innerHTML = contractPrintHtml;
+    const bodyEl = div.querySelector(".contract-print-body.contract-print-body-from-page2");
+    let bodyHtmlSection = "";
+    if (bodyEl) {
+      if (hasPdfPages) {
+        bodyEl.remove();
+      } else {
+        bodyHtmlSection = `<div class="contract-print-body-section">${bodyEl.outerHTML}</div>`;
+        bodyEl.remove();
+      }
     }
+    const firstPageHtml = div.innerHTML;
     const wrap = document.createElement("div");
     wrap.id = printRootId;
     wrap.className = "contract-print-only-root";
@@ -740,13 +745,13 @@ function ContractForm({
     const mr = bodyMargins.right;
     const mb = bodyMargins.bottom;
     const ml = bodyMargins.left;
-    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0 ${mr}mm 0 ${ml}mm;box-sizing:border-box">${firstPageHtml}</div>${docSection}`;
+    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0 ${mr}mm 0 ${ml}mm;box-sizing:border-box">${firstPageHtml}</div>${docSection || bodyHtmlSection}`;
     document.body.appendChild(wrap);
     document.body.classList.add("contract-printing");
     const noHeaderFooterStyle = document.createElement("style");
     noHeaderFooterStyle.setAttribute("media", "print");
     noHeaderFooterStyle.id = "contract-print-no-header-footer";
-    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 15mm 0; } #contract-print-only.contract-print-only-root { padding: 0; box-sizing: border-box; width: 210mm; margin: 0 auto; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 210mm; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 210mm; height: 267mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
+    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 15mm 0; } #contract-print-only.contract-print-only-root { padding: 0; box-sizing: border-box; width: 210mm; margin: 0 auto; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 210mm; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-body-section { page-break-before: always; padding: 0 ${mr}mm; box-sizing: border-box; font-size: 11px; line-height: 1.6; } #contract-print-only .contract-print-body-section .contract-print-body-from-page2 { padding: 0; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 210mm; height: 267mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
     document.head.appendChild(noHeaderFooterStyle);
     const prevTitle = document.title;
     const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
