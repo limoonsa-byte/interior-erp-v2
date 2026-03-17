@@ -719,10 +719,20 @@ function ContractForm({
     }
     const docSection =
       documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0
-        ? `<div class="contract-print-doc-pages">${pdfPageImages.map((dataUrl, i) => `<div class="contract-print-doc-page"><img src="${dataUrl}" alt="계약 문서 ${i + 1}페이지" class="contract-print-doc-img w-full bg-white" /></div>`).join("")}</div>`
+        ? `<div class="contract-print-doc-pages">${pdfPageImages.map((dataUrl, i) => `<div class="contract-print-doc-page"><img src="${dataUrl}" alt="계약 문서 ${i + 1}페이지" class="contract-print-doc-img" /></div>`).join("")}</div>`
         : documentPath && !documentPath.toLowerCase().endsWith(".pdf")
           ? `<div class="contract-print-doc-pages"><div class="contract-print-doc-page"><div class="rounded border border-gray-200 bg-gray-50 overflow-hidden"><img src="/api/company/contract-document?path=${encodeURIComponent(documentPath)}" alt="계약 문서" class="contract-print-doc-img max-h-[50vh] w-full object-contain" /></div></div></div>`
           : "";
+    // PDF가 있으면 본문은 PDF만 사용(2번 사진과 동일). 1페이지에는 표+서명란만.
+    const usePdfOnly = documentPath && documentPath.toLowerCase().endsWith(".pdf") && pdfPageImages.length > 0;
+    let firstPageHtml = contractPrintHtml;
+    if (usePdfOnly) {
+      const div = document.createElement("div");
+      div.innerHTML = contractPrintHtml;
+      const bodyEl = div.querySelector(".contract-print-body.contract-print-body-from-page2");
+      if (bodyEl) bodyEl.remove();
+      firstPageHtml = div.innerHTML;
+    }
     const wrap = document.createElement("div");
     wrap.id = printRootId;
     wrap.className = "contract-print-only-root";
@@ -730,13 +740,13 @@ function ContractForm({
     const mr = bodyMargins.right;
     const mb = bodyMargins.bottom;
     const ml = bodyMargins.left;
-    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:${mt}mm ${mr}mm ${mb}mm ${ml}mm;box-sizing:border-box">${contractPrintHtml}</div>${docSection}`;
+    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0 ${mr}mm 0 ${ml}mm;box-sizing:border-box">${firstPageHtml}</div>${docSection}`;
     document.body.appendChild(wrap);
     document.body.classList.add("contract-printing");
     const noHeaderFooterStyle = document.createElement("style");
     noHeaderFooterStyle.setAttribute("media", "print");
     noHeaderFooterStyle.id = "contract-print-no-header-footer";
-    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 0; } #contract-print-only.contract-print-only-root { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-first-page { box-sizing: border-box; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; box-sizing: border-box; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; padding: 0; width: 210mm; height: 297mm; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; }`;
+    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 15mm 0; } #contract-print-only.contract-print-only-root { padding: 0; box-sizing: border-box; width: 210mm; margin: 0 auto; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 210mm; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 210mm; height: 267mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
     document.head.appendChild(noHeaderFooterStyle);
     const prevTitle = document.title;
     const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
@@ -1103,12 +1113,12 @@ function ContractForm({
                     pdfPageImages.length > 0 ? (
                       <div className="contract-preview-doc-pages flex flex-col gap-4">
                         {pdfPageImages.map((dataUrl, i) => (
-                          <div key={i} className="contract-preview-doc-page bg-white shadow-sm" style={{ width: "210mm", minHeight: "297mm", boxSizing: "border-box" }}>
+                          <div key={i} className="contract-preview-doc-page bg-white shadow-sm" style={{ width: "210mm", height: "297mm", padding: "15mm 0", boxSizing: "border-box", overflow: "hidden" }}>
                             <img
                               src={dataUrl}
                               alt={`계약 문서 ${i + 1}페이지`}
-                              className="w-full h-auto block bg-white contract-print-doc-img"
-                              style={{ objectFit: "contain" }}
+                              className="block bg-white contract-print-doc-img"
+                              style={{ width: "100%", height: "100%", objectFit: "contain" }}
                             />
                           </div>
                         ))}

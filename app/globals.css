@@ -1096,12 +1096,15 @@ body {
     margin: 0 !important;
     padding: 0 !important;
   }
-  /* 계약서 본문(PDF 페이지): 페이지 컨테이너 A4 고정, 이미지는 그 안에 맞춤 → 인쇄 미리보기 1장=1페이지 */
+  /* 계약서 본문(PDF 페이지): @page margin으로 상·하 15mm 강제 적용 */
   #contract-print-only .contract-print-doc-page {
     width: 210mm !important;
-    height: 297mm !important;
+    height: 267mm !important;
+    padding: 0 !important;
+    margin: 0 !important;
     overflow: hidden !important;
     page-break-after: always;
+    box-sizing: border-box !important;
   }
   #contract-print-only .contract-print-doc-page:last-child {
     page-break-after: auto;
@@ -1112,8 +1115,9 @@ body {
     height: 100% !important;
     max-width: none !important;
     object-fit: contain !important;
-    box-sizing: border-box;
+    box-sizing: border-box !important;
     margin: 0 !important;
+    padding: 0 !important;
   }
   #contract-print-only .contract-print-doc-img,
   #contract-print-only img:not(.contract-print-stamp):not(.contract-print-stamp-sig) {
