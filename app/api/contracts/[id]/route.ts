@@ -82,8 +82,8 @@ export async function PATCH(
     const status = String(check.rows[0].status ?? "");
     if (status !== "draft" && status !== "sent") return NextResponse.json({ error: "서명 완료된 계약은 수정할 수 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { title, customerName, contact, signerEmail, documentPath, documentData, body: bodyText, consultationId, estimateId, details: detailsObj } = body;
-    const cur = await sql`SELECT title, customer_name, contact, signer_email, document_path, body, details, consultation_id, estimate_id FROM contracts WHERE id = ${contractId} AND company_id = ${company.id}`;
+    const { title, customerName, contact, signerEmail, documentPath, documentData, body: bodyText, consultationId, estimateId, details: detailsObj, bodyMargins: bodyMarginsObj } = body;
+    const cur = await sql`SELECT title, customer_name, contact, signer_email, document_path, body, details, body_margins, consultation_id, estimate_id FROM contracts WHERE id = ${contractId} AND company_id = ${company.id}`;
     if (cur.rows.length === 0) return NextResponse.json({ error: "계약을 찾을 수 없습니다." }, { status: 404 });
     const r = cur.rows[0] as Record<string, unknown>;
     const newTitle = title !== undefined ? String(title) : String(r.title ?? "");
@@ -96,17 +96,18 @@ export async function PATCH(
     const newDetails = detailsObj !== undefined ? (detailsObj == null || (typeof detailsObj === "object" && Object.keys(detailsObj).length === 0) ? null : (typeof detailsObj === "string" ? detailsObj : JSON.stringify(detailsObj))) : (r.details != null ? String(r.details) : null);
     const newConsultationId = consultationId !== undefined ? (consultationId == null ? null : Number(consultationId)) : (r.consultation_id != null ? Number(r.consultation_id) : null);
     const newEstimateId = estimateId !== undefined ? (estimateId == null ? null : Number(estimateId)) : (r.estimate_id != null ? Number(r.estimate_id) : null);
+    const newBodyMargins = bodyMarginsObj !== undefined ? (bodyMarginsObj == null ? null : (typeof bodyMarginsObj === "string" ? bodyMarginsObj : JSON.stringify(bodyMarginsObj))) : (r.body_margins != null ? String(r.body_margins) : null);
     if (newDocumentData !== undefined) {
       await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS document_data TEXT`;
       await sql`
         UPDATE contracts
-        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, document_data = ${newDocumentData}, body = ${newBody}, details = ${newDetails}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
+        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, document_data = ${newDocumentData}, body = ${newBody}, details = ${newDetails}, body_margins = ${newBodyMargins}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
         WHERE id = ${contractId} AND company_id = ${company.id}
       `;
     } else {
       await sql`
         UPDATE contracts
-        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, body = ${newBody}, details = ${newDetails}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
+        SET title = ${newTitle}, customer_name = ${newCustomerName}, contact = ${newContact}, signer_email = ${newSignerEmail}, document_path = ${newDocumentPath}, body = ${newBody}, details = ${newDetails}, body_margins = ${newBodyMargins}, consultation_id = ${newConsultationId}, estimate_id = ${newEstimateId}, updated_at = NOW()
         WHERE id = ${contractId} AND company_id = ${company.id}
       `;
     }

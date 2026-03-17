@@ -14,11 +14,13 @@ type PdfToA4ImagesProps = {
   fullWidth?: boolean;
   /** 이미지 로드 완료 시 호출 (미리보기/인쇄에서 재사용) */
   onPagesLoaded?: (dataUrls: string[]) => void;
+  /** PDF 로드 실패 시 호출 (서명 페이지에서 HTML 본문 폴백용) */
+  onError?: () => void;
   /** 각 페이지 이미지를 감쌀 div에 붙일 클래스 (서명 화면에서 A4 여백용) */
   pageWrapperClassName?: string;
 };
 
-export function PdfToA4Images({ documentPath = "", documentUrl, className = "", fullWidth = false, onPagesLoaded, pageWrapperClassName }: PdfToA4ImagesProps) {
+export function PdfToA4Images({ documentPath = "", documentUrl, className = "", fullWidth = false, onPagesLoaded, onError, pageWrapperClassName }: PdfToA4ImagesProps) {
   const [pageImages, setPageImages] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
           setError(is404 || isNetworkError
             ? "2페이지 이후 PDF가 아직 없습니다. 본문은 작성자가 계약서를 저장할 때 자동으로 PDF로 넣습니다. 계약 작성자에게 '계약서 저장 한 번 더 해 주세요'라고 요청하시거나, 위 요약을 확인하고 서명할 수 있습니다."
             : msg || "PDF 로드 실패");
+          onError?.();
         }
       } finally {
         if (!cancelled) setLoading(false);

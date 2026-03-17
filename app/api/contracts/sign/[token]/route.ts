@@ -43,6 +43,18 @@ async function sendSignedContractEmail(
 }
 
 function rowToSignInfo(row: Record<string, unknown>) {
+  let bodyMargins: { top: number; right: number; bottom: number; left: number } | undefined;
+  if (row.body_margins != null) {
+    try {
+      const parsed = typeof row.body_margins === "string" ? JSON.parse(row.body_margins) : row.body_margins;
+      bodyMargins = {
+        top: Number(parsed.top) || 15,
+        right: Number(parsed.right) || 15,
+        bottom: Number(parsed.bottom) || 15,
+        left: Number(parsed.left) || 15,
+      };
+    } catch { /* default 15mm */ }
+  }
   return {
     id: row.id,
     title: String(row.title ?? ""),
@@ -52,6 +64,7 @@ function rowToSignInfo(row: Record<string, unknown>) {
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
     body: row.body != null && String(row.body).trim() !== "" ? String(row.body) : undefined,
     details: row.details != null ? row.details : undefined,
+    bodyMargins,
   };
 }
 
@@ -63,7 +76,7 @@ export async function GET(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const result = await sql`
-      SELECT id, title, customer_name, contact, status, document_path, body, details
+      SELECT id, title, customer_name, contact, status, document_path, body, details, body_margins
       FROM contracts
       WHERE sign_token = ${token}
     `;

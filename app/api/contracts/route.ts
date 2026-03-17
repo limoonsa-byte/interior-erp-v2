@@ -83,12 +83,14 @@ export async function POST(request: Request) {
       documentPath,
       body: bodyText,
       details: detailsObj,
+      bodyMargins: bodyMarginsObj,
     } = body;
     const status = "draft";
     const detailsStr = detailsObj != null ? (typeof detailsObj === "string" ? detailsObj : JSON.stringify(detailsObj)) : null;
+    const bodyMarginsStr = bodyMarginsObj != null ? (typeof bodyMarginsObj === "string" ? bodyMarginsObj : JSON.stringify(bodyMarginsObj)) : null;
     const result = await sql`
-      INSERT INTO contracts (company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, details, status, updated_at)
-      VALUES (${company.id}, ${consultationId ?? null}, ${estimateId ?? null}, ${title ?? ""}, ${customerName ?? ""}, ${contact ?? ""}, ${signerEmail ?? null}, ${documentPath ?? null}, ${bodyText ?? null}, ${detailsStr}, ${status}, NOW())
+      INSERT INTO contracts (company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, details, body_margins, status, updated_at)
+      VALUES (${company.id}, ${consultationId ?? null}, ${estimateId ?? null}, ${title ?? ""}, ${customerName ?? ""}, ${contact ?? ""}, ${signerEmail ?? null}, ${documentPath ?? null}, ${bodyText ?? null}, ${detailsStr}, ${bodyMarginsStr}, ${status}, NOW())
       RETURNING id
     `;
     const newId = result.rows[0]?.id;

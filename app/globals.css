@@ -103,15 +103,27 @@ body {
 .contract-sign-summary .contract-print-summary {
   padding: 0.5in 0.4in !important;
   width: 100% !important;
+  height: 100%;
   box-sizing: border-box !important;
-  overflow: visible;
+  overflow: hidden;
   background: white;
   font-size: 12px;
-  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  border: none;
 }
 .contract-sign-summary .contract-print-page1 {
   position: relative;
   overflow: visible;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.contract-sign-summary .contract-print-page1-top {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .contract-sign-summary .contract-print-page1 .contract-print-title {
   text-align: center;
@@ -198,6 +210,8 @@ body {
 }
 .contract-sign-summary .contract-print-sig-line {
   margin: 0;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 .contract-sign-summary .contract-print-sig-line-name {
   position: relative;
@@ -296,11 +310,35 @@ body {
 
 /* 계약서 서명 화면: 2·3·4·5… 페이지 A4 기준 상하좌우 여백 (글로 불러오든 PDF로 불러오든 동일) */
 .contract-sign-view-pages {
-  padding: 15mm !important;
+  padding: 15mm 0 !important;
+  box-sizing: border-box;
+  overflow-x: hidden !important;
+}
+.contract-sign-view-pages .contract-sign-page-a4,
+.contract-sign-view-pages .contract-sign-summary {
+  max-width: 100%;
   box-sizing: border-box;
 }
+/* 서명 화면: 1페이지 요약도 본문·PDF와 동일 15mm 여백 (A4 통일) */
+.contract-sign-view-pages .contract-print-summary {
+  max-width: 100% !important;
+  padding: 15mm !important;
+  box-sizing: border-box !important;
+}
+.contract-sign-view-pages table.contract-print-main-tbl {
+  table-layout: fixed;
+  width: 100%;
+}
 /* PDF 각 페이지마다 상하좌우 15mm 여백 */
+.contract-sign-page-a4 {
+  flex-shrink: 0;
+  width: 210mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+}
 .contract-sign-doc-page {
+  width: 210mm;
+  min-height: 297mm;
   padding: 15mm;
   background: #fff;
   box-sizing: border-box;
@@ -311,14 +349,76 @@ body {
   display: block;
 }
 
-/* 계약서 서명 화면: 본문을 인쇄 미리보기처럼 페이지 나누어 표시 (A4 비율, 2페이지부터 구분선) */
-.contract-sign-body-pages {
-  margin-top: 1rem;
+/* 서명 화면: 본문을 A4 한 장씩 따로 표시 (구분선 없이 페이지별 박스) */
+.contract-sign-body-page {
+  width: 210mm;
+  min-width: 210mm;
+  max-width: 100%;
+  height: 297mm;
+  min-height: 297mm;
   padding: 15mm;
+  box-sizing: border-box;
+  background: #fff;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #111;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.contract-sign-body-page p,
+.contract-sign-body-page li,
+.contract-sign-body-page div {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+.contract-sign-body-page p {
+  margin: 0 0 0.5em 0;
+  min-height: 1em;
+}
+.contract-sign-body-page p:last-child {
+  margin-bottom: 0;
+}
+.contract-sign-body-page > * + * {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+.contract-sign-body-page > *:first-child {
+  margin-top: 0;
+}
+.contract-sign-body-page > *:last-child {
+  margin-bottom: 0;
+}
+.contract-sign-body-page strong {
+  font-weight: 600;
+}
+.contract-sign-body-page table {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100%;
+}
+.contract-sign-body-page th,
+.contract-sign-body-page td {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* 계약서 서명 화면 2페이지 본문(한 덩어리 fallback): 인쇄 미리보기와 동일하게 297mm(한 장)마다 구분선 — 210mm, 15mm 여백, 11px, 1.6 */
+.contract-sign-body-pages {
+  width: 210mm;
+  min-width: 210mm;
+  max-width: 100%;
+  min-height: 297mm;
+  margin-top: 0;
+  padding: 15mm;
+  box-sizing: border-box;
+  background: #fff;
   font-size: 11px;
   line-height: 1.6;
   color: #111;
   background: white;
+  /* 인쇄와 동일: 한 페이지 내용 높이 267mm(297mm−15mm−15mm)마다 구분선 */
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
@@ -330,6 +430,16 @@ body {
   background-size: 100% 267mm;
   background-repeat: repeat-y;
   box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+.contract-sign-body-pages p,
+.contract-sign-body-pages li,
+.contract-sign-body-pages div {
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
 }
 .contract-sign-body-pages p {
   margin: 0 0 0.5em 0;
@@ -350,6 +460,16 @@ body {
 }
 .contract-sign-body-pages strong {
   font-weight: 600;
+}
+.contract-sign-body-pages table {
+  table-layout: fixed;
+  width: 100%;
+  max-width: 100%;
+}
+.contract-sign-body-pages th,
+.contract-sign-body-pages td {
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 /* A4 페이지 브레이크: SVG 배경이 하단여백+간격+상단여백을 그리므로 투명 처리. 회색 구역에는 입력 불가 */
@@ -392,7 +512,22 @@ body {
 .contract-a4-paper-sheet {
   position: relative;
   background-color: #e8e8e8;
-  overflow: hidden; /* 본문이 여백(패딩) 영역으로 넘어가지 않게 */
+  overflow: hidden;
+}
+/* 계약서 작성 본문(A4): 양식에서 넣은 빈 줄·단락 간격 유지 (prose보다 우선) */
+.contract-a4-paper-sheet p,
+.contract-a4-paper-sheet .prose p {
+  min-height: 1em !important;
+  margin-top: 0.5em !important;
+  margin-bottom: 0.5em !important;
+}
+.contract-a4-paper-sheet p:first-child,
+.contract-a4-paper-sheet .prose p:first-child {
+  margin-top: 0 !important;
+}
+.contract-a4-paper-sheet p:last-child,
+.contract-a4-paper-sheet .prose p:last-child {
+  margin-bottom: 0 !important;
 }
 
 /* 계약서 작성 인쇄 미리보기 모달: 실제 인쇄·서명 화면과 동일한 페이지 간격·여백·본문 스타일 */

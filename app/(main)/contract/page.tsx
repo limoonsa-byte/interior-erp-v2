@@ -523,6 +523,7 @@ function ContractForm({
       documentPath: documentPath || undefined,
       body: body.trim() || undefined,
       details: Object.keys(detailsObj).length > 0 ? detailsObj : undefined,
+      bodyMargins,
       consultationId: preFill?.consultationId ?? contract?.consultationId,
       estimateId: preFill?.estimateId ?? contract?.estimateId,
     };

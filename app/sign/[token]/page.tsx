@@ -14,7 +14,95 @@ type SignInfo = {
   body?: string;
   details?: Record<string, string> | string | null;
   alreadySigned?: boolean;
+  bodyMargins?: { top: number; right: number; bottom: number; left: number };
 };
+
+/** 서명 페이지 본문 뷰어: 계약서 작성 본문과 동일한 방식 (연속 div + 반복 SVG 배경 + spacer) */
+function SignBodyA4Viewer({ bodyHtml, margins }: { bodyHtml: string; margins: { top: number; right: number; bottom: number; left: number } }) {
+  const mT = margins.top, mR = margins.right, mB = margins.bottom, mL = margins.left;
+  const cleanHtml = bodyHtml.replace(/<div[^>]*data-page-break[^>]*>[\s\S]*?<\/div>/gi, "");
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const viewerRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = viewerRef.current;
+    const wrap = containerRef.current;
+    if (!el || !wrap || !cleanHtml.trim()) { if (el) el.innerHTML = ""; return; }
+    el.innerHTML = cleanHtml;
+    const MM_PX = 96 / 25.4;
+    const contentHPx = (297 - mT - mB) * MM_PX;
+    const gapPx = (mB + 8 + mT) * MM_PX;
+    let spacerCount = 0;
+    for (let iter = 0; iter < 100; iter++) {
+      let inserted = false;
+      const base = el.getBoundingClientRect().top;
+      let page = 0;
+      const kids = Array.from(el.children) as HTMLElement[];
+      for (let i = 0; i < kids.length; i++) {
+        const kid = kids[i];
+        if (kid.dataset && kid.dataset.pageSpacer) { page++; continue; }
+        const elRect = kid.getBoundingClientRect();
+        const elBottom = elRect.bottom - base;
+        const pageBoundary = (page + 1) * contentHPx + page * gapPx;
+        if (elBottom > pageBoundary + 1) {
+          const spacer = document.createElement("div");
+          spacer.dataset.pageSpacer = "1";
+          const elTop = elRect.top - base;
+          const spacerH = pageBoundary + gapPx - elTop;
+          if (spacerH > 0) {
+            spacer.style.cssText = `height:${spacerH}px;flex-shrink:0;pointer-events:none;`;
+          }
+          el.insertBefore(spacer, kid);
+          spacerCount++;
+          inserted = true;
+          break;
+        }
+      }
+      if (!inserted) break;
+    }
+    const totalPages = spacerCount + 1;
+    const totalH = totalPages * 297 + (totalPages - 1) * 8;
+    wrap.style.height = `${totalH}mm`;
+  }, [cleanHtml, mT, mR, mB, mL]);
+
+  const gap = 8, c = 4, sc = "#c0c0c0";
+  const rH = 297 + gap;
+  const mkP = (d: string) => `<path d='${d}' fill='none' stroke='${sc}' stroke-width='0.3'/>`;
+  const svg = [
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 210 ${rH}'>`,
+    `<rect x='0' y='0' width='210' height='297' fill='#fff'/>`,
+    `<rect x='0' y='297' width='210' height='${gap}' fill='#e8e8e8'/>`,
+    mkP(`M ${mL - c} ${mT} L ${mL} ${mT} L ${mL} ${mT - c}`),
+    mkP(`M ${210 - mR + c} ${mT} L ${210 - mR} ${mT} L ${210 - mR} ${mT - c}`),
+    mkP(`M ${mL - c} ${297 - mB} L ${mL} ${297 - mB} L ${mL} ${297 - mB + c}`),
+    mkP(`M ${210 - mR + c} ${297 - mB} L ${210 - mR} ${297 - mB} L ${210 - mR} ${297 - mB + c}`),
+    `</svg>`,
+  ].join("");
+  const bgUrl = `url("data:image/svg+xml,${svg.replace(/#/g, "%23")}")`;
+
+  return (
+    <div
+      ref={containerRef}
+      className="contract-a4-paper-sheet mx-auto"
+      style={{
+        width: "100%",
+        maxWidth: "210mm",
+        minHeight: "297mm",
+        padding: `${mT}mm ${mR}mm ${mB}mm ${mL}mm`,
+        boxSizing: "border-box",
+        backgroundImage: bgUrl,
+        backgroundSize: `100% ${rH}mm`,
+        backgroundRepeat: "repeat-y",
+        backgroundPosition: "0 0",
+      }}
+    >
+      <div
+        ref={viewerRef}
+        className="text-gray-900 prose prose-sm max-w-none"
+      />
+    </div>
+  );
+}
 
 /** 계약 details로 표준도급 계약서 요약 1페이지 HTML 생성 (인쇄용과 동일 구조, 도장 포함). 서명은 표 밖 레이어로 따로 겹침 */
 function buildSummaryPageHtml(
@@ -59,6 +147,7 @@ function buildSummaryPageHtml(
   const clientResidentNumber = signer?.residentNumber?.trim() || String(details.clientResidentNumber ?? "").trim();
   return (
     `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
+    `<div class="contract-print-page1-top">` +
     `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
     `<table class="contract-print-main-tbl">` +
     `<colgroup><col class="contract-print-col-section" /><col class="contract-print-col-label" /><col class="contract-print-col-sub" /><col class="contract-print-col-value2" /><col class="contract-print-col-in" /></colgroup>` +
@@ -75,6 +164,7 @@ function buildSummaryPageHtml(
     `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balancePercent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
     `</tbody></table>` +
     (stampHtml ? stampHtml : "") +
+    `</div>` +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
     `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
@@ -159,8 +249,9 @@ function ContractSummaryScaled({
     if (captureRef) (captureRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
   };
   return (
-    <div ref={setRef} className="contract-sign-summary contract-sign-summary-with-overlays mb-4">
-      <div dangerouslySetInnerHTML={{ __html: summaryHtml }} />
+    <div className="contract-sign-page-a4 w-full bg-white" style={{ width: "100%", maxWidth: "210mm", height: "297mm", boxSizing: "border-box", overflow: "hidden" }}>
+      <div ref={setRef} className="contract-sign-summary contract-sign-summary-with-overlays h-full">
+        <div dangerouslySetInnerHTML={{ __html: summaryHtml }} />
       {hasSignature && (
         <>
           <img
@@ -179,6 +270,7 @@ function ContractSummaryScaled({
           />
         </>
       )}
+      </div>
     </div>
   );
 }
@@ -196,6 +288,8 @@ export default function SignPage() {
   const [signerEmail, setSignerEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const summaryCaptureRef = useRef<HTMLDivElement>(null);
   const isDrawing = useRef(false);
@@ -214,6 +308,7 @@ export default function SignPage() {
           return;
         }
         setInfo(data);
+        setPdfLoadFailed(false);
       })
       .catch(() => setError("정보를 불러올 수 없습니다."))
       .finally(() => setLoading(false));
@@ -409,42 +504,48 @@ export default function SignPage() {
         <div className="mt-6">
           <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
           <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명해 주세요.</p>
-          <div className="contract-sign-view-pages mt-2 max-h-[70vh] overflow-y-auto rounded-lg border border-gray-200 bg-gray-50 space-y-4">
-            {/* 1페이지: 표준도급 계약서 요약 + 서명란 */}
-            <ContractSummaryScaled
-              info={info}
-              token={token}
-              signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
-              signatureData={signatureData}
-              captureRef={summaryCaptureRef}
-            />
-            {/* 2페이지부터: 업로드된 PDF만 표시 (본문은 작성 시 자동 PDF 변환 또는 수동 업로드) */}
-            {info.documentUrl ? (
-              <>
-                <PdfToA4Images
-                  documentUrl={info.documentUrl}
-                  className="space-y-4"
-                  fullWidth
-                  pageWrapperClassName="contract-sign-doc-page"
+          <div className="mt-2 w-full">
+            <div className="max-h-[70vh] overflow-y-auto overflow-x-hidden rounded-lg bg-[#e8e8e8] p-[8mm]">
+              <div className="mx-auto w-full flex flex-col gap-[8mm]" style={{ maxWidth: "210mm" }}>
+                <ContractSummaryScaled
+                  info={info}
+                  token={token}
+                  signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
+                  signatureData={signatureData}
+                  captureRef={summaryCaptureRef}
                 />
-                <a
-                  href={info.documentUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-block text-sm text-blue-600 hover:underline"
-                >
-                  새 창에서 보기
-                </a>
-              </>
-            ) : info.body?.trim() ? (
-              <div className="rounded border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                본문은 작성자가 <strong>저장</strong>할 때 시스템이 자동으로 PDF로 변환해 넣습니다. 수동으로 인쇄 미리보기·PDF 저장·업로드할 필요 없습니다. 아직 2페이지가 보이지 않는다면 계약 작성자에게 &quot;계약서 저장 한 번 더 해 주세요&quot;라고 문의하세요.
+                {info.documentUrl && !(pdfLoadFailed && info.body?.trim()) ? (
+                  <>
+                    <PdfToA4Images
+                      documentUrl={info.documentUrl}
+                      className="space-y-4"
+                      fullWidth
+                      pageWrapperClassName="contract-sign-doc-page"
+                      onError={info.body?.trim() ? () => setPdfLoadFailed(true) : undefined}
+                    />
+                    <a
+                      href={info.documentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block text-sm text-blue-600 hover:underline"
+                    >
+                      새 창에서 보기
+                    </a>
+                  </>
+                ) : pdfLoadFailed && info.body?.trim() ? (
+                  <SignBodyA4Viewer bodyHtml={info.body} margins={info.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 }} />
+                ) : info.body?.trim() ? (
+                  <div className="space-y-2">
+                    <SignBodyA4Viewer bodyHtml={info.body} margins={info.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 }} />
+                    <p className="text-xs text-amber-700">본문은 작성자가 저장할 때 자동으로 PDF로 넣습니다. 계약서 저장 한 번 더 해 주시면 2페이지가 PDF로 보입니다.</p>
+                  </div>
+                ) : (
+                  <div className="rounded border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
+                    이 계약서에는 계약 본문(2페이지 이후)이 등록되지 않았습니다. 필요 시 계약 작성자에게 문의하세요.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-800">
-                이 계약서에는 계약 본문(2페이지 이후)이 등록되지 않았습니다. 필요 시 계약 작성자에게 문의하세요.
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -505,6 +606,51 @@ export default function SignPage() {
               placeholder="서명 완료 후 계약서를 받을 이메일 주소"
             />
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (!signerName.trim() || !signerAddress.trim() || !signerResidentNumber.trim() || !signatureData) {
+                alert("미리보기를 보려면 서명자 이름, 주소, 주민번호, 서명을 모두 입력해 주세요.");
+                return;
+              }
+              setShowPreview(true);
+            }}
+            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            PDF 미리보기
+          </button>
+          {showPreview && (
+            <div className="fixed inset-0 z-50 flex flex-col" onClick={() => setShowPreview(false)}>
+              <div className="absolute inset-0 bg-black/50" />
+              <div className="relative z-10 flex h-full flex-col">
+                <div className="flex items-center justify-between bg-white px-4 py-3 shadow">
+                  <h3 className="text-sm font-bold text-gray-900">PDF 미리보기</h3>
+                  <button type="button" onClick={() => setShowPreview(false)} className="rounded-lg bg-gray-100 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200">
+                    닫기
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[#e8e8e8] p-[8mm]" onClick={(e) => e.stopPropagation()}>
+                  <div className="mx-auto flex flex-col gap-[8mm]" style={{ maxWidth: "210mm" }}>
+                    <ContractSummaryScaled
+                      info={info}
+                      token={token}
+                      signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
+                      signatureData={signatureData}
+                    />
+                    {info.documentUrl && !(pdfLoadFailed && info.body?.trim()) ? (
+                      <PdfToA4Images
+                        documentUrl={info.documentUrl}
+                        fullWidth
+                        pageWrapperClassName="contract-sign-doc-page"
+                      />
+                    ) : info.body?.trim() ? (
+                      <SignBodyA4Viewer bodyHtml={info.body} margins={info.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 }} />
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           <button
             type="submit"
             disabled={submitting}
