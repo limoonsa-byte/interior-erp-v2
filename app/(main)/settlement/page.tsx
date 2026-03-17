@@ -61,6 +61,16 @@ function formatNum(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+function formatDateYMD(dateStr: string | undefined): string {
+  if (!dateStr || !dateStr.trim()) return "-";
+  const d = new Date(dateStr.trim());
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function itemAmount(item: EstimateItem): number {
   const q = Number(item.qty) || 0;
   const mat = Number(item.materialUnitPrice ?? item.unitPrice ?? 0) || 0;
@@ -477,45 +487,91 @@ export default function SettlementPage() {
         </div>
       )}
 
-      <div className="mb-4 no-print">
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">프로젝트(견적) 선택</label>
-        <div className="flex flex-wrap items-center gap-3 mb-1.5">
-          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            완료된 항목 보기
-          </label>
-        </div>
-        <select
-          value={selectedId ?? ""}
-          onChange={(e) => setSelectedId(Number(e.target.value) || null)}
-          disabled={estimateListLoading}
-          className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white disabled:opacity-50"
-        >
-          {estimatesForSelect.length === 0 ? (
-            <option value="">{estimateListLoading ? "불러오는 중…" : "견적이 없습니다."}</option>
-          ) : (
-            <>
-              <option value="">선택하세요</option>
-              {estimatesForSelect.map((est) => (
-                <option key={est.id} value={est.id}>
-                  {est.customerName || "고객"} / {est.title} ({est.estimateDate || "-"})
-                </option>
-              ))}
-            </>
+      {selectedId == null ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3 mb-3 no-print">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              완료된 항목 보기
+            </label>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="p-2 sm:p-3">견적일자</th>
+                  <th className="p-2 sm:p-3">고객명</th>
+                  <th className="p-2 sm:p-3">연락처</th>
+                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3 text-right">합계</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {estimateListLoading ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-gray-500">불러오는 중…</td>
+                  </tr>
+                ) : filteredEstimates.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                      {estimates.length === 0
+                        ? "저장된 견적이 없습니다."
+                        : "표시할 견적이 없습니다. '완료된 항목 보기'를 켜 보세요."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEstimates.map((est) => {
+                    const subtotal = (est.items || []).reduce(
+                      (s, itm) =>
+                        s +
+                        (Number(itm.qty) || 0) * (Number(itm.materialUnitPrice ?? itm.unitPrice ?? 0) || 0) +
+                        (Number(itm.qty) || 0) * (Number(itm.laborUnitPrice ?? 0) || 0),
+                      0
+                    );
+                    const ohRate = (est.overheadPercent != null ? Number(est.overheadPercent) : 5) / 100;
+                    const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
+                    const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
+                    return (
+                      <tr
+                        key={est.id}
+                        onClick={() => setSelectedId(est.id)}
+                        className="text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
+                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
+                        <td className="p-2 sm:p-3">
+                          <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                        </td>
+                        <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(total)}원</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="mb-4 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 no-print"
+          >
+            ← 목록으로
+          </button>
+
+          {detailLoading && (
+            <p className="py-6 text-sm text-gray-500">견적·정산 정보를 불러오는 중…</p>
           )}
-        </select>
-      </div>
 
-      {detailLoading && (
-        <p className="py-6 text-sm text-gray-500">견적·정산 정보를 불러오는 중…</p>
-      )}
-
-      {!detailLoading && estimate && (
+          {!detailLoading && estimate && (
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
             {estimate.customerName && <span>고객: {estimate.customerName}</span>}
@@ -844,6 +900,8 @@ export default function SettlementPage() {
             다시 불러오기
           </button>
         </div>
+      )}
+        </>
       )}
       </div>
 

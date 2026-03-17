@@ -1109,6 +1109,7 @@ export default function MasterAdminPage() {
                               <div
                                 className="contract-a4-paper-sheet relative mx-auto"
                                 style={{
+                                  width: "210mm",
                                   maxWidth: "210mm",
                                   minHeight: `${297}mm`,
                                   boxSizing: "border-box",
@@ -1216,6 +1217,7 @@ export default function MasterAdminPage() {
                           <div
                             className="contract-a4-paper-sheet relative mx-auto"
                             style={{
+                              width: "210mm",
                               maxWidth: "210mm",
                               minHeight: `${297}mm`,
                               boxSizing: "border-box",

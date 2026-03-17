@@ -351,23 +351,47 @@ body {
   font-weight: 600;
 }
 
-/* A4 페이지 브레이크: SVG 배경이 하단여백+간격+상단여백을 그리므로 투명 처리 */
+/* A4 페이지 브레이크: SVG 배경이 하단여백+간격+상단여백을 그리므로 투명 처리. 회색 구역에는 입력 불가 */
 .contract-a4-paper-sheet div[data-page-break] {
   background: transparent !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+/* A4 여백 안쪽만 인쇄 영역: 본문은 흰 용지의 여백 안에서만 표시·입력 */
+.contract-a4-paper-sheet .contract-rich-editor-content {
+  width: 100%;
+  max-width: 100%;
+  min-height: 200px !important;
+  box-sizing: border-box;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
 }
 .contract-a4-paper-sheet .ProseMirror {
-  padding: 0 !important;
-  min-height: auto !important;
+  width: 100%;
+  max-width: 100%;
+  padding: 2mm !important;
+  min-height: 200px !important;
+  pointer-events: auto;
+  cursor: text;
+  box-sizing: border-box;
+  overflow-x: hidden !important;
+  overflow-y: visible;
+  word-break: break-word;
+  background: transparent !important; /* 페이지 사이 회색·각 페이지 하단 여백이 SVG로 보이도록 */
 }
-.contract-a4-paper-sheet .contract-rich-editor-content {
-  overflow: visible !important;
-  min-height: 0 !important;
+/* 스크롤 맨 위로 올려도 첫 줄이 보이도록: 첫 블록 상단 여백 제거 */
+.contract-a4-paper-sheet .ProseMirror > *:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
 }
 
-/* A4 용지 스타일 */
+/* A4 용지 스타일
+ * 회색: 용지 밖·페이지 사이 간격 (글 금지)
+ * 흰색: A4 용지. 글은 반드시 흰 용지의 여백(상하좌우) 안쪽에만 적힘 */
 .contract-a4-paper-sheet {
   position: relative;
   background-color: #e8e8e8;
+  overflow: hidden; /* 본문이 여백(패딩) 영역으로 넘어가지 않게 */
 }
 
 /* 계약서 작성 인쇄 미리보기 모달: 실제 인쇄·서명 화면과 동일한 페이지 간격·여백·본문 스타일 */
@@ -412,8 +436,10 @@ body {
 .contract-preview-print-pages .contract-print-body-from-page2 {
   font-size: 11px;
   line-height: 1.6;
-  padding: 15mm 0;
+  padding-top: 15mm;
+  padding-bottom: 15mm;
   margin-top: 1rem;
+  box-sizing: border-box;
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
@@ -423,7 +449,6 @@ body {
   );
   background-size: 100% 267mm;
   background-repeat: repeat-y;
-  box-sizing: border-box;
 }
 .contract-preview-print-pages .contract-print-body p,
 .contract-preview-print-pages .contract-print-body-from-page2 p {
@@ -1071,14 +1096,29 @@ body {
     margin: 0 !important;
     padding: 0 !important;
   }
-  /* 계약서 본문(PDF 페이지) 이미지: 인쇄 시 용지 가로 폭 100% 꽉 채움, 페이지당 1장 */
+  /* 계약서 본문(PDF 페이지): 페이지 컨테이너 A4 고정, 이미지는 그 안에 맞춤 → 인쇄 미리보기 1장=1페이지 */
+  #contract-print-only .contract-print-doc-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    overflow: hidden !important;
+    page-break-after: always;
+  }
+  #contract-print-only .contract-print-doc-page:last-child {
+    page-break-after: auto;
+  }
+  #contract-print-only .contract-print-doc-page .contract-print-doc-img {
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    object-fit: contain !important;
+    box-sizing: border-box;
+    margin: 0 !important;
+  }
   #contract-print-only .contract-print-doc-img,
   #contract-print-only img:not(.contract-print-stamp):not(.contract-print-stamp-sig) {
     display: block !important;
     width: 100% !important;
-    max-width: none !important;
-    height: auto !important;
-    page-break-after: always;
     box-sizing: border-box;
     margin: 0 auto !important;
   }
