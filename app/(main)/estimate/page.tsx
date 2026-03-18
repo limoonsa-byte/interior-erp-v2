@@ -2232,10 +2232,20 @@ export default function EstimatePage() {
     setFormOpen("new");
   };
 
-  /** 모달에 표시할 상담 목록 (완료 건 보기 꺼짐이면 완료/완료및정산 제외) */
+  /** 이미 견적이 연결된 상담 ID 집합 */
+  const linkedConsultationIds = React.useMemo(
+    () => new Set(estimates.filter((e) => e.consultationId != null).map((e) => e.consultationId!)),
+    [estimates]
+  );
+
+  /** 모달에 표시할 상담 목록 (이미 견적 연결된 상담 제외, 완료 건 보기 꺼짐이면 완료/완료및정산 제외) */
   const consultationsToShow = React.useMemo(
-    () => consultations.filter((c) => showCompletedInModal || (c.status !== "완료" && c.status !== "완료및정산")),
-    [consultations, showCompletedInModal]
+    () => consultations.filter((c) => {
+      if (linkedConsultationIds.has(c.id)) return false;
+      if (!showCompletedInModal && (c.status === "완료" || c.status === "완료및정산")) return false;
+      return true;
+    }),
+    [consultations, showCompletedInModal, linkedConsultationIds]
   );
 
   const editingEstimate = formOpen !== null && formOpen !== "new" ? estimates.find((e) => e.id === formOpen) ?? null : null;
