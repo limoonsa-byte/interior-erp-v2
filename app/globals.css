@@ -1288,7 +1288,7 @@ body {
     overflow: visible !important;
     height: auto !important;
     width: 100% !important;
-    padding: 0.5in;
+    padding: 0;
     background: white;
     box-shadow: none;
     font-size: 11px;

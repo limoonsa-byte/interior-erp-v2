@@ -1738,8 +1738,8 @@ function EstimateForm({
               <span className="text-xs text-gray-500">인쇄 시 색상이 나오게 하려면 인쇄 대화상자에서 &quot;배경 그래픽&quot;을 켜 주세요. &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
             </div>
           </div>
-          <div className="estimate-preview-print-wrap flex-1 min-h-0 overflow-auto p-4 flex justify-center" id="estimate-preview-print" ref={previewPrintRef}>
-            <div className="mx-auto max-w-3xl w-full min-w-0 shrink-0 text-sm estimate-preview-body">
+          <div className="estimate-preview-print-wrap flex-1 min-h-0 overflow-auto p-4 bg-gray-100 flex justify-center" id="estimate-preview-print" ref={previewPrintRef}>
+            <div className="mx-auto w-[180mm] min-w-0 shrink-0 text-[11px] estimate-preview-body bg-white p-[15mm] shadow-md">
               {(() => {
                 const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
                 const sortedIndices = items
