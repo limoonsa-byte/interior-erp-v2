@@ -3,16 +3,40 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-/** 견적서작성 이후 단계만 공사 일정 관리 대상 */
-const SCHEDULE_TARGET_STATUSES = [
-  "견적서작성",
-  "자재리스트",
-  "계약서작성",
-  "디자인",
-  "계약",
-  "공사진행",
-  "완료및정산",
-] as const;
+/** 완료 상태값 (체크박스로 보기/숨기기) */
+const COMPLETED_STATUS = "완료및정산";
+
+/** 한국 공휴일 (양력 고정 + 음력 기반 변동) - "MM-DD": "공휴일명" */
+const KOREAN_HOLIDAYS: Record<string, Record<string, string>> = {
+  "2025": {
+    "01-01": "신정", "01-28": "설날", "01-29": "설날", "01-30": "설날",
+    "03-01": "삼일절", "05-05": "어린이날", "05-06": "대체공휴일",
+    "06-06": "현충일", "08-15": "광복절",
+    "10-03": "개천절", "10-05": "추석", "10-06": "추석", "10-07": "추석", "10-08": "대체공휴일",
+    "10-09": "한글날", "12-25": "성탄절",
+  },
+  "2026": {
+    "01-01": "신정", "02-16": "설날", "02-17": "설날", "02-18": "설날",
+    "03-01": "삼일절", "03-02": "대체공휴일",
+    "05-05": "어린이날", "05-24": "부처님오신날", "05-25": "대체공휴일",
+    "06-06": "현충일", "08-15": "광복절", "08-17": "대체공휴일",
+    "09-24": "추석", "09-25": "추석", "09-26": "추석",
+    "10-03": "개천절", "10-05": "대체공휴일", "10-09": "한글날", "12-25": "성탄절",
+  },
+  "2027": {
+    "01-01": "신정", "02-06": "설날", "02-07": "설날", "02-08": "설날", "02-09": "대체공휴일",
+    "03-01": "삼일절", "05-05": "어린이날", "05-13": "부처님오신날",
+    "06-06": "현충일", "08-15": "광복절", "08-16": "대체공휴일",
+    "09-14": "추석", "09-15": "추석", "09-16": "추석",
+    "10-03": "개천절", "10-04": "대체공휴일", "10-09": "한글날", "12-25": "성탄절",
+  },
+};
+
+function getHolidayName(dateStr: string): string | null {
+  const year = dateStr.slice(0, 4);
+  const mmdd = dateStr.slice(5);
+  return KOREAN_HOLIDAYS[year]?.[mmdd] ?? null;
+}
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const LIST_PAGE_SIZE = 10;
@@ -159,11 +183,11 @@ export default function SchedulePage() {
   }, []);
 
   const scheduleList = useMemo(() => {
-    const list = consultations.filter((c) => {
-      if (!showCompleted && c.status === "완료") return false;
-      return SCHEDULE_TARGET_STATUSES.includes(c.status as (typeof SCHEDULE_TARGET_STATUSES)[number]);
-    });
-    return list
+    return consultations
+      .filter((c) => {
+        if (!showCompleted && c.status === COMPLETED_STATUS) return false;
+        return true;
+      })
       .map((consultation) => {
         const est = estimates.find((e) => e.consultationId === consultation.id);
         return {
@@ -386,27 +410,46 @@ export default function SchedulePage() {
       <div className="overflow-x-auto">
         <div className="min-w-[600px] rounded-lg border border-gray-200 bg-white">
           <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-            {WEEKDAYS.map((wd) => (
+            {WEEKDAYS.map((wd, i) => (
               <div
                 key={wd}
-                className="p-2 text-center text-xs font-medium text-gray-600"
+                className={`p-2 text-center text-xs font-medium ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}
               >
                 {wd}
               </div>
             ))}
           </div>
           <div className="grid grid-cols-7">
-            {calendarDays.map(({ date, isCurrentMonth, dayNum }) => {
+            {calendarDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
               const siteBars = siteBarsByDay(date);
+              const dow = idx % 7;
+              const isSunday = dow === 0;
+              const isSaturday = dow === 6;
+              const holiday = getHolidayName(date);
+              const isHoliday = !!holiday;
+              const isOff = isSunday || isSaturday || isHoliday;
+              const cellBg = !isCurrentMonth
+                ? "bg-gray-50"
+                : isOff
+                  ? "bg-red-50/50"
+                  : "";
+              const dayColor = !isCurrentMonth
+                ? "text-gray-400"
+                : (isSunday || isHoliday)
+                  ? "text-red-500"
+                  : isSaturday
+                    ? "text-blue-500"
+                    : "text-gray-900";
               return (
                 <div
                   key={date}
-                  className={`min-h-[100px] border-b border-r border-gray-100 p-1 last:border-r-0 ${!isCurrentMonth ? "bg-gray-50" : ""}`}
+                  className={`min-h-[100px] border-b border-r border-gray-100 p-1 last:border-r-0 ${cellBg}`}
                 >
-                  <div
-                    className={`text-right text-sm ${isCurrentMonth ? "text-gray-900" : "text-gray-400"}`}
-                  >
+                  <div className={`text-right text-sm ${dayColor}`}>
                     {dayNum}
+                    {holiday && isCurrentMonth && (
+                      <span className="ml-1 text-[10px] text-red-400">{holiday}</span>
+                    )}
                   </div>
                   <div className="mt-1 space-y-0.5">
                     {siteBars.map((bar) => {
