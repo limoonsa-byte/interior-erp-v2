@@ -1151,21 +1151,6 @@ export default function ConsultingPage() {
             </div>
 
             <div className="flex gap-2 text-sm">
-              <label
-                className={`flex items-center gap-1.5 rounded border px-2 py-1.5 ${hasCompletedSettled ? "cursor-pointer border-gray-200 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
-                title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
-              >
-                <input
-                  type="checkbox"
-                  checked={showCompleted}
-                  onChange={(e) => setShowCompleted(e.target.checked)}
-                  disabled={!hasCompletedSettled}
-                  className="rounded border-gray-300"
-                />
-                <span className={hasCompletedSettled ? "text-gray-700" : "text-gray-400"}>완료 건 보기</span>
-              </label>
-            </div>
-            <div className="flex gap-2 text-sm">
               <label className="flex cursor-pointer items-center gap-1">
                 <input
                   type="radio"
@@ -1242,6 +1227,20 @@ export default function ConsultingPage() {
           </div>
         </div>
       </div>
+
+      <label
+        className={`mb-3 inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${hasCompletedSettled ? "cursor-pointer border-gray-300 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
+        title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
+      >
+        <input
+          type="checkbox"
+          checked={showCompleted}
+          onChange={(e) => setShowCompleted(e.target.checked)}
+          disabled={!hasCompletedSettled}
+          className="rounded border-gray-300"
+        />
+        <span className={hasCompletedSettled ? "text-gray-700" : "text-gray-400"}>완료 건 보기</span>
+      </label>
 
       <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full min-w-[640px] text-center text-sm">
