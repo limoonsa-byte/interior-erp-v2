@@ -20,6 +20,26 @@ export const LUNAR_HOLIDAY_DATES: Record<string, string[]> = {
   "2032": ["2032-02-10", "2032-02-11", "2032-02-12", "2032-09-19", "2032-09-20", "2032-09-21"],
 };
 
+/** 고정 공휴일 이름 매핑 */
+const FIXED_HOLIDAY_NAMES: Record<string, string> = {
+  "01-01": "신정", "03-01": "삼일절", "05-05": "어린이날",
+  "06-06": "현충일", "08-15": "광복절", "10-03": "개천절",
+  "10-09": "한글날", "12-25": "성탄절",
+};
+
+/** 음력 공휴일 이름 매핑 (YYYY-MM-DD → 이름) — 대체공휴일, 부처님오신날 포함 */
+const LUNAR_HOLIDAY_NAMES: Record<string, string> = {
+  "2025-01-28": "설날", "2025-01-29": "설날", "2025-01-30": "설날",
+  "2025-10-05": "추석", "2025-10-06": "추석", "2025-10-07": "추석",
+  "2026-02-16": "설날", "2026-02-17": "설날", "2026-02-18": "설날",
+  "2026-03-02": "대체공휴일", "2026-05-24": "부처님오신날", "2026-05-25": "대체공휴일",
+  "2026-08-17": "대체공휴일", "2026-09-24": "추석", "2026-09-25": "추석", "2026-09-26": "추석",
+  "2026-10-05": "대체공휴일",
+  "2027-02-06": "설날", "2027-02-07": "설날", "2027-02-08": "설날", "2027-02-09": "대체공휴일",
+  "2027-05-13": "부처님오신날", "2027-08-16": "대체공휴일",
+  "2027-09-14": "추석", "2027-09-15": "추석", "2027-09-17": "추석", "2027-10-04": "대체공휴일",
+};
+
 /**
  * YYYY-MM-DD 형식 날짜가 한국 공휴일(주말 제외)인지 반환
  */
@@ -29,7 +49,24 @@ export function isKoreanHoliday(date: string): boolean {
   const [, m, d] = parts;
   const mmdd = `${m}-${d}`;
   if (FIXED_HOLIDAYS_MMDD.includes(mmdd)) return true;
+  if (LUNAR_HOLIDAY_NAMES[date]) return true;
   const y = date.slice(0, 4);
   const list = LUNAR_HOLIDAY_DATES[y];
   return !!list && list.includes(date);
+}
+
+/**
+ * 공휴일명 반환 (공휴일이 아니면 null)
+ */
+export function getHolidayName(date: string): string | null {
+  const parts = date.split("-");
+  if (parts.length < 3) return null;
+  const [, m, d] = parts;
+  const mmdd = `${m}-${d}`;
+  if (FIXED_HOLIDAY_NAMES[mmdd]) return FIXED_HOLIDAY_NAMES[mmdd];
+  if (LUNAR_HOLIDAY_NAMES[date]) return LUNAR_HOLIDAY_NAMES[date];
+  const y = date.slice(0, 4);
+  const list = LUNAR_HOLIDAY_DATES[y];
+  if (list && list.includes(date)) return "공휴일";
+  return null;
 }

@@ -3,7 +3,7 @@
 import React, { useMemo, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { isKoreanHoliday } from "@/lib/koreanHolidays";
+import { isKoreanHoliday, getHolidayName } from "@/lib/koreanHolidays";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -426,9 +426,9 @@ export default function ScheduleDetailPage() {
           </button>
         </div>
         <div className="rounded-lg border-2 border-gray-300 bg-white overflow-hidden">
-          <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-medium text-gray-600">
+          <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-medium">
             {WEEKDAYS.map((wd, i) => (
-              <div key={wd} className={`p-2 border-r border-gray-300 last:border-r-0 ${i === 0 || i === 6 ? "bg-pink-50" : "bg-gray-50"}`}>{wd}</div>
+              <div key={wd} className={`p-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-pink-50 text-red-500" : i === 6 ? "bg-pink-50 text-blue-500" : "bg-gray-50 text-gray-600"}`}>{wd}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 border-t border-gray-300">
@@ -436,9 +436,20 @@ export default function ScheduleDetailPage() {
               const onDay = phasesOnDay(date);
               const inRange = isInConstructionRange(date);
               const dayOfWeek = new Date(date + "T12:00:00").getDay();
-              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+              const isSunday = dayOfWeek === 0;
+              const isSaturday = dayOfWeek === 6;
+              const isWeekend = isSunday || isSaturday;
               const isHoliday = isKoreanHoliday(date);
-              const cellBg = (isWeekend || isHoliday) ? "bg-pink-50" : !isCurrentMonth ? "bg-gray-50" : inRange ? "bg-blue-50/50" : "";
+              const holidayName = getHolidayName(date);
+              const isOff = isWeekend || isHoliday;
+              const cellBg = isOff ? "bg-red-50/50" : !isCurrentMonth ? "bg-gray-50" : inRange ? "bg-blue-50/50" : "";
+              const dayColor = !isCurrentMonth
+                ? "text-gray-400"
+                : (isSunday || isHoliday)
+                  ? "text-red-500"
+                  : isSaturday
+                    ? "text-blue-500"
+                    : "text-gray-700";
               return (
                 <div
                   key={date}
@@ -451,8 +462,11 @@ export default function ScheduleDetailPage() {
                     onDragOver={(e) => handleDragOver(e, date)}
                     onDrop={(e) => handleDropOnDay(date, e)}
                   >
-                    <div className={`text-right text-xs ${isCurrentMonth ? "text-gray-700" : "text-gray-400"}`}>
+                    <div className={`text-right text-xs ${dayColor}`}>
                       {dayNum}
+                      {holidayName && isCurrentMonth && (
+                        <span className="ml-1 text-[9px] text-red-400">{holidayName}</span>
+                      )}
                     </div>
                     <div className="mt-0.5 space-y-0.5">
                     {onDay.map((p, i) => {
