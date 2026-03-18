@@ -3,15 +3,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-/** 견적완료 이후만 공사 일정 관리 대상 */
+/** 견적서작성 이후 단계만 공사 일정 관리 대상 */
 const SCHEDULE_TARGET_STATUSES = [
-  "견적완료",
-  "자재미팅",
-  "계약서 작성",
-  "디자인미팅",
-  "계약완료",
-  "취소/보류",
-  "완료",
+  "견적서작성",
+  "자재리스트",
+  "계약서작성",
+  "디자인",
+  "계약",
+  "공사진행",
+  "완료및정산",
 ] as const;
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
