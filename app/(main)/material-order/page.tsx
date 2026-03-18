@@ -697,35 +697,78 @@ export default function MaterialOrderPage() {
       <h1 className="mb-1 text-xl font-semibold text-gray-900">자재 발주</h1>
       <p className="mb-6 text-sm text-gray-600">견적을 선택하면 자재 항목만 필터해 표시합니다. 엑셀 내보내기 후 발주에 활용하세요.</p>
 
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <label className="mb-2 block text-sm font-medium text-gray-700">프로젝트(견적) 선택</label>
-        <div className="flex flex-wrap items-center gap-3 mb-1.5">
-          <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={showCompleted}
-              onChange={(e) => setShowCompleted(e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            완료된 항목 보기
-          </label>
-        </div>
-        <select
-          value={selectedEstimateId ?? ""}
-          onChange={(e) => setSelectedEstimateId(Number(e.target.value) || null)}
-          className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
-        >
-          <option value="">선택하세요</option>
-          {estimatesForSelect.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.customerName || "고객"} / {e.title || "제목 없음"} (견적 #{e.id})
-            </option>
-          ))}
-        </select>
+      {selectedEstimateId == null ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => setShowCompleted(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              완료된 항목 보기
+            </label>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
+                <tr>
+                  <th className="p-2 sm:p-3">견적일자</th>
+                  <th className="p-2 sm:p-3">고객명</th>
+                  <th className="p-2 sm:p-3">연락처</th>
+                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3 text-right">합계</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredEstimates.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                      {estimates.length === 0
+                        ? "저장된 견적이 없습니다."
+                        : "표시할 견적이 없습니다. '완료된 항목 보기'를 켜 보세요."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredEstimates.map((est) => {
+                    const subtotal = (est.items || []).reduce(
+                      (s, itm) => s + materialAmount(itm), 0
+                    );
+                    return (
+                      <tr
+                        key={est.id}
+                        onClick={() => setSelectedEstimateId(est.id)}
+                        className="text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <td className="p-2 sm:p-3">{est.estimateDate ? est.estimateDate.slice(0, 10) : "-"}</td>
+                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
+                        <td className="p-2 sm:p-3">
+                          <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                        </td>
+                        <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(subtotal)}원</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setSelectedEstimateId(null)}
+            className="mb-4 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            ← 목록으로
+          </button>
 
         {selectedEstimate && (
           <>
-            <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
+            <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
               <div className="font-medium text-gray-800">{selectedEstimate.title || "제목 없음"}</div>
               <div className="mt-1 text-gray-600">고객: {selectedEstimate.customerName || "-"}</div>
               <div className="text-gray-600">주소: {selectedEstimate.address || "-"}</div>
@@ -1408,13 +1451,8 @@ export default function MaterialOrderPage() {
                 </div>
           </>
         )}
-
-        {!selectedEstimate && estimates.length === 0 && (
-          <p className="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-            등록된 견적이 없습니다. 견적 페이지에서 먼저 견적을 등록해 주세요.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
