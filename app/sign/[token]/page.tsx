@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
 import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
+import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
+import type { SignedContractSummaryContract } from "@/components/contract/SignedContractSummary";
 
 type SignInfo = {
   id: number;
@@ -288,10 +290,13 @@ export default function SignPage() {
   const [signerEmail, setSignerEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
+  const [previewBuilding, setPreviewBuilding] = useState(false);
   const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
+  /** 본문 PDF가 있을 때 이미지 변환이 끝났는지. 끝나야 제출 가능(계약서 이메일 보내기와 동일하게 클라이언트에서 전체 PDF 조립) */
+  const [docPagesReady, setDocPagesReady] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const summaryCaptureRef = useRef<HTMLDivElement>(null);
+  const docPageImagesRef = useRef<string[]>([]);
   const isDrawing = useRef(false);
 
   useEffect(() => {
@@ -309,6 +314,7 @@ export default function SignPage() {
         }
         setInfo(data);
         setPdfLoadFailed(false);
+        setDocPagesReady(!data.documentUrl);
       })
       .catch(() => setError("정보를 불러올 수 없습니다."))
       .finally(() => setLoading(false));
@@ -379,6 +385,132 @@ export default function SignPage() {
     };
   }, [info?.id, info?.alreadySigned]);
 
+  /** 테스트 페이지·계약서 작성과 동일: 794px SignedContractSummary 캡처 + 본문 이미지 → PDF 조립. 제출 시·미리보기 시 동일 PDF. */
+  const buildPdfForSign = async (): Promise<{ summaryImage: string; pdfBase64?: string; docPageImages: string[] } | null> => {
+    if (!info) return null;
+    let details: Record<string, unknown> | null = null;
+    if (info.details != null) {
+      if (typeof info.details === "object") details = info.details as Record<string, unknown>;
+      else if (typeof info.details === "string") {
+        try { details = JSON.parse(info.details) as Record<string, unknown>; } catch { /* ignore */ }
+      }
+    }
+    const summaryContract: SignedContractSummaryContract = {
+      details,
+      signerName: signerName.trim() || undefined,
+      signerAddress: signerAddress.trim() || undefined,
+      signerResidentNumber: signerResidentNumber.trim() || undefined,
+      signatureData: signatureData ?? undefined,
+    };
+    let summaryImage: string | undefined;
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const root = await import("react-dom/client");
+      const offscreen = document.createElement("div");
+      offscreen.className = "contract-email-capture-print-style";
+      offscreen.style.cssText =
+        "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
+      document.body.appendChild(offscreen);
+      const container = document.createElement("div");
+      offscreen.appendChild(container);
+      const r = root.createRoot(container);
+      r.render(React.createElement(SignedContractSummary, { contract: summaryContract }));
+      await new Promise((res) => setTimeout(res, 1200));
+      const imgs = offscreen.querySelectorAll("img");
+      await Promise.all(
+        Array.from(imgs).map((img) =>
+          (img as HTMLImageElement).complete
+            ? Promise.resolve()
+            : new Promise<void>((res) => {
+                (img as HTMLImageElement).onload = () => res();
+                (img as HTMLImageElement).onerror = () => res();
+                setTimeout(() => res(), 2000);
+              })
+        )
+      );
+      await new Promise((res) => setTimeout(res, 300));
+      await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+      const canvas = await html2canvas(offscreen, {
+        scale: 3, useCORS: true, backgroundColor: "#ffffff",
+        width: 794, windowWidth: 794, logging: false,
+      });
+      summaryImage = canvas.toDataURL("image/png");
+      r.unmount();
+      document.body.removeChild(offscreen);
+    } catch (err) {
+      console.warn("서명 요약 캡처 실패:", err);
+      return null;
+    }
+    if (!summaryImage) return null;
+
+    let docPageImages: string[] = [...(docPageImagesRef.current ?? [])];
+    if (info.documentUrl && docPageImages.length === 0) {
+      const domImgs = Array.from(document.querySelectorAll<HTMLImageElement>(".contract-sign-doc-page img"))
+        .map((img) => img.src)
+        .filter((s): s is string => typeof s === "string" && s.startsWith("data:image/"));
+      if (domImgs.length > 0) docPageImages = domImgs;
+    }
+    if (info.documentUrl && docPageImages.length === 0) {
+      try {
+        const pdfjsLib = await import("pdfjs-dist");
+        const lib = pdfjsLib as { getDocument: (opts: { url: string }) => { promise: Promise<{ numPages: number; getPage: (i: number) => Promise<{ getViewport: (o: { scale: number }) => unknown; render: (o: unknown) => { promise: Promise<void> } }> }> }; GlobalWorkerOptions?: { workerSrc: string }; version?: string };
+        if (typeof window !== "undefined" && lib.GlobalWorkerOptions) {
+          lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${lib.version || "4.0.379"}/build/pdf.worker.min.mjs`;
+        }
+        const pdf = await lib.getDocument({ url: info.documentUrl }).promise;
+        const scale = 2;
+        const images: string[] = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale }) as { width: number; height: number };
+          const canvas = document.createElement("canvas");
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) continue;
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          images.push(canvas.toDataURL("image/png"));
+        }
+        docPageImages = images;
+      } catch (err) {
+        console.warn("pdfjs 본문 변환 실패:", err);
+      }
+    }
+
+    let pdfBase64: string | undefined;
+    try {
+      const { PDFDocument } = await import("pdf-lib");
+      const pdfDoc = await PDFDocument.create();
+      const A4_W = 595.28;
+      const A4_H = 841.89;
+      const addImagePage = async (dataUrl: string) => {
+        const match = dataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+        if (!match) return;
+        const binary = atob(match[2]);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const img = match[1] === "png" ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+        const scale = Math.min(A4_W / img.width, A4_H / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const page = pdfDoc.addPage([A4_W, A4_H]);
+        page.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
+      };
+      await addImagePage(summaryImage);
+      for (const url of docPageImages) await addImagePage(url);
+      const pdfBytes = await pdfDoc.save();
+      let binary = "";
+      const chunk = 8192;
+      for (let i = 0; i < pdfBytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, Array.from(pdfBytes.subarray(i, i + chunk)));
+      }
+      pdfBase64 = btoa(binary);
+    } catch (e) {
+      console.warn("PDF 조립 실패:", e);
+    }
+    return { summaryImage, pdfBase64, docPageImages };
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !signerName.trim()) {
@@ -397,30 +529,28 @@ export default function SignPage() {
       alert("서명을 그려 주세요.");
       return;
     }
+    const emailTrimmed = signerEmail.trim();
+    if (!emailTrimmed) {
+      alert("계약서 PDF를 받을 이메일 주소를 입력해 주세요.");
+      return;
+    }
+    const hasBody = Boolean(info?.documentUrl || info?.body?.trim());
+    if (hasBody && !docPagesReady) {
+      alert("본문 PDF 로딩 중입니다. 잠시 후 [메일 보내기]를 눌러 주세요.");
+      return;
+    }
     setSubmitting(true);
-    let summaryImage: string | undefined;
-    if (info?.documentUrl && summaryCaptureRef.current) {
-      let offscreen: HTMLDivElement | null = null;
-      try {
-        const html2canvas = (await import("html2canvas")).default;
-        const el = summaryCaptureRef.current;
-        offscreen = document.createElement("div");
-        offscreen.className = "contract-email-capture-print-style";
-        offscreen.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;min-height:1123px;background:#fff;z-index:-1;box-sizing:border-box;";
-        document.body.appendChild(offscreen);
-        const clone = el.cloneNode(true) as HTMLElement;
-        clone.style.width = "100%";
-        offscreen.appendChild(clone);
-        const imgs = clone.querySelectorAll("img");
-        await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((r) => { img.onload = () => r(); img.onerror = () => r(); setTimeout(r, 3000); })));
-        await new Promise((r) => setTimeout(r, 500));
-        const canvas = await html2canvas(offscreen, { scale: 3, useCORS: true, backgroundColor: "#ffffff", width: 794, windowWidth: 794, logging: false });
-        summaryImage = canvas.toDataURL("image/png");
-      } catch (err) {
-        console.warn("서명 요약 캡처 실패:", err);
-      } finally {
-        if (offscreen?.parentNode) document.body.removeChild(offscreen);
-      }
+    const result = await buildPdfForSign();
+    if (!result) {
+      setSubmitting(false);
+      alert("PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+      return;
+    }
+    const { summaryImage, pdfBase64, docPageImages } = result;
+    if (hasBody && docPageImages.length === 0) {
+      setSubmitting(false);
+      alert("본문 PDF 로딩 중입니다. 잠시 후 [메일 보내기]를 눌러 주세요.");
+      return;
     }
     try {
       const res = await fetch(`/api/contracts/sign/${token}`, {
@@ -430,19 +560,21 @@ export default function SignPage() {
           signerName: signerName.trim(),
           signerAddress: signerAddress.trim() || undefined,
           signerResidentNumber: signerResidentNumber.trim() || undefined,
-          signerEmail: signerEmail.trim() || undefined,
+          signerEmail: emailTrimmed,
           signatureData,
-          summaryImage,
+          pdfBase64: pdfBase64 ?? undefined,
+          summaryImage: pdfBase64 ? undefined : summaryImage,
+          docPageImages: pdfBase64 ? undefined : docPageImages,
         }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setSubmitted(true);
-      if (data.emailSent === false && data.emailError) {
-        console.error("이메일 발송 실패:", data.emailError);
+      if (data.emailError) {
+        alert(`서명은 저장되었으나 이메일 발송 실패: ${data.emailError}`);
       }
+      setSubmitted(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "제출 실패");
+      alert(err instanceof Error ? err.message : "메일 발송 실패");
     } finally {
       setSubmitting(false);
     }
@@ -482,13 +614,8 @@ export default function SignPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-100 p-4">
         <div className="rounded-lg bg-white p-6 text-center shadow-md max-w-md">
-          <h1 className="text-lg font-semibold text-green-700">서명이 완료되었습니다.</h1>
-          <p className="mt-2 text-gray-600">계약서 서명이 정상적으로 접수되었습니다.</p>
-          {signerEmail.trim() && (
-            <p className="mt-2 text-sm text-blue-600">
-              {signerEmail.trim()} 으로 계약서가 발송되었습니다.
-            </p>
-          )}
+          <h1 className="text-lg font-semibold text-green-700">발송 완료</h1>
+          <p className="mt-2 text-gray-600">입력하신 이메일로 계약서 PDF(본문 포함)를 발송했습니다. 메일함을 확인해 주세요.</p>
         </div>
       </div>
     );
@@ -499,11 +626,12 @@ export default function SignPage() {
       <div className="mx-auto max-w-4xl rounded-xl bg-white p-4 shadow-md sm:p-6">
         <h1 className="text-lg font-bold text-gray-900">계약서 서명</h1>
         <p className="mt-1 text-sm text-gray-600">{info.title}</p>
+        <p className="mt-1 text-xs text-amber-700">아래 항목을 입력한 뒤 <strong>이메일 주소를 적고 [메일 보내기]</strong>를 누르면 계약서 PDF(본문 포함)가 해당 메일로 발송됩니다.</p>
 
-        {/* 1페이지: 요약(서명란). 2페이지부터: 작성 시 자동 변환된 본문 PDF 또는 업로드된 문서 */}
+        {/* 1페이지: 요약(서명란). 2페이지부터: 본문 PDF */}
         <div className="mt-6">
           <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
-          <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명해 주세요.</p>
+          <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명·이메일을 입력해 주세요.</p>
           <div className="mt-2 w-full">
             <div className="max-h-[70vh] overflow-y-auto overflow-x-hidden rounded-lg bg-[#e8e8e8] p-[8mm]">
               <div className="mx-auto w-full flex flex-col gap-[8mm]" style={{ maxWidth: "210mm" }}>
@@ -521,6 +649,10 @@ export default function SignPage() {
                       className="space-y-4"
                       fullWidth
                       pageWrapperClassName="contract-sign-doc-page"
+                      onPagesLoaded={(imgs) => {
+                        docPageImagesRef.current = imgs;
+                        if (imgs.length > 0) setDocPagesReady(true);
+                      }}
                       onError={info.body?.trim() ? () => setPdfLoadFailed(true) : undefined}
                     />
                     <a
@@ -597,68 +729,56 @@ export default function SignPage() {
           </div>
           <p className="text-xs text-gray-500">서명일: {new Date().toLocaleDateString("ko-KR")}</p>
           <div>
-            <label className="block text-sm font-medium text-gray-700">계약서 받을 이메일 (선택)</label>
+            <label className="block text-sm font-medium text-gray-700">계약서 받을 이메일 *</label>
             <input
               type="email"
               value={signerEmail}
               onChange={(e) => setSignerEmail(e.target.value)}
               className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"
-              placeholder="서명 완료 후 계약서를 받을 이메일 주소"
+              placeholder="계약서 PDF를 받을 이메일 주소"
+              required
             />
+            <p className="mt-0.5 text-xs text-gray-500">본문 포함 PDF가 이 주소로 발송됩니다.</p>
           </div>
           <button
             type="button"
-            onClick={() => {
+            disabled={previewBuilding}
+            onClick={async () => {
               if (!signerName.trim() || !signerAddress.trim() || !signerResidentNumber.trim() || !signatureData) {
                 alert("미리보기를 보려면 서명자 이름, 주소, 주민번호, 서명을 모두 입력해 주세요.");
                 return;
               }
-              setShowPreview(true);
+              setPreviewBuilding(true);
+              try {
+                const result = await buildPdfForSign();
+                if (!result?.pdfBase64) {
+                  alert("PDF 생성에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+                  return;
+                }
+                const binary = atob(result.pdfBase64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                const blob = new Blob([bytes], { type: "application/pdf" });
+                const url = URL.createObjectURL(blob);
+                window.open(url, "_blank", "noopener,noreferrer");
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+              } finally {
+                setPreviewBuilding(false);
+              }
             }}
-            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="w-full rounded-lg border border-gray-300 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
-            PDF 미리보기
+            {previewBuilding ? "PDF 만드는 중..." : "PDF 미리보기 (제출 시와 동일)"}
           </button>
-          {showPreview && (
-            <div className="fixed inset-0 z-50 flex flex-col" onClick={() => setShowPreview(false)}>
-              <div className="absolute inset-0 bg-black/50" />
-              <div className="relative z-10 flex h-full flex-col">
-                <div className="flex items-center justify-between bg-white px-4 py-3 shadow">
-                  <h3 className="text-sm font-bold text-gray-900">PDF 미리보기</h3>
-                  <button type="button" onClick={() => setShowPreview(false)} className="rounded-lg bg-gray-100 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200">
-                    닫기
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[#e8e8e8] p-[8mm]" onClick={(e) => e.stopPropagation()}>
-                  <div className="mx-auto flex flex-col gap-[8mm]" style={{ maxWidth: "210mm" }}>
-                    <ContractSummaryScaled
-                      info={info}
-                      token={token}
-                      signer={{ name: signerName, residentNumber: signerResidentNumber, address: signerAddress }}
-                      signatureData={signatureData}
-                    />
-                    {info.documentUrl && !(pdfLoadFailed && info.body?.trim()) ? (
-                      <PdfToA4Images
-                        documentUrl={info.documentUrl}
-                        fullWidth
-                        pageWrapperClassName="contract-sign-doc-page"
-                      />
-                    ) : info.body?.trim() ? (
-                      <SignBodyA4Viewer bodyHtml={info.body} margins={info.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 }} />
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || (Boolean(info.documentUrl) && !docPagesReady)}
             className="w-full rounded-lg bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {submitting ? "제출 중..." : "서명 제출"}
+            {submitting ? "보내는 중..." : info.documentUrl && !docPagesReady ? "본문 PDF 로딩 중..." : "메일 보내기 (본문 포함 PDF 발송)"}
           </button>
         </form>
+        <p className="mt-4 text-center text-[10px] text-gray-400">빌드: 메일보내기전용 2025-03</p>
       </div>
     </div>
   );

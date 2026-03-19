@@ -2,113 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
-
-function SignedContractSummary({ contract }: { contract: Contract }) {
-  const d = contract.details as Record<string, string> | null;
-  const containerRef = useRef<HTMLDivElement>(null);
-  const sig1Ref = useRef<HTMLImageElement>(null);
-  const sig2Ref = useRef<HTMLImageElement>(null);
-
-  const hasSignature = !!contract.signatureData && contract.signatureData.startsWith("data:");
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const container = containerRef.current;
-
-    container.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
-      const hide = () => { img.style.display = "none"; };
-      if (img.complete && img.naturalWidth === 0) { hide(); return; }
-      img.addEventListener("error", hide);
-    });
-
-    if (!hasSignature) return;
-    const inElements = container.querySelectorAll<HTMLElement>(".contract-print-in-fixed");
-    const tableInCells = container.querySelectorAll<HTMLElement>(".contract-print-in");
-    const containerRect = container.getBoundingClientRect();
-    if (tableInCells.length > 0 && sig1Ref.current) {
-      const cellRect = tableInCells[0].getBoundingClientRect();
-      const cx = cellRect.left + cellRect.width / 2 - containerRect.left;
-      const cy = cellRect.top + cellRect.height / 2 - containerRect.top;
-      sig1Ref.current.style.left = `${cx}px`;
-      sig1Ref.current.style.top = `${cy}px`;
-      sig1Ref.current.style.transform = "translate(-50%, -50%)";
-    }
-    if (inElements.length > 0 && sig2Ref.current) {
-      const inRect = inElements[0].getBoundingClientRect();
-      const cx = inRect.left + inRect.width / 2 - containerRect.left;
-      const cy = inRect.top + inRect.height / 2 - containerRect.top;
-      sig2Ref.current.style.left = `${cx}px`;
-      sig2Ref.current.style.top = `${cy}px`;
-      sig2Ref.current.style.transform = "translate(-50%, -50%)";
-    }
-  });
-
-  if (!d || typeof d !== "object") return null;
-  const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  const raw = Number(String(d.contractAmount ?? "").replace(/\D/g, "")) || 0;
-  const fmtAmt = (n: number) => (n ? n.toLocaleString("ko-KR") : "");
-  const contractAmountFormatted = raw ? raw.toLocaleString("ko-KR") : "-";
-  const downPct = String(d.downPaymentPercent ?? "").trim();
-  const balPct = String(d.balancePercent ?? "").trim();
-  const downAmtFmt = fmtAmt(downPct ? Math.round(raw * Number(downPct) / 100) : 0);
-  const balanceAmtFmt = fmtAmt(balPct ? Math.round(raw * Number(balPct) / 100) : 0);
-  let interimList: Array<{ percent: string; daysAfter: string }>;
-  try {
-    const rawP = d.interimPayments;
-    if (rawP && typeof rawP === "string" && rawP.trim()) {
-      const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
-      interimList = Array.isArray(parsed) && parsed.length > 0
-        ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
-        : [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }];
-    } else interimList = [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }];
-  } catch { interimList = [{ percent: String(d.interimPercent ?? ""), daysAfter: String(d.interimDaysAfter ?? "") }]; }
-  const interimRows = interimList.map((item, idx) => {
-    const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
-    const label = idx === 0 ? "중도금1차" : `중도금${idx + 1}차`;
-    return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter)}일후</span></td></tr>`;
-  }).join("");
-  const rowspanMoney = 3 + interimList.length + 1;
-  const clientName = contract.signerName || String(d.clientName ?? "");
-  const sigDisplay = String(d.contractorSignature ?? d.contractorName ?? d.contractorSignatureDirect ?? "").trim();
-  const clientAddr = contract.signerAddress || String(d.clientAddress ?? d.client_address ?? "").trim();
-  const clientRrn = contract.signerResidentNumber || String(d.clientResidentNumber ?? d.client_resident_number ?? "").trim();
-  const stampHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp" alt="" onerror="this.remove()" />`;
-  const stampSigHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp-sig" alt="" onerror="this.remove()" />`;
-  const html =
-    `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
-    `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
-    `<table class="contract-print-main-tbl">` +
-    `<colgroup><col class="contract-print-col-section" /><col class="contract-print-col-label" /><col class="contract-print-col-sub" /><col class="contract-print-col-value2" /><col class="contract-print-col-in" /></colgroup>` +
-    `<tbody>` +
-    `<tr><th rowspan="2" class="contract-print-section-label">계<br/>약<br/>자</th><td class="contract-print-row-label">발주자(수급인)</td><td colspan="2" class="contract-print-value">${esc(clientName)}</td><td class="contract-print-in">(인)</td></tr>` +
-    `<tr><td class="contract-print-row-label">시공자(하수급인)</td><td colspan="2" class="contract-print-value">${esc(d.contractorCompanyName ?? "")}</td><td class="contract-print-in">(인)</td></tr>` +
-    `<tr><th rowspan="4" class="contract-print-section-label">공<br/>사<br/>개<br/>요</th><td class="contract-print-row-label">공 사 명</td><td colspan="3" class="contract-print-value">${esc(d.projectName ?? "")}</td></tr>` +
-    `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(d.projectPlace ?? "")}</td></tr>` +
-    `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(d.projectStartDate ?? "")}</td></tr>` +
-    `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(d.projectEndDate ?? "")}</td></tr>` +
-    `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
-    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPct)}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
-    interimRows +
-    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balPct)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
-    `</tbody></table>` +
-    stampHtml +
-    `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
-    `<div class="contract-print-signatures">` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddr)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientRrn)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
-    `<div class="contract-print-sig-block"><p class="contract-print-sig-title">시공자(하수급인)</p><p class="contract-print-sig-line">주소 : ${esc(d.contractorAddress ?? "")}</p><p class="contract-print-sig-line">상호 : ${esc(d.contractorCompanyName ?? "")}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(sigDisplay)}</span><span class="contract-print-in-fixed contract-print-stamp-in-wrap"><span class="contract-print-red contract-print-in-text">(인)</span>${stampSigHtml}</span></p></div>` +
-    `</div></div>`;
-  return (
-    <div ref={containerRef} className="contract-sign-summary" style={{ position: "relative" }}>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
-      {hasSignature && (
-        <>
-          <img ref={sig1Ref} src={contract.signatureData!} className="contract-print-signature-overlay" alt="" aria-hidden />
-          <img ref={sig2Ref} src={contract.signatureData!} className="contract-print-signature-overlay" alt="" aria-hidden />
-        </>
-      )}
-    </div>
-  );
-}
+import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
 
 type Contract = {
   id: number;
@@ -121,6 +15,7 @@ type Contract = {
   signerEmail?: string;
   documentPath?: string;
   body?: string;
+  bodyMargins?: { top: number; right: number; bottom: number; left: number };
   details?: Record<string, unknown>;
   status: string;
   signToken?: string;
@@ -214,7 +109,13 @@ function ContractForm({
   const [signerEmail, setSignerEmail] = useState(contract?.signerEmail ?? "");
   const [documentPath, setDocumentPath] = useState(contract?.documentPath ?? "");
   const [body, setBody] = useState(contract?.body ?? "");
-  const [bodyMargins, setBodyMargins] = useState<{ top: number; right: number; bottom: number; left: number }>({ top: 15, right: 15, bottom: 15, left: 15 });
+  const [bodyMargins, setBodyMargins] = useState<{ top: number; right: number; bottom: number; left: number }>(() => {
+    const m = contract?.bodyMargins;
+    if (m && typeof m.top === "number" && typeof m.right === "number" && typeof m.bottom === "number" && typeof m.left === "number") {
+      return { top: m.top, right: m.right, bottom: m.bottom, left: m.left };
+    }
+    return { top: 15, right: 15, bottom: 15, left: 15 };
+  });
   const bodyViewerRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -267,6 +168,31 @@ function ContractForm({
       })
       .catch(() => setStampUrl(""));
   }, []);
+
+  useEffect(() => {
+    if (contract?.bodyMargins && typeof contract.bodyMargins.top === "number") {
+      setBodyMargins({
+        top: contract.bodyMargins.top,
+        right: contract.bodyMargins.right,
+        bottom: contract.bodyMargins.bottom,
+        left: contract.bodyMargins.left,
+      });
+    } else {
+      fetch("/api/company/company-contract-template")
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.bodyMargins) {
+            setBodyMargins({
+              top: Number(data.bodyMargins.top) || 15,
+              right: Number(data.bodyMargins.right) || 15,
+              bottom: Number(data.bodyMargins.bottom) || 15,
+              left: Number(data.bodyMargins.left) || 15,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [contract?.id, contract?.bodyMargins]);
 
   useEffect(() => {
     const d = (contract?.details ?? {}) as Record<string, string>;
@@ -603,7 +529,7 @@ function ContractForm({
       : contractAmount || "-";
 
   /** 인쇄/미리보기 공통: 1페이지 + 본문 HTML (계약서 작성 인쇄 미리보기와 동일한 구조·간격) */
-  const contractPrintHtml = React.useMemo(() => {
+  const contractPrintData = React.useMemo(() => {
     const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const rawAmount = Number(contractAmount.replace(/\D/g, "")) || 0;
     const fmtAmt = (n: number) => n ? n.toLocaleString("ko-KR") : "";
@@ -644,10 +570,11 @@ function ContractForm({
       `</div></div>`;
     const cleanBody = body.replace(/<div[^>]*data-page-break[^>]*><\/div>/gi, "");
     const bodySection = cleanBody.trim()
-      ? `<div class="contract-print-body contract-print-body-from-page2">${cleanBody}</div>`
+      ? `<div class="contract-print-body contract-print-body-from-page2 prose prose-sm max-w-none">${cleanBody}</div>`
       : "";
-    return page1 + bodySection;
+    return { page1, bodySection, full: page1 + bodySection };
   }, [title, clientName, clientAddress, clientResidentNumber, contractorCompanyName, contractorAddress, projectName, projectPlace, projectStartDate, projectEndDate, contractAmountFormatted, downPaymentPercent, balancePercent, interimPayments, body, stampUrl, sigDisplay]);
+  const contractPrintHtml = contractPrintData.full;
 
   /** 본문 HTML을 서명용 PDF(2페이지부터 해당)로 변환. 브라우저 전용. */
   const generateBodyPdf = async (bodyHtml: string): Promise<Blob> => {
@@ -657,7 +584,7 @@ function ContractForm({
     const root = document.createElement("div");
     root.id = "contract-body-pdf-capture-root";
     const inner = document.createElement("div");
-    inner.className = "contract-print-body contract-print-body-from-page2";
+    inner.className = "contract-print-body contract-print-body-from-page2 prose prose-sm max-w-none";
     inner.innerHTML = bodyHtml;
     root.appendChild(inner);
     document.body.appendChild(root);
@@ -754,13 +681,15 @@ function ContractForm({
     const mr = bodyMargins.right;
     const mb = bodyMargins.bottom;
     const ml = bodyMargins.left;
-    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0 ${mr}mm 0 ${ml}mm;box-sizing:border-box">${firstPageHtml}</div>${docSection || bodyHtmlSection}`;
+    wrap.style.cssText = `box-sizing: border-box;`;
+    wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0;box-sizing:border-box">${firstPageHtml}</div>${docSection || bodyHtmlSection}`;
     document.body.appendChild(wrap);
     document.body.classList.add("contract-printing");
     const noHeaderFooterStyle = document.createElement("style");
     noHeaderFooterStyle.setAttribute("media", "print");
     noHeaderFooterStyle.id = "contract-print-no-header-footer";
-    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 15mm 0; } #contract-print-only.contract-print-only-root { padding: 0; box-sizing: border-box; width: 210mm; margin: 0 auto; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 210mm; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-body-section { page-break-before: always; padding: 0 ${mr}mm; box-sizing: border-box; font-size: 11px; line-height: 1.6; } #contract-print-only .contract-print-body-section .contract-print-body-from-page2 { padding: 0; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 210mm; height: 267mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
+    const contentH = 297 - mt - mb;
+    noHeaderFooterStyle.textContent = `@page { size: A4; margin: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; } #contract-print-only.contract-print-only-root { width: 100%; margin: 0; padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 100%; } #contract-print-only .contract-print-summary { height: ${contentH}mm !important; min-height: ${contentH}mm !important; max-height: ${contentH}mm !important; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-body-section { page-break-before: always; padding: 0; box-sizing: border-box; font-size: 14px; line-height: 1.75; } #contract-print-only .contract-print-body-section .contract-print-body-from-page2 { padding: 0; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 100%; height: ${contentH}mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
     document.head.appendChild(noHeaderFooterStyle);
     const prevTitle = document.title;
     const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
@@ -1083,44 +1012,42 @@ function ContractForm({
               </div>
             </div>
             <div ref={previewPrintRef} id="contract-preview-print-area" className="contract-preview-print-pages overflow-y-auto p-6 bg-[#d1d5db]">
+              {/* 1페이지: 계약 요약(서명란) */}
               <div
-                className="contract-a4-paper-sheet mx-auto"
+                className="mx-auto bg-white"
                 style={{
                   maxWidth: "210mm",
                   boxSizing: "border-box",
                   minHeight: "297mm",
-                  backgroundImage: "repeating-linear-gradient(to bottom, transparent 0, transparent calc(297mm - 1px), #e5e7eb calc(297mm - 1px), #e5e7eb 297mm)",
-                  backgroundSize: "100% 297mm",
-                  backgroundPosition: "0 0",
+                  paddingTop: `${bodyMargins.top}mm`,
+                  paddingLeft: `${bodyMargins.left}mm`,
+                  paddingRight: `${bodyMargins.right}mm`,
+                  paddingBottom: `${bodyMargins.bottom}mm`,
                 }}
               >
                 <div
-                  className="min-h-[297mm] flex-1"
+                  className="contract-print-only-root"
+                  style={{ boxSizing: "border-box", minHeight: `${297 - bodyMargins.top - bodyMargins.bottom}mm` }}
+                  dangerouslySetInnerHTML={{ __html: contractPrintData.page1 }}
+                />
+              </div>
+              {/* 2페이지~: 계약 본문 (bodyMargins 여백 동일 적용) */}
+              {contractPrintData.bodySection && (
+                <div
+                  className="mx-auto mt-6 bg-white"
                   style={{
+                    maxWidth: "210mm",
                     boxSizing: "border-box",
-                    marginLeft: "15mm",
-                    marginRight: "15mm",
-                    backgroundImage: [
-                      "linear-gradient(to bottom, #e5e7eb 0, #e5e7eb 15mm, transparent 15mm)",
-                      "linear-gradient(to bottom, transparent calc(297mm - 15mm), #e5e7eb calc(297mm - 15mm), #e5e7eb 297mm)",
-                      "linear-gradient(to bottom, transparent 0, #fafaf8 15mm, #fafaf8 calc(297mm - 15mm), transparent calc(297mm - 15mm))",
-                      "linear-gradient(to bottom, transparent 0, transparent calc(15mm - 1px), #d1d5db calc(15mm - 1px), #d1d5db 15mm, transparent 15mm)",
-                      "linear-gradient(to bottom, transparent calc(297mm - 15mm - 1px), #d1d5db calc(297mm - 15mm - 1px), #d1d5db calc(297mm - 15mm + 1px), transparent calc(297mm - 15mm + 1px))",
-                      "linear-gradient(to right, #d1d5db 0, #d1d5db 1px, transparent 1px)",
-                      "linear-gradient(to right, transparent calc(100% - 1px), #d1d5db calc(100% - 1px), #d1d5db 100%)",
-                    ].join(", "),
-                    backgroundSize: "100% 297mm, 100% 297mm, 100% 297mm, 100% 297mm, 100% 297mm, 1px 297mm, 1px 297mm",
-                    backgroundRepeat: "repeat-y, repeat-y, repeat-y, repeat-y, repeat-y, repeat-y, repeat-y",
-                    backgroundPosition: "0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 100% 0",
+                    minHeight: "297mm",
+                    paddingTop: `${bodyMargins.top}mm`,
+                    paddingLeft: `${bodyMargins.left}mm`,
+                    paddingRight: `${bodyMargins.right}mm`,
+                    paddingBottom: `${bodyMargins.bottom}mm`,
                   }}
                 >
-                  <div
-                    className="contract-print-only-root"
-                    style={{ padding: `${bodyMargins.top}mm ${bodyMargins.right}mm ${bodyMargins.bottom}mm ${bodyMargins.left}mm`, boxSizing: "border-box" }}
-                    dangerouslySetInnerHTML={{ __html: contractPrintHtml }}
-                  />
+                  <div dangerouslySetInnerHTML={{ __html: contractPrintData.bodySection }} />
                 </div>
-              </div>
+              )}
               {documentPath ? (
                 <div className="max-w-[210mm] mx-auto mt-4">
                   {documentPath.toLowerCase().endsWith(".pdf") ? (
@@ -1647,7 +1574,7 @@ export default function ContractPage() {
 
               {signViewContract.details && (
                 <div ref={contractViewSummaryRef} className="contract-sign-summary mb-4">
-                  <SignedContractSummary contract={signViewContract} />
+                  <SignedContractSummary contract={{ ...signViewContract, details: signViewContract.details ?? null }} />
                 </div>
               )}
 
@@ -1709,7 +1636,7 @@ export default function ContractPage() {
                         const container = document.createElement("div");
                         offscreen.appendChild(container);
                         const r = root.createRoot(container);
-                        r.render(React.createElement(SignedContractSummary, { contract: emailModal as unknown as Contract }));
+                        r.render(React.createElement(SignedContractSummary, { contract: { ...emailModal, details: emailModal.details ?? null } }));
                         await new Promise((res) => setTimeout(res, 800));
                         const imgs = offscreen.querySelectorAll("img");
                         await Promise.all(Array.from(imgs).map((img) => img.complete ? Promise.resolve() : new Promise<void>((res) => { img.onload = () => res(); img.onerror = () => res(); setTimeout(res, 2000); })));

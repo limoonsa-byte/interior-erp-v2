@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "@/components/providers/AuthProvider";
+import { ConditionalAuthProvider } from "@/components/providers/ConditionalAuthProvider";
 import { TabActivation } from "@/components/TabActivation";
 
 export const dynamic = "force-dynamic";
@@ -45,10 +45,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
+        <ConditionalAuthProvider>
           <TabActivation />
           {children}
-        </AuthProvider>
+        </ConditionalAuthProvider>
       </body>
     </html>
   );

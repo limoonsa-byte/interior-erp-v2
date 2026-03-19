@@ -26,6 +26,20 @@ function rowToContract(row: Record<string, unknown>) {
       details = row.details as Record<string, unknown>;
     }
   }
+  let bodyMargins: { top: number; right: number; bottom: number; left: number } | undefined;
+  if (row.body_margins != null && String(row.body_margins).trim() !== "") {
+    try {
+      const parsed = JSON.parse(String(row.body_margins)) as { top?: number; right?: number; bottom?: number; left?: number };
+      bodyMargins = {
+        top: Number(parsed.top) || 15,
+        right: Number(parsed.right) || 15,
+        bottom: Number(parsed.bottom) || 15,
+        left: Number(parsed.left) || 15,
+      };
+    } catch {
+      bodyMargins = undefined;
+    }
+  }
   return {
     id: row.id,
     companyId: row.company_id,
@@ -37,6 +51,7 @@ function rowToContract(row: Record<string, unknown>) {
     signerEmail: row.signer_email != null ? String(row.signer_email) : undefined,
     documentPath: row.document_path != null ? String(row.document_path) : undefined,
     body: row.body != null ? String(row.body) : undefined,
+    bodyMargins: bodyMargins ?? undefined,
     details: details ?? undefined,
     status: String(row.status ?? "draft"),
     signToken: row.sign_token != null ? String(row.sign_token) : undefined,
@@ -55,7 +70,7 @@ export async function GET() {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
     const result = await sql`
-      SELECT id, company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, details, status, sign_token, signed_at, signer_name, signer_address, signer_resident_number, signature_data, created_at, updated_at
+      SELECT id, company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, body_margins, details, status, sign_token, signed_at, signer_name, signer_address, signer_resident_number, signature_data, created_at, updated_at
       FROM contracts
       WHERE company_id = ${company.id}
       ORDER BY id DESC

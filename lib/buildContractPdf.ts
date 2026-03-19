@@ -13,6 +13,8 @@ interface BuildContractPdfOptions {
   signatureDataUrl: string | null;
   companyId: number;
   documentPath: string | null;
+  /** DB 등에 저장된 본문 PDF base64 (파일 없을 때 사용) */
+  documentDataB64?: string | null;
 }
 
 function fmtAmt(n: number) {
@@ -51,12 +53,19 @@ async function loadStampImage(companyId: number): Promise<Buffer | null> {
   }
 }
 
-async function loadDocumentPdf(documentPath: string): Promise<Buffer | null> {
+async function loadDocumentPdf(documentPath: string, documentDataB64?: string | null): Promise<Buffer | null> {
   const baseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
   const fileName = documentPath.startsWith("contracts/") ? documentPath.slice("contracts/".length) : path.basename(documentPath);
   try {
     return await readFile(path.join(baseDir, fileName));
   } catch {
+    if (documentDataB64 && typeof documentDataB64 === "string" && documentDataB64.trim().length > 0) {
+      try {
+        return Buffer.from(documentDataB64, "base64");
+      } catch {
+        /* ignore */
+      }
+    }
     if (fileName === "master-template.pdf") {
       try {
         const { sql } = await import("@vercel/postgres");
@@ -157,6 +166,9 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
       const clientName = signerName || String(details.clientName ?? "");
       const contractorCompany = String(details.contractorCompanyName ?? "");
 
+      const stampBuf = await loadStampImage(companyId);
+      const parsedSig = signatureDataUrl ? parseSignatureDataUrl(signatureDataUrl) : null;
+
       let interimList: Array<{ percent: string; daysAfter: string }>;
       try {
         const rawP = details.interimPayments;
@@ -179,19 +191,33 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
       payRows.push(["잔 금", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))}원 (${balPct} %) 공사완료 시` : "-"]);
 
       // ────────────────────────────────────────
-      //  섹션 1: 계약자 (2행)
+      //  섹션 1: 계약자 (2행) — 상단 (인) 칸에 서명·도장 배치
       // ────────────────────────────────────────
+      const inCellW = 32;
       const s1 = y;
       cell(C1X, s1, C1W, RH * 2, "계\n약\n자", true, 9, "center");
       cell(C2X, s1, C2W, RH, "발주자(수급인)", true, 9, "center");
       doc.rect(C3X, s1, C3W, RH).stroke();
-      drawCellText(clientName, C3X, s1, C3W - 35, RH);
-      drawCellText("(인)", C3X + C3W - 35, s1, 30, RH, false, 9, "right");
+      drawCellText(clientName, C3X, s1, C3W - inCellW, RH);
+      drawCellText("(인)", C3X + C3W - inCellW, s1, inCellW, RH, false, 9, "right");
+      if (parsedSig) {
+        try {
+          const w = 26;
+          const h = Math.min(18, RH - 4);
+          doc.image(parsedSig.buf, C3X + C3W - inCellW + (inCellW - w) / 2, s1 + (RH - h) / 2, { width: w, height: h });
+        } catch { /* ignore */ }
+      }
 
       cell(C2X, s1 + RH, C2W, RH, "시공자(하수급인)", true, 9, "center");
       doc.rect(C3X, s1 + RH, C3W, RH).stroke();
-      drawCellText(contractorCompany, C3X, s1 + RH, C3W - 35, RH);
-      drawCellText("(인)", C3X + C3W - 35, s1 + RH, 30, RH, false, 9, "right");
+      drawCellText(contractorCompany, C3X, s1 + RH, C3W - inCellW, RH);
+      drawCellText("(인)", C3X + C3W - inCellW, s1 + RH, inCellW, RH, false, 9, "right");
+      if (stampBuf) {
+        try {
+          const sz = Math.min(22, RH - 4);
+          doc.image(stampBuf, C3X + C3W - inCellW + (inCellW - sz) / 2, s1 + RH + (RH - sz) / 2, { width: sz, height: sz });
+        } catch { /* ignore */ }
+      }
       y = s1 + RH * 2;
 
       // ────────────────────────────────────────
@@ -260,26 +286,33 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
       const sigDisplay = String(
         details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "",
       ).trim();
-      doc.text(`성명 : ${clientName}  (인)`, TL, y, { width: halfW });
-      doc.text(`성명 : ${sigDisplay}  (인)`, rX, y, { width: halfW });
+      // (인)을 항상 같은 위치에 두기 위해 성명과 (인)을 분리해서 그림. 인 칸 너비 42pt.
+      const inW = 42;
+      doc.text(`성명 : ${clientName}`, TL, y, { width: halfW - inW });
+      doc.text("(인)", TL + halfW - inW, y, { width: inW, align: "right" });
+      doc.text(`성명 : ${sigDisplay}`, rX, y, { width: halfW - inW });
+      doc.text("(인)", rX + halfW - inW, y, { width: inW, align: "right" });
       const sigY = y;
 
-      // 서명 이미지
-      if (signatureDataUrl) {
-        const parsed = parseSignatureDataUrl(signatureDataUrl);
-        if (parsed) {
-          try {
-            doc.image(parsed.buf, TL + 110, sigY - 20, { width: 70, height: 45 });
-            doc.image(parsed.buf, rX + 110, sigY - 20, { width: 70, height: 45 });
-          } catch { /* ignore bad image */ }
-        }
+      // 발주자(좌측) 서명: (인) 칸 안에 맞춤 (인 칸: TL + halfW - inW ~ TL + halfW)
+      if (parsedSig) {
+        try {
+          const sigW = 70;
+          const sigH = 45;
+          const sigX = TL + halfW - inW - sigW + 6;
+          const sigYPos = sigY - sigH;
+          doc.image(parsedSig.buf, sigX, sigYPos, { width: sigW, height: sigH });
+        } catch { /* ignore bad image */ }
       }
 
-      // 도장 이미지
-      const stampBuf = await loadStampImage(companyId);
+      // 시공자(우측) 도장: (인) 칸 안에 맞춤 (인 칸: rX + halfW - inW ~ rX + halfW)
       if (stampBuf) {
         try {
-          doc.image(stampBuf, rX + 190, sigY - 25, { width: 55, height: 55 });
+          const stampW = 55;
+          const stampH = 55;
+          const stampX = rX + halfW - inW - stampW + 4;
+          const stampY = sigY - stampH;
+          doc.image(stampBuf, stampX, stampY, { width: stampW, height: stampH });
         } catch { /* ignore */ }
       }
 
@@ -296,6 +329,10 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
 export async function buildContractPdfFromImage(
   imageDataUrl: string,
   documentPath: string | null,
+  docPageImages?: string[],
+  documentDataB64?: string | null,
+  /** 서버에서 이미 확보한 본문 PDF 버퍼(선택). 있으면 loadDocumentPdf 호출 생략 */
+  documentBuffer?: Buffer | null,
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
   const A4_W = 595.28;
@@ -306,7 +343,6 @@ export async function buildContractPdfFromImage(
     const imgBuf = Buffer.from(match[2], "base64");
     const isPng = match[1] === "png";
     const img = isPng ? await pdfDoc.embedPng(imgBuf) : await pdfDoc.embedJpg(imgBuf);
-    /* 캡처한 이미지 그대로 넣기 (비율 유지, 한 페이지에 맞춤) */
     const scale = Math.min(A4_W / img.width, A4_H / img.height);
     const w = img.width * scale;
     const h = img.height * scale;
@@ -316,18 +352,102 @@ export async function buildContractPdfFromImage(
     pdfDoc.addPage([A4_W, A4_H]);
   }
 
-  if (documentPath && documentPath.toLowerCase().endsWith(".pdf")) {
-    const docBuf = await loadDocumentPdf(documentPath);
-    if (docBuf) {
-      try {
-        const existingPdf = await PDFDocument.load(docBuf);
-        const pages = await pdfDoc.copyPages(existingPdf, existingPdf.getPageIndices());
-        for (const p of pages) pdfDoc.addPage(p);
-      } catch { /* ignore */ }
+  if (docPageImages && docPageImages.length > 0) {
+    for (const dataUrl of docPageImages) {
+      const m = dataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+      if (m) {
+        const buf = Buffer.from(m[2], "base64");
+        const isPng = m[1] === "png";
+        const img = isPng ? await pdfDoc.embedPng(buf) : await pdfDoc.embedJpg(buf);
+        const scale = Math.min(A4_W / img.width, A4_H / img.height);
+        const w = img.width * scale;
+        const h = img.height * scale;
+        const p = pdfDoc.addPage([A4_W, A4_H]);
+        p.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
+      }
     }
   }
 
+  let docBuf: Buffer | null = documentBuffer ?? null;
+  if (docBuf == null && ((documentPath && documentPath.toLowerCase().endsWith(".pdf")) || (documentDataB64 && typeof documentDataB64 === "string" && documentDataB64.trim().length > 0))) {
+    docBuf = await loadDocumentPdf(documentPath ?? "", documentDataB64);
+  }
+  if (docBuf && docBuf.length > 0) {
+    try {
+      const existingPdf = await PDFDocument.load(docBuf);
+      const pages = await pdfDoc.copyPages(existingPdf, existingPdf.getPageIndices());
+      for (const p of pages) pdfDoc.addPage(p);
+    } catch { /* ignore */ }
+  }
+
   return pdfDoc.save();
+}
+
+/* ------------------------------------------------------------------ */
+/*  서버 첫 페이지 PDF + (본문을 캡처한) 문서 페이지 이미지 병합  */
+/* ------------------------------------------------------------------ */
+export async function buildContractPdfFromFirstPagePdf(
+  firstPagePdfBytes: Uint8Array,
+  docPageImages: string[] | undefined,
+  documentPath: string | null,
+  documentDataB64?: string | null,
+): Promise<Uint8Array> {
+  const merged = await PDFDocument.create();
+
+  const firstDoc = await PDFDocument.load(firstPagePdfBytes);
+  const firstPages = await merged.copyPages(firstDoc, firstDoc.getPageIndices());
+  for (const p of firstPages) merged.addPage(p);
+
+  const A4_W = 595.28;
+  const A4_H = 841.89;
+
+  let existingPdfPageCount = 0;
+  let existingPdf: PDFDocument | null = null;
+
+  // document_path가 없어도(또는 .pdf가 아니어도) document_data가 있으면 반드시 합쳐야 한다.
+  if (documentPath && documentPath.toLowerCase().endsWith(".pdf")) {
+    const docBuf = await loadDocumentPdf(documentPath, documentDataB64);
+    if (docBuf) {
+      try {
+        existingPdf = await PDFDocument.load(docBuf);
+        existingPdfPageCount = existingPdf.getPageCount();
+      } catch {
+        /* ignore */
+      }
+    }
+  } else if (documentDataB64 && typeof documentDataB64 === "string" && documentDataB64.trim().length > 0) {
+    try {
+      const docBuf = Buffer.from(documentDataB64, "base64");
+      existingPdf = await PDFDocument.load(docBuf);
+      existingPdfPageCount = existingPdf.getPageCount();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 본문 이미지(docPageImages)가 있을 때만 추가하고,
+  // 기존 PDF에 이미 2페이지 이상이 들어있으면 중복 방지로 본문 이미지를 스킵합니다.
+  if (docPageImages && docPageImages.length > 0 && existingPdfPageCount <= 1) {
+    for (const dataUrl of docPageImages) {
+      const m = dataUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/);
+      if (!m) continue;
+      const buf = Buffer.from(m[2], "base64");
+      const isPng = m[1] === "png";
+      const img = isPng ? await merged.embedPng(buf) : await merged.embedJpg(buf);
+      const scale = Math.min(A4_W / img.width, A4_H / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const page = merged.addPage([A4_W, A4_H]);
+      page.drawImage(img, { x: 0, y: A4_H - h, width: w, height: h });
+    }
+  }
+
+  if (existingPdf) {
+    const pages = await merged.copyPages(existingPdf, existingPdf.getPageIndices());
+    for (const p of pages) merged.addPage(p);
+  }
+
+  return merged.save();
 }
 
 /* ------------------------------------------------------------------ */
@@ -336,11 +456,12 @@ export async function buildContractPdfFromImage(
 export async function buildContractPdf(opts: BuildContractPdfOptions): Promise<Uint8Array> {
   const contractPageBuf = await buildContractPage(opts);
 
-  if (!opts.documentPath || !opts.documentPath.toLowerCase().endsWith(".pdf")) {
+  const hasDocPath = opts.documentPath && opts.documentPath.toLowerCase().endsWith(".pdf");
+  if (!hasDocPath && !(opts.documentDataB64 && String(opts.documentDataB64).trim().length > 0)) {
     return new Uint8Array(contractPageBuf);
   }
 
-  const docBuf = await loadDocumentPdf(opts.documentPath);
+  const docBuf = await loadDocumentPdf(opts.documentPath ?? "", opts.documentDataB64);
   if (!docBuf) return new Uint8Array(contractPageBuf);
 
   try {

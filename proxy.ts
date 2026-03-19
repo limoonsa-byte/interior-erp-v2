@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = ["/login"];
+/** 로그인 없이 접근 가능한 경로 (서명 링크는 외부에 전달되므로 공개) */
+const publicPaths = ["/login", "/sign"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

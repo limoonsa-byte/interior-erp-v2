@@ -1735,7 +1735,7 @@ function EstimateForm({
               <button type="button" onClick={() => setPreviewOpen(false)} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
                 닫기
               </button>
-              <span className="text-xs text-gray-500">인쇄 시 색상이 나오게 하려면 인쇄 대화상자에서 &quot;배경 그래픽&quot;을 켜 주세요. &quot;머리글 및 바닥글&quot; 해제 시 날짜·주소가 나오지 않습니다.</span>
+              <span className="text-xs text-gray-500">인쇄 시 색상: &quot;배경 그래픽&quot; 켜기. 여백이 두 번 들어가면 <strong>설정 더보기 → 여백 → 없음</strong>으로 선택하세요. (미리보기 여백만 적용됩니다.)</span>
             </div>
           </div>
           <div className="estimate-preview-print-wrap flex-1 min-h-0 overflow-auto p-4 flex justify-center" id="estimate-preview-print" ref={previewPrintRef}>

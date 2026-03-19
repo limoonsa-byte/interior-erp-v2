@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { buildContractPdf, buildContractPdfFromImage } from "@/lib/buildContractPdf";
+import { buildContractPdfFromImage, buildContractPdf } from "@/lib/buildContractPdf";
 import { getTransporter } from "@/lib/smtp";
 import { cookies } from "next/headers";
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
     const companyId = company.id;
     const result = await sql`
-      SELECT id, title, status, company_id, document_path, details, signer_name, signer_address, signer_resident_number, signature_data, sign_token
+      SELECT id, title, status, company_id, document_path, document_data, details, signer_name, signer_address, signer_resident_number, signature_data, sign_token
       FROM contracts WHERE id = ${contractId} AND company_id = ${companyId}
     `;
     if (result.rows.length === 0) return NextResponse.json({ error: "계약서를 찾을 수 없습니다." }, { status: 404 });
@@ -37,29 +37,36 @@ export async function POST(request: Request) {
     if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail 앱 비밀번호로 연결하거나 OAuth로 연결해 주세요." }, { status: 500 });
 
     const documentPath = c.document_path ? String(c.document_path) : null;
-    let pdfBytes: Uint8Array;
+    let documentDataB64 =
+      c.document_data != null && typeof c.document_data === "string" && String(c.document_data).trim().length > 0
+        ? String(c.document_data)
+        : null;
 
+    // DB에 본문이 없고 document_path만 있으면 문서 API로 본문 PDF 조회 (서버리스에서 파일 없을 때)
+    if (!documentDataB64 && documentPath && contractId) {
+      try {
+        const base = (await import("@/lib/appUrl")).getAppBaseUrl();
+        const docRes = await fetch(`${base}/api/contracts/document/${contractId}`, {
+          headers: { cookie: request.headers.get("cookie") || "" },
+        });
+        if (docRes.ok) {
+          const buf = await docRes.arrayBuffer();
+          documentDataB64 = Buffer.from(buf).toString("base64");
+        }
+      } catch (_) { /* ignore */ }
+    }
+
+    // 1페이지는 계약서 작성 인쇄 미리보기와 동일하게 클라이언트 캡처(summaryImage)만 사용. 서버 pdfkit으로 크기/위치 바꾸지 않음.
+    let pdfBytes: Uint8Array;
     if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.length > 0) {
       pdfBytes = new Uint8Array(Buffer.from(pdfBase64, "base64"));
     } else if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
-      pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath);
+      pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath, undefined, documentDataB64);
     } else {
-      let contractDetails: Record<string, string> | null = null;
-      try {
-        contractDetails = c.details != null
-          ? (typeof c.details === "string" ? JSON.parse(c.details as string) : c.details as Record<string, string>)
-          : null;
-      } catch { contractDetails = null; }
-
-      pdfBytes = await buildContractPdf({
-        details: contractDetails,
-        signerName: String(c.signer_name ?? ""),
-        signerAddress: String(c.signer_address ?? ""),
-        signerResidentNumber: String(c.signer_resident_number ?? ""),
-        signatureDataUrl: c.signature_data ? String(c.signature_data) : null,
-        companyId,
-        documentPath,
-      });
+      return NextResponse.json(
+        { error: "계약서 작성 화면에서 해당 계약서를 열고 [이메일 보내기]로 보내 주세요. (1페이지는 인쇄 미리보기와 동일하게만 사용됩니다.)" },
+        { status: 400 }
+      );
     }
 
     const title = String(c.title ?? "계약서");

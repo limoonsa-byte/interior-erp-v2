@@ -68,10 +68,20 @@ body {
   #contract-print-only img {
     display: block !important;
   }
-  /* 2·3·4·5… 페이지 A4 기준 상하좌우 여백 15mm (모든 페이지에 적용) */
+  /* 기본 인쇄: 계약서는 handlePrint에서 동적으로 @page margin 주입 */
   @page {
     size: A4;
-    margin: 15mm;
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
+    @bottom-right { content: none; }
+  }
+  /* 견적서만: 미리보기=인쇄(WYSIWYG). 브라우저 여백 없이 본문 padding만 적용 */
+  @page estimate-print {
+    size: A4;
+    margin: 0;
     @top-left { content: none; }
     @top-center { content: none; }
     @top-right { content: none; }
@@ -329,7 +339,7 @@ body {
   table-layout: fixed;
   width: 100%;
 }
-/* PDF 각 페이지마다 상하좌우 15mm 여백 */
+/* 1페이지(요약)만 15mm, 2페이지부터는 불러온 본문/PDF 여백만 사용(중복 여백 제거) */
 .contract-sign-page-a4 {
   flex-shrink: 0;
   width: 210mm;
@@ -339,24 +349,26 @@ body {
 .contract-sign-doc-page {
   width: 210mm;
   min-height: 297mm;
-  padding: 15mm;
+  padding: 0;
   background: #fff;
   box-sizing: border-box;
 }
 .contract-sign-doc-page img {
   max-width: 100%;
+  width: 100%;
   height: auto;
   display: block;
+  vertical-align: top;
 }
 
-/* 서명 화면: 본문을 A4 한 장씩 따로 표시 (구분선 없이 페이지별 박스) */
+/* 서명 화면: 본문 2페이지 이후 — 여백 없음(본문에 이미 여백 있음) */
 .contract-sign-body-page {
   width: 210mm;
   min-width: 210mm;
   max-width: 100%;
   height: 297mm;
   min-height: 297mm;
-  padding: 15mm;
+  padding: 0;
   box-sizing: border-box;
   background: #fff;
   font-size: 11px;
@@ -530,7 +542,7 @@ body {
   margin-bottom: 0 !important;
 }
 
-/* 계약서 작성 인쇄 미리보기 모달: 실제 인쇄·서명 화면과 동일한 페이지 간격·여백·본문 스타일 */
+/* 계약서 작성 인쇄 미리보기: 관리(계약 본문) A4 기준 — 여백은 바깥 wrapper bodyMargins만 사용 */
 .contract-preview-print-pages {
   padding: 15mm;
   box-sizing: border-box;
@@ -568,13 +580,13 @@ body {
   font-size: 12px;
   table-layout: fixed;
 }
+/* 본문(2페이지~): 관리 에디터와 동일 — 기본 14px/1.75, 인라인 글자 크기 있으면 그대로 적용 */
 .contract-preview-print-pages .contract-print-body,
 .contract-preview-print-pages .contract-print-body-from-page2 {
-  font-size: 11px;
-  line-height: 1.6;
-  padding-top: 15mm;
-  padding-bottom: 15mm;
-  margin-top: 1rem;
+  font-size: 14px !important;
+  line-height: 1.75 !important;
+  padding: 0;
+  margin: 0;
   box-sizing: border-box;
   background-image: repeating-linear-gradient(
     to bottom,
@@ -624,8 +636,8 @@ body {
   z-index: -1;
 }
 #contract-body-pdf-capture-root .contract-print-body-from-page2 {
-  font-size: 11px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.75;
   padding: 15mm;
   box-sizing: border-box;
 }
@@ -914,6 +926,15 @@ body {
   body.printing > *:not(#estimate-print-only) {
     display: none !important;
   }
+  body.printing #estimate-print-only {
+    page: estimate-print;
+  }
+  /* 견적서 인쇄 시 문서 여백 제거 → 미리보기 본문 padding만 적용 */
+  html:has(body.printing),
+  body.printing {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   /* 계약서 인쇄/PDF: body 직계로 복사한 #contract-print-pages만 보이게 → 1페이지+2페이지 이후 모두 출력 */
   body.contract-print-pages-mode {
     background: white !important;
@@ -1086,8 +1107,8 @@ body {
   /* 2페이지 이후 본문: 상하좌우 여백은 @page margin 15mm로 적용됨 */
   #contract-print-only .contract-print-body,
   #contract-print-only .contract-print-body-from-page2 {
-    font-size: 11px;
-    line-height: 1.6;
+    font-size: 14px;
+    line-height: 1.75;
     padding: 0;
   }
   #contract-print-only .contract-print-body-from-page2 {
@@ -1225,11 +1246,9 @@ body {
     word-break: break-word !important;
     overflow-wrap: break-word !important;
   }
-  /* 계약서 HTML 본문(PDF 없을 때): 2페이지부터 별도 영역 */
+  /* 계약서 HTML 본문(PDF 없을 때): 2페이지부터 별도 영역. 글자·줄간격은 에디터 HTML 유지 */
   #contract-print-only .contract-print-body-section {
     page-break-before: always !important;
-    font-size: 11px !important;
-    line-height: 1.6 !important;
     box-sizing: border-box !important;
   }
   #contract-print-only .contract-print-body-section .contract-print-body-from-page2 {

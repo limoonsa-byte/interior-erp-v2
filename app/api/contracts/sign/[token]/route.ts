@@ -1,46 +1,9 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { buildContractPdf, buildContractPdfFromImage } from "@/lib/buildContractPdf";
+import { PDFDocument } from "pdf-lib";
+import { getAppBaseUrl } from "@/lib/appUrl";
+import { buildContractPdfFromImage } from "@/lib/buildContractPdf";
 import { getTransporter } from "@/lib/smtp";
-
-async function sendSignedContractEmail(
-  companyId: number,
-  to: string,
-  title: string,
-  _contractId: number,
-  _token: string,
-  pdfBytes: Uint8Array
-) {
-  const result = await getTransporter(companyId);
-  if (!result) {
-    console.error("SMTP 설정이 없어 이메일을 보낼 수 없습니다.");
-    return;
-  }
-  const { transporter, from } = result;
-  const subject = title ? `[계약서 서명 완료] ${title}` : "계약서 서명 완료";
-  const safeFileName = (title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
-  const text = `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`;
-  const html = `<!DOCTYPE html><html><body style="font-family:sans-serif;">` +
-    `<h2 style="color:#1a73e8;">계약서 서명이 완료되었습니다</h2>` +
-    `<p><strong>계약서 제목:</strong> ${title}</p>` +
-    `<p>첨부된 PDF 파일을 확인해 주세요.</p>` +
-    `<p style="color:#666;font-size:12px;">본 메일은 자동 발송된 메일입니다.</p>` +
-    `</body></html>`;
-  await transporter.sendMail({
-    from,
-    to,
-    subject,
-    text,
-    html,
-    attachments: [
-      {
-        filename: `${safeFileName}.pdf`,
-        content: Buffer.from(pdfBytes),
-        contentType: "application/pdf",
-      },
-    ],
-  });
-}
 
 function rowToSignInfo(row: Record<string, unknown>) {
   let bodyMargins: { top: number; right: number; bottom: number; left: number } | undefined;
@@ -84,7 +47,7 @@ export async function GET(
     const c = result.rows[0];
     const info = rowToSignInfo(c);
     if (c.status === "signed") return NextResponse.json({ ...info, alreadySigned: true }, { status: 200 });
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+    const baseUrl = getAppBaseUrl();
     const documentUrl = c.document_path != null && String(c.document_path).trim() !== ""
       ? `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`
       : undefined;
@@ -103,23 +66,17 @@ export async function POST(
     const { token } = await params;
     if (!token) return NextResponse.json({ error: "토큰이 없습니다." }, { status: 400 });
     const body = await request.json();
-    const { signerName, signerAddress, signerResidentNumber, signatureData, signerEmail, summaryImage } = body;
+    const { signerName, signerAddress, signerResidentNumber, signatureData, signerEmail, pdfBase64, summaryImage, docPageImages } = body;
     if (!signerName || typeof signerName !== "string" || !signerName.trim()) return NextResponse.json({ error: "서명자 이름을 입력해 주세요." }, { status: 400 });
     const result = await sql`
-      SELECT id, title, status, company_id, document_path, details FROM contracts WHERE sign_token = ${token}
+      SELECT id, status, company_id, title, document_path, document_data
+      FROM contracts
+      WHERE sign_token = ${token}
     `;
     if (result.rows.length === 0) return NextResponse.json({ error: "유효하지 않거나 만료된 링크입니다." }, { status: 404 });
     if (result.rows[0].status === "signed") return NextResponse.json({ error: "이미 서명이 완료된 계약입니다." }, { status: 400 });
     const contractId = result.rows[0].id;
-    const contractTitle = String(result.rows[0].title ?? "");
     const companyId = Number(result.rows[0].company_id);
-    const documentPath = result.rows[0].document_path != null ? String(result.rows[0].document_path) : null;
-    let contractDetails: Record<string, string> | null = null;
-    try {
-      contractDetails = result.rows[0].details != null
-        ? (typeof result.rows[0].details === "string" ? JSON.parse(result.rows[0].details as string) : result.rows[0].details as Record<string, string>)
-        : null;
-    } catch { contractDetails = null; }
     const sigData = signatureData != null ? String(signatureData) : null;
     const addr = signerAddress != null ? String(signerAddress).trim() : null;
     const rrn = signerResidentNumber != null ? String(signerResidentNumber).trim() : null;
@@ -132,46 +89,82 @@ export async function POST(
     if (email) {
       await sql`UPDATE contracts SET signer_email = ${email}, updated_at = NOW() WHERE id = ${contractId}`;
     }
+
+    // 테스트 페이지와 동일: 클라이언트가 보낸 1페이지(summaryImage/pdfBase64)+본문만 사용. 서버 pdfkit 안 씀.
     let emailSent = false;
-    let emailError = "";
-    try {
-      const companyRow = await sql`SELECT company_email FROM companies WHERE id = ${companyId}`;
-      const companyEmail = companyRow.rows.length > 0 && companyRow.rows[0].company_email
-        ? String(companyRow.rows[0].company_email).trim()
-        : null;
-      if (email || companyEmail) {
+    let emailError: string | undefined;
+    if (email && (pdfBase64 || summaryImage)) {
+      try {
+        const documentPath = result.rows[0].document_path != null ? String(result.rows[0].document_path) : null;
+        let documentDataB64 =
+          result.rows[0].document_data != null && typeof result.rows[0].document_data === "string" && String(result.rows[0].document_data).trim().length > 0
+            ? String(result.rows[0].document_data)
+            : null;
+        if (!documentDataB64 && documentPath && contractId) {
+          try {
+            const base = getAppBaseUrl();
+            const docRes = await fetch(`${base}/api/contracts/document/${contractId}?token=${encodeURIComponent(token)}`);
+            if (docRes.ok) documentDataB64 = Buffer.from(await docRes.arrayBuffer()).toString("base64");
+          } catch (_) { /* ignore */ }
+        }
+        const bodyImages = Array.isArray(docPageImages)
+          ? docPageImages.filter((u: unknown) => typeof u === "string" && (u as string).startsWith("data:image/"))
+          : [];
         let pdfBytes: Uint8Array;
-        if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
-          pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath);
+        if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.length > 0) {
+          pdfBytes = new Uint8Array(Buffer.from(pdfBase64, "base64"));
+          // 클라이언트가 1페이지만 보냈을 수 있음 → 서버에서 본문 붙임 (3/17 본문 잘 오던 것과 동일하게)
+          if (documentDataB64 && documentDataB64.trim().length > 0) {
+            try {
+              const clientPdf = await PDFDocument.load(pdfBytes);
+              if (clientPdf.getPageCount() === 1) {
+                const docBuf = Buffer.from(documentDataB64, "base64");
+                const bodyPdf = await PDFDocument.load(docBuf);
+                const merged = await PDFDocument.create();
+                const [firstPage] = await merged.copyPages(clientPdf, [0]);
+                merged.addPage(firstPage);
+                const bodyPages = await merged.copyPages(bodyPdf, bodyPdf.getPageIndices());
+                for (const p of bodyPages) merged.addPage(p);
+                pdfBytes = new Uint8Array(await merged.save());
+              }
+            } catch (_) { /* 본문 병합 실패 시 원본 pdfBytes 유지 */ }
+          }
+        } else if (summaryImage && typeof summaryImage === "string" && summaryImage.startsWith("data:image/")) {
+          pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath, bodyImages.length > 0 ? bodyImages : undefined, documentDataB64);
         } else {
-          pdfBytes = await buildContractPdf({
-            details: contractDetails,
-            signerName: signerName.trim(),
-            signerAddress: addr || "",
-            signerResidentNumber: rrn || "",
-            signatureDataUrl: sigData,
-            companyId,
-            documentPath,
+          throw new Error("1페이지 이미지가 없습니다.");
+        }
+        const smtp = await getTransporter(companyId);
+        if (smtp) {
+          const title = String(result.rows[0].title ?? "계약서");
+          const safeFileName = title.replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
+          await smtp.transporter.sendMail({
+            from: smtp.from,
+            to: email,
+            subject: `[계약서 서명 완료] ${title}`,
+            text: `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`,
+            html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><h2 style="color:#1a73e8;">계약서 서명이 완료되었습니다</h2><p><strong>계약서 제목:</strong> ${title}</p><p>첨부된 PDF 파일을 확인해 주세요.</p><p style="color:#666;font-size:12px;">본 메일은 자동 발송된 메일입니다.</p></body></html>`,
+            attachments: [{ filename: `${safeFileName}.pdf`, content: Buffer.from(pdfBytes), contentType: "application/pdf" }],
           });
-        }
-        if (email) {
-          await sendSignedContractEmail(companyId, email, contractTitle, contractId, token, pdfBytes);
           emailSent = true;
+        } else {
+          emailError = "SMTP 설정이 없어 이메일을 보낼 수 없습니다.";
         }
-        if (companyEmail && companyEmail !== email) {
-          await sendSignedContractEmail(companyId, companyEmail, contractTitle, contractId, token, pdfBytes);
-        }
+      } catch (e) {
+        emailError = e instanceof Error ? e.message : String(e);
+        console.error("서명 완료 이메일 발송 실패:", emailError, e);
       }
-    } catch (emailErr) {
-      emailError = emailErr instanceof Error ? emailErr.message : String(emailErr);
-      console.error("서명 완료 이메일 발송 실패:", emailError, emailErr);
     }
-    return NextResponse.json({
+
+    const res = NextResponse.json({
       message: "서명이 완료되었습니다.",
       emailSent,
-      emailError: emailError || undefined,
+      emailError,
       emailTo: email || undefined,
+      _build: "mail-only-202503",
     }, { status: 200 });
+    res.headers.set("X-Contract-Sign-Build", "mail-only-202503");
+    return res;
   } catch (error) {
     console.error("contracts sign POST error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

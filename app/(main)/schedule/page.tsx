@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getHolidayName } from "@/lib/koreanHolidays";
+import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
+import { chunkDaysForPrint, padChunkToWeekRows } from "@/lib/schedule-print-chunk";
 
 /** 완료 상태값 (체크박스로 보기/숨기기) */
 const COMPLETED_STATUS = "완료및정산";
@@ -124,6 +126,75 @@ function getSiteBarsOnDay(day: string, scheduleList: ScheduleItem[]): SiteBar[] 
   }));
 }
 
+function getCalendarDaysForMonth(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const last = new Date(y, m, 0);
+  const startWeekday = first.getDay();
+  const totalDays = last.getDate();
+  const prevY = m === 1 ? y - 1 : y;
+  const prevM = m === 1 ? 12 : m - 1;
+  const prevLast = new Date(y, m - 1, 0).getDate();
+  const days: { date: string; isCurrentMonth: boolean; dayNum: number }[] = [];
+  for (let i = 0; i < startWeekday; i++) {
+    const d = prevLast - startWeekday + i + 1;
+    days.push({ date: `${prevY}-${String(prevM).padStart(2, "0")}-${String(d).padStart(2, "0")}`, isCurrentMonth: false, dayNum: d });
+  }
+  for (let d = 1; d <= totalDays; d++) {
+    days.push({ date: `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`, isCurrentMonth: true, dayNum: d });
+  }
+  const nextY = m === 12 ? y + 1 : y;
+  const nextM = m === 12 ? 1 : m + 1;
+  let nextDay = 1;
+  while (days.length < 42) {
+    days.push({ date: `${nextY}-${String(nextM).padStart(2, "0")}-${String(nextDay).padStart(2, "0")}`, isCurrentMonth: false, dayNum: nextDay });
+    nextDay += 1;
+  }
+  return days.slice(0, 42);
+}
+
+/** 미리보기/인쇄: 일정이 없는 앞·뒤 주는 제거 */
+function trimPreviewCalendarWeeks(
+  days: { date: string; isCurrentMonth: boolean; dayNum: number }[],
+  hasSchedule: (date: string) => boolean
+) {
+  const cols = 7;
+  const n = days.length;
+  const rows = Math.ceil(n / cols);
+  let firstRow = 0;
+  let lastRow = rows - 1;
+  for (let r = 0; r < rows; r++) {
+    let found = false;
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (i < n && hasSchedule(days[i].date)) {
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      firstRow = r;
+      break;
+    }
+  }
+  for (let r = rows - 1; r >= firstRow; r--) {
+    let found = false;
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      if (i < n && hasSchedule(days[i].date)) {
+        found = true;
+        break;
+      }
+    }
+    if (found) {
+      lastRow = r;
+      break;
+    }
+  }
+  const out = days.slice(firstRow * cols, (lastRow + 1) * cols);
+  return out.length >= cols ? out : days;
+}
+
 export default function SchedulePage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -229,6 +300,40 @@ export default function SchedulePage() {
     [scheduleList]
   );
 
+  const [showPreview, setShowPreview] = useState(false);
+
+  const previewMonths = useMemo(() => {
+    const monthSet = new Set<string>();
+    scheduleList.forEach(({ consultation }) => {
+      const sp = consultation.schedulePhases;
+      if (!Array.isArray(sp)) return;
+      sp.forEach((p) => {
+        const start = toDateValue(p.start);
+        const end = toDateValue(p.end) || start;
+        if (!start) return;
+        let [sy, sm] = start.slice(0, 7).split("-").map(Number);
+        const [ey, em] = end.slice(0, 7).split("-").map(Number);
+        while (sy < ey || (sy === ey && sm <= em)) {
+          monthSet.add(`${sy}-${String(sm).padStart(2, "0")}`);
+          sm++;
+          if (sm > 12) { sm = 1; sy++; }
+        }
+      });
+    });
+    const candidates = [...monthSet].sort();
+    const withSchedule = candidates.filter((month) => {
+      const days = getCalendarDaysForMonth(month);
+      return days.some((d) => getSiteBarsOnDay(d.date, scheduleList).length > 0);
+    });
+    if (withSchedule.length > 0) return withSchedule;
+    if (candidates.length > 0) return candidates;
+    return [currentMonth];
+  }, [scheduleList, currentMonth]);
+
+  const handlePrint = () => {
+    printScheduleCalendarContent(document.getElementById("schedule-print-content"));
+  };
+
   const prevMonth = () => {
     const [y, m] = currentMonth.split("-").map(Number);
     if (m === 1) setCurrentMonth(`${y - 1}-12`);
@@ -252,12 +357,17 @@ export default function SchedulePage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <h1 className="text-lg sm:text-xl font-bold text-gray-900 mb-4">일정</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg sm:text-xl font-bold text-gray-900">일정</h1>
+        <button type="button" onClick={() => setShowPreview(true)} className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+          인쇄 / 미리보기
+        </button>
+      </div>
 
-      <p className="text-sm text-gray-500 mb-3">
+      <p className="text-sm text-gray-500 mb-3 no-print">
         저장된 공사 일정 목록입니다. <strong>견적서를 작성한 상담</strong>만 표시됩니다. 제목을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
       </p>
-      <label className="mb-4 flex cursor-pointer items-center gap-2">
+      <label className="mb-4 flex cursor-pointer items-center gap-2 no-print">
         <input
           type="checkbox"
           checked={showCompleted}
@@ -275,7 +385,7 @@ export default function SchedulePage() {
               <th className="p-2 sm:p-3">입주일</th>
               <th className="p-2 sm:p-3">고객명</th>
               <th className="p-2 sm:p-3">연락처</th>
-              <th className="w-20 sm:w-24 p-2 sm:p-3" />
+              <th className="w-20 sm:w-24 p-2 sm:p-3 no-print" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -311,7 +421,7 @@ export default function SchedulePage() {
                   <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.moveInAt)}</td>
                   <td className="p-2 sm:p-3">{item.consultation.customerName || "-"}</td>
                   <td className="p-2 sm:p-3">{item.consultation.contact || "-"}</td>
-                  <td className="whitespace-nowrap p-2 sm:p-3 align-middle">
+                  <td className="whitespace-nowrap p-2 sm:p-3 align-middle no-print">
                     <Link
                       href={`/schedule/${item.consultation.id}`}
                       className="rounded px-2 py-1 text-blue-600 hover:underline"
@@ -328,7 +438,7 @@ export default function SchedulePage() {
       </div>
 
       {totalListPages > 1 && (
-        <div className="mb-8 flex items-center justify-center gap-2">
+        <div className="mb-8 flex items-center justify-center gap-2 no-print">
           <button
             type="button"
             onClick={() => setListPage((p) => Math.max(1, p - 1))}
@@ -353,7 +463,7 @@ export default function SchedulePage() {
 
       {/* 전체일정 캘린더 */}
       <h2 className="text-base font-semibold text-gray-900 mb-2">전체일정</h2>
-      <p className="text-sm text-gray-600 mb-4">
+      <p className="text-sm text-gray-600 mb-4 no-print">
         <strong>공사 일정을 넣은 날만</strong> 캘린더에 표시됩니다. 제목을 클릭하면 해당 현장의 공사 일정을 짤 수 있습니다.
       </p>
 
@@ -454,7 +564,7 @@ export default function SchedulePage() {
       </div>
 
       {noDateItems.length > 0 && (
-        <div className="mt-6">
+        <div className="mt-6 no-print">
           <h2 className="mb-2 text-sm font-semibold text-gray-700">일정 미정 (제목 클릭하여 공사 일정 짜기)</h2>
           <div className="flex flex-wrap gap-2">
             {noDateItems.map((item) => (
@@ -472,7 +582,7 @@ export default function SchedulePage() {
         </div>
       )}
 
-      <p className="mt-4 text-sm text-gray-500">
+      <p className="mt-4 text-sm text-gray-500 no-print">
         <Link href="/consulting" className="text-blue-600 hover:underline">
           상담 및 미팅관리
         </Link>
@@ -482,6 +592,104 @@ export default function SchedulePage() {
         </Link>
         에서 해당 상담으로 견적을 저장하면 일정 목록에 표시됩니다.
       </p>
+
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8" onClick={() => setShowPreview(false)}>
+          <div className="w-full max-w-5xl my-4 rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-lg border-b border-gray-200 bg-white px-6 py-4 no-print">
+              <h2 className="text-lg font-semibold text-gray-900">전체 일정 미리보기</h2>
+              <div className="flex gap-2">
+                <button type="button" onClick={handlePrint} className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">인쇄 / PDF 저장</button>
+                <button type="button" onClick={() => setShowPreview(false)} className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">닫기</button>
+              </div>
+            </div>
+            <div id="schedule-print-content" className="p-6">
+              {previewMonths.map((month, mIdx) => {
+                const mDays = trimPreviewCalendarWeeks(
+                  getCalendarDaysForMonth(month),
+                  (d) => siteBarsByDay(d).length > 0
+                );
+                const pages = chunkDaysForPrint(mDays);
+                return (
+                  <React.Fragment key={month}>
+                    {pages.map((chunk, pageIdx) => {
+                      const padded = padChunkToWeekRows(chunk);
+                      const totalP = pages.length;
+                      const isFirstOverall = mIdx === 0 && pageIdx === 0;
+                      return (
+                        <div
+                          key={`${month}-${pageIdx}`}
+                          className="mb-6"
+                          style={
+                            isFirstOverall
+                              ? undefined
+                              : { pageBreakBefore: "always", breakBefore: "page" }
+                          }
+                        >
+                          <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
+                            전체 일정 &mdash; {month.slice(0, 4)}년 {Number(month.slice(5, 7))}월
+                            {totalP > 1 && (
+                              <span className="mt-0.5 block text-sm font-normal text-gray-600">
+                                {pageIdx + 1} / {totalP}쪽
+                              </span>
+                            )}
+                          </h2>
+                          <div className="rounded border border-gray-300 overflow-hidden">
+                            <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-semibold">
+                              {WEEKDAYS.map((wd, i) => (
+                                <div key={wd} className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}>{wd}</div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-7">
+                              {padded.map((cell, ci) => {
+                                if (cell == null) {
+                                  return (
+                                    <div
+                                      key={`pad-${month}-${pageIdx}-${ci}`}
+                                      className="min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
+                                      aria-hidden
+                                    />
+                                  );
+                                }
+                                const { date, isCurrentMonth, dayNum } = cell;
+                                const siteBars = siteBarsByDay(date);
+                                const dow = new Date(date + "T12:00:00").getDay();
+                                const holiday = getHolidayName(date);
+                                const isOff = dow === 0 || dow === 6 || !!holiday;
+                                const cellBg = !isCurrentMonth ? "bg-gray-50" : isOff ? "bg-red-50/40" : "";
+                                const dayClr = !isCurrentMonth ? "text-gray-300" : (dow === 0 || !!holiday) ? "text-red-500 font-semibold" : dow === 6 ? "text-blue-500 font-semibold" : "text-gray-800";
+                                return (
+                                  <div key={date} className={`min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}>
+                                    <div className={`text-right text-xs ${dayClr}`}>
+                                      {dayNum}
+                                      {holiday && isCurrentMonth && <span className="ml-1 text-[9px] text-red-400 font-normal">{holiday}</span>}
+                                    </div>
+                                    <div className="mt-1 space-y-0.5">
+                                      {siteBars.map((bar) => {
+                                        const r = parseInt(bar.color.slice(1, 3), 16), g = parseInt(bar.color.slice(3, 5), 16), b = parseInt(bar.color.slice(5, 7), 16);
+                                        const tc = (r * 299 + g * 587 + b * 114) / 1000 > 180 ? "text-gray-900" : "text-white";
+                                        return (
+                                          <div key={bar.consultationId} className={`rounded px-1.5 py-0.5 text-[11px] font-medium truncate ${tc}`} style={{ backgroundColor: bar.color }} title={`${bar.estimateTitle} · ${bar.phaseNames.join(" · ")}`}>
+                                            {bar.phaseNames.join(" · ")}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
