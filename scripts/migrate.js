@@ -101,6 +101,8 @@ async function migrate() {
     console.log("[migrate] construction_start_at, move_in_at OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_phases TEXT`;
     console.log("[migrate] schedule_phases OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_list_color TEXT`;
+    console.log("[migrate] schedule_list_color OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`
@@ -402,6 +404,71 @@ async function migrate() {
       )
     `;
     console.log("[migrate] oauth_pending_state OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS shop_products (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        sku TEXT NOT NULL,
+        name TEXT NOT NULL,
+        category TEXT,
+        brand TEXT,
+        spec TEXT,
+        unit TEXT,
+        price NUMERIC(14,2) NOT NULL DEFAULT 0,
+        sale_price NUMERIC(14,2),
+        stock_status TEXT,
+        image_url TEXT,
+        product_url TEXT,
+        shop_line TEXT,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id, sku)
+      )
+    `;
+    await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS shop_line TEXT`;
+    await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS image_data TEXT`;
+    await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS image_mime TEXT`;
+    await sql`CREATE INDEX IF NOT EXISTS shop_products_company_active_idx ON shop_products(company_id, is_active, name)`;
+    await sql`CREATE INDEX IF NOT EXISTS shop_products_company_line_idx ON shop_products(company_id, shop_line)`;
+    console.log("[migrate] shop_products OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS shop_secret_tokens (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        note TEXT,
+        expires_at TIMESTAMPTZ NOT NULL,
+        revoked_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS shop_secret_tokens_company_idx ON shop_secret_tokens(company_id, expires_at)`;
+    console.log("[migrate] shop_secret_tokens OK");
+    await sql`
+      CREATE TABLE IF NOT EXISTS shop_taxonomy_lines (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id, name)
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS shop_taxonomy_lines_company_idx ON shop_taxonomy_lines(company_id, sort_order, name)`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS shop_taxonomy_subcategories (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        shop_line TEXT NOT NULL,
+        name TEXT NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(company_id, shop_line, name)
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS shop_taxonomy_sub_company_line_idx ON shop_taxonomy_subcategories(company_id, shop_line, sort_order)`;
+    console.log("[migrate] shop_taxonomy OK");
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);

@@ -71,6 +71,23 @@ function formatDateYMD(dateStr: string | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
+function parseSettlementSummariesResponse(sumData: unknown): Record<string, number> {
+  const summaries =
+    sumData != null &&
+    typeof sumData === "object" &&
+    "summaries" in sumData &&
+    typeof (sumData as { summaries?: unknown }).summaries === "object" &&
+    (sumData as { summaries: Record<string, unknown> }).summaries !== null
+      ? (sumData as { summaries: Record<string, unknown> }).summaries
+      : {};
+  const next: Record<string, number> = {};
+  Object.keys(summaries).forEach((k) => {
+    const n = Number((summaries as Record<string, unknown>)[k]);
+    if (!Number.isNaN(n)) next[k] = n;
+  });
+  return next;
+}
+
 function itemAmount(item: EstimateItem): number {
   const q = Number(item.qty) || 0;
   const mat = Number(item.materialUnitPrice ?? item.unitPrice ?? 0) || 0;
@@ -116,6 +133,10 @@ export default function SettlementPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** 견적 ID 문자열 → 고객결제상환 합계(원). 정산 행이 없으면 키 없음. */
+  const [customerPaymentTotalsByEstimate, setCustomerPaymentTotalsByEstimate] = useState<Record<string, number>>(
+    {}
+  );
 
   const phasesFromEstimate = useMemo(() => {
     if (!estimate) return [];
@@ -147,8 +168,11 @@ export default function SettlementPage() {
     Promise.all([
       fetch("/api/estimates", { credentials: "include" }).then((r) => r.json()),
       fetch("/api/consultations", { credentials: "include" }).then((r) => r.json()),
+      fetch("/api/company/settlement-summaries", { credentials: "include" }).then((r) =>
+        r.ok ? r.json().catch(() => ({})) : {}
+      ),
     ])
-      .then(([estData, consData]) => {
+      .then(([estData, consData, sumData]) => {
         if (Array.isArray(estData)) {
           setEstimates(estData as Estimate[]);
           const list = estData as Estimate[];
@@ -162,6 +186,7 @@ export default function SettlementPage() {
         }
         if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
         else setConsultations([]);
+        setCustomerPaymentTotalsByEstimate(parseSettlementSummariesResponse(sumData));
       })
       .catch(() => setError("견적 목록을 불러올 수 없습니다."))
       .finally(() => setEstimateListLoading(false));
@@ -392,6 +417,10 @@ export default function SettlementPage() {
         const data = await r.json().catch(() => ({}));
         if (r.ok) {
           alert("저장되었습니다.");
+          fetch("/api/company/settlement-summaries", { credentials: "include" })
+            .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
+            .then((sumData) => setCustomerPaymentTotalsByEstimate(parseSettlementSummariesResponse(sumData)))
+            .catch(() => {});
         } else {
           setError((data as { error?: string }).error || "저장에 실패했습니다.");
         }
@@ -508,17 +537,18 @@ export default function SettlementPage() {
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3 text-right">고객결제상환</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {estimateListLoading ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-gray-500">불러오는 중…</td>
+                    <td colSpan={6} className="p-8 text-center text-gray-500">불러오는 중…</td>
                   </tr>
                 ) : filteredEstimates.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                    <td colSpan={6} className="p-8 text-center text-gray-500">
                       {estimates.length === 0
                         ? "저장된 견적이 없습니다."
                         : "표시할 견적이 없습니다. '완료된 항목 보기'를 켜 보세요."}
@@ -547,6 +577,11 @@ export default function SettlementPage() {
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                         <td className="p-2 sm:p-3">
                           <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                        </td>
+                        <td className="p-2 sm:p-3 text-right tabular-nums text-gray-700">
+                          {Object.prototype.hasOwnProperty.call(customerPaymentTotalsByEstimate, String(est.id))
+                            ? `${formatNum(customerPaymentTotalsByEstimate[String(est.id)] ?? 0)}원`
+                            : "-"}
                         </td>
                         <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(total)}원</td>
                       </tr>

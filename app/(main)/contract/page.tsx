@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
+import { SignBodyA4Viewer } from "@/components/contract/SignBodyA4Viewer";
 import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
 
 type Contract = {
@@ -1100,6 +1101,8 @@ export default function ContractPage() {
   const [sendModal, setSendModal] = useState<{ id: number; signUrl: string; title?: string } | null>(null);
   const [sendEmail, setSendEmail] = useState("");
   const [signViewContract, setSignViewContract] = useState<Contract | null>(null);
+  /** 계약서 보기: PDF 로드 실패 시 DB에 있는 HTML 본문(body)으로 표시 */
+  const [viewBodyPdfFallback, setViewBodyPdfFallback] = useState(false);
   const [emailModal, setEmailModal] = useState<Contract | null>(null);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
@@ -1107,6 +1110,10 @@ export default function ContractPage() {
   const emailCaptureFromViewRef = useRef<string | null>(null);
   /** 이메일 발송 시 인쇄/PDF와 동일하게 추가 문서 페이지 이미지(data URL) 목록 */
   const emailDocPagesRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    if (signViewContract) setViewBodyPdfFallback(false);
+  }, [signViewContract?.id]);
 
   /** 인쇄/PDF와 동일하게 1페이지(캡처) + 추가 문서 페이지로 PDF 생성 → base64 */
   const buildContractPdfForEmail = async (summaryImage: string, docPageDataUrls: string[]): Promise<string> => {
@@ -1229,7 +1236,7 @@ export default function ContractPage() {
   const handleSendClick = (c: Contract) => {
     if (c.status === "sent" && c.signToken) {
       const base = typeof window !== "undefined" ? window.location.origin : "";
-      setSendModal({ id: c.id, signUrl: `${base}/sign/${c.signToken}`, title: c.title });
+      setSendModal({ id: c.id, signUrl: `${base}/sign/${c.signToken}?v=1`, title: c.title });
       return;
     }
     fetch(`/api/contracts/${c.id}/send`, {
@@ -1241,7 +1248,7 @@ export default function ContractPage() {
       .then((data) => {
         if (data.error) throw new Error(data.error);
         const base = typeof window !== "undefined" ? window.location.origin : "";
-        setSendModal({ id: c.id, signUrl: data.signUrl || `${base}/sign/${data.signToken}`, title: c.title });
+        setSendModal({ id: c.id, signUrl: data.signUrl ? `${data.signUrl}${data.signUrl.includes("?") ? "&" : "?"}v=1` : `${base}/sign/${data.signToken}?v=1`, title: c.title });
         load();
       })
       .catch((err) => alert(err?.message || "발송 실패"));
@@ -1578,15 +1585,38 @@ export default function ContractPage() {
                 </div>
               )}
 
-              {signViewContract.documentPath && (
-                <div className="contract-print-doc-pages-wrapper mb-4">
-                  <PdfToA4Images
-                    documentUrl={`/api/company/contract-document?path=${encodeURIComponent(signViewContract.documentPath)}`}
-                    className="space-y-4"
-                    fullWidth
-                  />
-                </div>
-              )}
+              {(() => {
+                const c = signViewContract;
+                const hasBody = Boolean(c.body?.trim());
+                const docPath = c.documentPath;
+                const showPdf = Boolean(docPath && !(viewBodyPdfFallback && hasBody));
+                const showBodyHtml = hasBody && (!docPath || viewBodyPdfFallback);
+                const margins = c.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 };
+                return (
+                  <>
+                    {showPdf && (
+                      <div className="contract-print-doc-pages-wrapper mb-4">
+                        <PdfToA4Images
+                          documentUrl={`/api/company/contract-document?path=${encodeURIComponent(docPath!)}`}
+                          className="space-y-4"
+                          fullWidth
+                          onError={hasBody ? () => setViewBodyPdfFallback(true) : undefined}
+                        />
+                      </div>
+                    )}
+                    {showBodyHtml && c.body?.trim() && (
+                      <div className="contract-print-doc-pages-wrapper mb-4">
+                        <SignBodyA4Viewer bodyHtml={c.body} margins={margins} />
+                        {docPath && (
+                          <p className="mt-2 text-xs text-amber-700">
+                            본문 PDF 파일을 불러오지 못해 저장된 본문(HTML)으로 표시합니다. PDF가 필요하면 계약서를 한 번 더 저장해 주세요.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { getHolidayName } from "@/lib/koreanHolidays";
 import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
@@ -12,19 +12,37 @@ const COMPLETED_STATUS = "완료및정산";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const LIST_PAGE_SIZE = 10;
-/** 공사명(제목)별 색상 - 같은 공사명은 같은 색 */
+/**
+ * 현장(상담) 제목·캘린더 막대 색상 — 색상환을 넓게 돌려 파랑/보라만 몰리지 않게 함.
+ * 배정은 견적 제목이 아니라 상담 ID 기준(비슷한 제목이어도 현장마다 색이 갈리기 쉬움).
+ */
 const TITLE_COLORS = [
-  "#2563EB", "#059669", "#B45309", "#7C3AED", "#BE185D",
-  "#0D9488", "#CA8A04", "#DC2626", "#4F46E5", "#0F766E",
+  "#B91C1C", // red
+  "#C2410C", // orange
+  "#A16207", // amber/brown
+  "#4D7C0F", // lime
+  "#166534", // green
+  "#0F766E", // teal
+  "#0E7490", // cyan
+  "#0369A1", // sky
+  "#1D4ED8", // blue
+  "#3730A3", // indigo
+  "#6B21A8", // purple
+  "#A21CAF", // fuchsia
 ];
 
-/** 공사명 문자열로부터 일관된 색상 인덱스 반환 */
-function getColorIndexByTitle(title: string): number {
-  if (!title || !title.trim()) return 0;
-  let h = 0;
-  const s = title.trim();
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return h % TITLE_COLORS.length;
+/** 상담 ID → 일관된 색 인덱스 (연속 ID도 골든비율로 잘 섞임) */
+function getColorIndexForConsultation(consultationId: number): number {
+  if (!consultationId || consultationId < 1) return 0;
+  const u = (consultationId * 0x9e3779b9) >>> 0;
+  return u % TITLE_COLORS.length;
+}
+
+/** 지정색이 있으면 사용, 없으면 자동 팔레트 */
+function resolveScheduleAccent(consultation: { id: number; scheduleListColor?: string }): string {
+  const c = consultation.scheduleListColor?.trim();
+  if (c && /^#[0-9A-Fa-f]{6}$/.test(c)) return c;
+  return TITLE_COLORS[getColorIndexForConsultation(consultation.id)];
 }
 
 type Consultation = {
@@ -37,6 +55,8 @@ type Consultation = {
   constructionStartAt?: string;
   moveInAt?: string;
   schedulePhases?: { name: string; start: string; end: string; color?: string }[];
+  /** 일정 목록·캘린더 막대 표시색 (#RRGGBB), 없으면 상담 ID 기준 자동색 */
+  scheduleListColor?: string;
 };
 
 type Estimate = {
@@ -94,7 +114,7 @@ type SiteBar = {
 
 /** 해당 날짜에 현장별로 한 줄씩 표시할 데이터 (공정명은 " · "로 연결) */
 function getSiteBarsOnDay(day: string, scheduleList: ScheduleItem[]): SiteBar[] {
-  const siteMap = new Map<number, { estimateTitle: string; phaseNames: string[] }>();
+  const siteMap = new Map<number, { estimateTitle: string; phaseNames: string[]; consultation: Consultation }>();
   scheduleList.forEach(({ consultation, estimateTitle }) => {
     const phases = consultation.schedulePhases;
     if (!Array.isArray(phases)) return;
@@ -114,15 +134,15 @@ function getSiteBarsOnDay(day: string, scheduleList: ScheduleItem[]): SiteBar[] 
       if (existing) {
         names.forEach((n) => { if (!existing.phaseNames.includes(n)) existing.phaseNames.push(n); });
       } else {
-        siteMap.set(consultation.id, { estimateTitle, phaseNames: names });
+        siteMap.set(consultation.id, { estimateTitle, phaseNames: names, consultation });
       }
     }
   });
-  return Array.from(siteMap.entries()).map(([consultationId, { estimateTitle, phaseNames }]) => ({
+  return Array.from(siteMap.entries()).map(([consultationId, { estimateTitle, phaseNames, consultation }]) => ({
     consultationId,
     estimateTitle,
     phaseNames,
-    color: TITLE_COLORS[getColorIndexByTitle(estimateTitle)],
+    color: resolveScheduleAccent(consultation),
   }));
 }
 
@@ -206,6 +226,49 @@ export default function SchedulePage() {
   });
   /** 완료 건 보기: 기본 꺼짐(완료 건 숨김) */
   const [showCompleted, setShowCompleted] = useState(false);
+
+  /** 일정 목록 제목 왼쪽 색 선택 팝업 */
+  const [scheduleColorMenu, setScheduleColorMenu] = useState<{
+    consultationId: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  const scheduleColorInputRef = useRef<HTMLInputElement>(null);
+
+  const patchScheduleListColor = useCallback(async (consultationId: number, color: string | null) => {
+    const res = await fetch(`/api/consultations/${consultationId}/schedule-list-color`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ color }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert((data as { error?: string }).error || "색상 저장에 실패했습니다.");
+      return;
+    }
+    setConsultations((prev) =>
+      prev.map((c) =>
+        c.id === consultationId
+          ? {
+              ...c,
+              scheduleListColor:
+                color != null && /^#[0-9A-Fa-f]{6}$/.test(color) ? color : undefined,
+            }
+          : c
+      )
+    );
+    setScheduleColorMenu(null);
+  }, []);
+
+  useEffect(() => {
+    if (!scheduleColorMenu) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setScheduleColorMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [scheduleColorMenu]);
 
   useEffect(() => {
     Promise.all([
@@ -365,7 +428,8 @@ export default function SchedulePage() {
       </div>
 
       <p className="text-sm text-gray-500 mb-3 no-print">
-        저장된 공사 일정 목록입니다. <strong>견적서를 작성한 상담</strong>만 표시됩니다. 제목을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.
+        저장된 공사 일정 목록입니다. <strong>견적서를 작성한 상담</strong>만 표시됩니다. 제목을 클릭하면 공사 일정(목공사, 전기, 도장 등)을 짤 수 있습니다.{" "}
+        <strong>제목 왼쪽 색 막대</strong>를 누르면 목록·캘린더 막대에 쓰는 표시 색을 고를 수 있습니다(미지정 시 자동 색).
       </p>
       <label className="mb-4 flex cursor-pointer items-center gap-2 no-print">
         <input
@@ -405,17 +469,40 @@ export default function SchedulePage() {
               </tr>
             ) : (
               paginatedList.map((item) => {
-                const titleColor = TITLE_COLORS[getColorIndexByTitle(item.estimateTitle)];
+                const accent = resolveScheduleAccent(item.consultation);
                 return (
                 <tr key={item.consultation.id} className="text-gray-700 hover:bg-gray-50">
                   <td className="p-2 sm:p-3 font-medium">
-                    <Link
-                      href={`/schedule/${item.consultation.id}`}
-                      className="hover:underline"
-                      style={{ color: titleColor }}
-                    >
-                      {item.estimateTitle || "-"}
-                    </Link>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        type="button"
+                        title="표시 색 바꾸기 (목록·캘린더)"
+                        aria-label="표시 색 바꾸기"
+                        className="shrink-0 w-1.5 self-stretch min-h-[2.25rem] rounded-sm border border-black/15 shadow-sm hover:brightness-95 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 no-print"
+                        style={{ backgroundColor: accent }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const id = item.consultation.id;
+                          setScheduleColorMenu((prev) => {
+                            if (prev?.consultationId === id) return null;
+                            const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+                            const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+                            const panelW = 236;
+                            const panelH = 260;
+                            const left = Math.max(8, Math.min(e.clientX - 8, vw - panelW - 8));
+                            const top = Math.max(8, Math.min(e.clientY + 8, vh - panelH - 8));
+                            return { consultationId: id, left, top };
+                          });
+                        }}
+                      />
+                      <Link
+                        href={`/schedule/${item.consultation.id}`}
+                        className="min-w-0 truncate text-gray-900 hover:underline font-medium"
+                      >
+                        {item.estimateTitle || "-"}
+                      </Link>
+                    </div>
                   </td>
                   <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.constructionStartAt)}</td>
                   <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.moveInAt)}</td>
@@ -689,6 +776,71 @@ export default function SchedulePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {scheduleColorMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            aria-hidden
+            onClick={() => setScheduleColorMenu(null)}
+          />
+          <div
+            role="dialog"
+            aria-label="일정 표시 색상"
+            className="fixed z-[70] w-[228px] rounded-lg border border-gray-200 bg-white p-3 shadow-xl no-print"
+            style={{ left: scheduleColorMenu.left, top: scheduleColorMenu.top }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <p className="mb-2 text-xs font-medium text-gray-700">표시 색상</p>
+            <p className="mb-2 text-[11px] leading-snug text-gray-500">
+              아래 색을 누르거나 직접 고른 뒤 적용하세요. 캘린더 막대에도 같은 색이 쓰입니다.
+            </p>
+            <div className="mb-3 grid grid-cols-6 gap-1.5">
+              {TITLE_COLORS.map((hex) => (
+                <button
+                  key={hex}
+                  type="button"
+                  title={hex}
+                  className="h-7 w-full rounded border border-gray-200 shadow-sm transition-transform hover:z-10 hover:scale-110"
+                  style={{ backgroundColor: hex }}
+                  onClick={() => void patchScheduleListColor(scheduleColorMenu.consultationId, hex)}
+                />
+              ))}
+            </div>
+            <label className="mb-1 block text-[11px] font-medium text-gray-600">직접 선택</label>
+            <input
+              ref={scheduleColorInputRef}
+              key={scheduleColorMenu.consultationId}
+              type="color"
+              className="mb-2 h-9 w-full cursor-pointer rounded border border-gray-300 bg-white"
+              defaultValue={resolveScheduleAccent(
+                consultations.find((c) => c.id === scheduleColorMenu.consultationId) ?? {
+                  id: scheduleColorMenu.consultationId,
+                }
+              )}
+            />
+            <button
+              type="button"
+              className="mb-2 w-full rounded-md border border-gray-300 bg-white py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50"
+              onClick={() => {
+                const v = scheduleColorInputRef.current?.value;
+                if (v && /^#[0-9A-Fa-f]{6}$/.test(v)) {
+                  void patchScheduleListColor(scheduleColorMenu.consultationId, v);
+                }
+              }}
+            >
+              이 색으로 저장
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-md border border-dashed border-gray-300 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+              onClick={() => void patchScheduleListColor(scheduleColorMenu.consultationId, null)}
+            >
+              자동 색으로 초기화
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

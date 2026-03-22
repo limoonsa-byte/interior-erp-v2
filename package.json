@@ -11,6 +11,7 @@
     "build": "node scripts/migrate.js && next build",
     "start": "next start",
     "lint": "eslint",
+    "seed:shop-demo": "node scripts/seed-shop-demo.js",
     "deploy": "vercel --prod --yes"
   },
   "dependencies": {

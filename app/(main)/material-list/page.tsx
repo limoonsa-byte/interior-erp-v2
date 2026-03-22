@@ -1,15 +1,64 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ListChecks, Plus, Trash2, ImageOff, FolderPlus, Printer, Eye, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import {
+  ListChecks,
+  Plus,
+  Trash2,
+  ImageOff,
+  FolderPlus,
+  Printer,
+  Eye,
+  X,
+  GripVertical,
+} from "lucide-react";
+
+type EstimateItemRow = {
+  qty?: number | string;
+  materialUnitPrice?: number | string;
+  unitPrice?: number;
+  laborUnitPrice?: number | string;
+};
 
 type Estimate = {
   id: number;
   consultationId?: number;
   customerName?: string;
+  contact?: string;
   title?: string;
   estimateDate?: string;
+  items?: EstimateItemRow[];
+  overheadPercent?: number;
+  profitPercent?: number;
 };
+
+function formatNumber(n: number): string {
+  return n.toLocaleString("ko-KR");
+}
+
+function formatDateYMD(dateStr: string | undefined): string {
+  if (!dateStr || !dateStr.trim()) return "-";
+  const d = new Date(dateStr.trim());
+  if (Number.isNaN(d.getTime())) return dateStr;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function estimateTotal(est: Estimate): number {
+  const subtotal = (est.items || []).reduce(
+    (s, i) =>
+      s +
+      (Number(i.qty) || 0) * (Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0) +
+      (Number(i.qty) || 0) * (Number(i.laborUnitPrice ?? 0) || 0),
+    0
+  );
+  const ohRate = (Number(est.overheadPercent) ?? 5) / 100;
+  const prRate = (Number(est.profitPercent) ?? 10) / 100;
+  return subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
+}
 
 type Consultation = {
   id: number;
@@ -18,6 +67,8 @@ type Consultation = {
 
 type MaterialItem = {
   id?: number;
+  /** React 리스트 key / 행 순서 변경 시 안정화 (저장 시 API로 보내지 않음) */
+  _clientKey?: string;
   itemName: string;
   imageUrl: string;
   productNameCode: string;
@@ -34,8 +85,16 @@ type MaterialSection = {
 
 const REMARKS_IMPORTANT_PREFIX = "[중요] ";
 
+function newClientKey(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `k-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function createEmptyItem(): MaterialItem {
   return {
+    _clientKey: newClientKey(),
     itemName: "",
     imageUrl: "",
     productNameCode: "",
@@ -60,6 +119,15 @@ function getRemarksDisplay(remarks: string): string {
 function setRemarksImportant(remarks: string, important: boolean): string {
   const content = getRemarksDisplay(remarks);
   return important ? REMARKS_IMPORTANT_PREFIX + content : content;
+}
+
+/** `toFinal`: 이동 후 배열에서의 목표 인덱스(0…length). 같은 위치면 순서 유지. */
+function moveRowInArray<T>(items: readonly T[], fromIndex: number, toFinal: number): T[] {
+  if (fromIndex < 0 || fromIndex >= items.length) return [...items];
+  if (toFinal < 0 || toFinal > items.length) return [...items];
+  const x = items[fromIndex];
+  const without = items.filter((_, i) => i !== fromIndex);
+  return [...without.slice(0, toFinal), x, ...without.slice(toFinal)];
 }
 
 const MAX_IMAGE_PX = 720;
@@ -144,6 +212,22 @@ export default function MaterialListPage() {
   const [imageCompressingCell, setImageCompressingCell] = useState<string | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
+  /** 같은 섹션 안에서 행 순서 드래그 */
+  const [draggingRow, setDraggingRow] = useState<{ sectionIndex: number; itemIndex: number } | null>(null);
+  const [dragOverRow, setDragOverRow] = useState<{ sectionIndex: number; itemIndex: number } | null>(null);
+
+  /** 인쇄 스타일은 globals.css 의 body.material-list-print-open 에서 적용 (전역 img 숨김 등과 충돌 방지) */
+  useEffect(() => {
+    if (!showPrintPreview) {
+      document.body.classList.remove("material-list-print-open");
+      return;
+    }
+    document.body.classList.add("material-list-print-open");
+    return () => {
+      document.body.classList.remove("material-list-print-open");
+    };
+  }, [showPrintPreview]);
+
   useEffect(() => {
     setEstimateListLoading(true);
     setError(null);
@@ -176,7 +260,8 @@ export default function MaterialListPage() {
     });
   }, [estimates, consultations, showCompleted]);
 
-  const estimatesForSelect = useMemo(() => {
+  /** 필터에서 빠져도 현재 선택 견적은 목록에 유지 */
+  const estimatesForTable = useMemo(() => {
     if (selectedId == null) return filteredEstimates;
     if (filteredEstimates.some((e) => e.id === selectedId)) return filteredEstimates;
     const selected = estimates.find((e) => e.id === selectedId);
@@ -189,15 +274,19 @@ export default function MaterialListPage() {
         data.sections.map((s: { id?: number | null; title?: string; items?: Record<string, unknown>[] }) => ({
           id: s.id ?? null,
           title: (s.title ?? "") as string,
-          items: (Array.isArray(s.items) ? s.items : []).map((x: Record<string, unknown>) => ({
-            id: typeof x.id === "number" ? x.id : undefined,
-            itemName: (x.itemName ?? "") as string,
-            imageUrl: (x.imageUrl ?? "") as string,
-            productNameCode: (x.productNameCode ?? "") as string,
-            size: (x.size ?? "") as string,
-            remarks: (x.remarks ?? "") as string,
-            shoppingLink: (x.shoppingLink ?? "") as string,
-          })),
+          items: (Array.isArray(s.items) ? s.items : []).map((x: Record<string, unknown>) => {
+            const id = typeof x.id === "number" ? x.id : undefined;
+            return {
+              id,
+              _clientKey: id == null ? newClientKey() : undefined,
+              itemName: (x.itemName ?? "") as string,
+              imageUrl: (x.imageUrl ?? "") as string,
+              productNameCode: (x.productNameCode ?? "") as string,
+              size: (x.size ?? "") as string,
+              remarks: (x.remarks ?? "") as string,
+              shoppingLink: (x.shoppingLink ?? "") as string,
+            };
+          }),
         }))
       );
     } else {
@@ -294,6 +383,43 @@ export default function MaterialListPage() {
     });
   }, []);
 
+  const moveRow = useCallback((sectionIndex: number, fromIndex: number, toFinal: number) => {
+    setSections((prev) => {
+      const next = [...prev];
+      if (sectionIndex < 0 || sectionIndex >= next.length) return prev;
+      const items = next[sectionIndex].items;
+      if (fromIndex < 0 || fromIndex >= items.length) return prev;
+      if (toFinal < 0 || toFinal > items.length) return prev;
+      const nextItems = moveRowInArray(items, fromIndex, toFinal);
+      next[sectionIndex] = { ...next[sectionIndex], items: nextItems };
+      return next;
+    });
+  }, []);
+
+  const handleMaterialRowDrop = useCallback(
+    (e: React.DragEvent, sectionIndex: number, itemIndex: number, itemCount: number) => {
+      const raw = e.dataTransfer.getData("application/x-material-row");
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const p = JSON.parse(raw) as { sectionIndex: number; itemIndex: number };
+        if (p.sectionIndex !== sectionIndex) return;
+        const tr = (e.currentTarget as HTMLElement).closest("tr");
+        if (!tr) return;
+        const rect = tr.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+        let toFinal = insertBefore ? itemIndex : itemIndex + 1;
+        if (toFinal < 0) toFinal = 0;
+        if (toFinal > itemCount) toFinal = itemCount;
+        moveRow(sectionIndex, p.itemIndex, toFinal);
+      } catch {
+        /* ignore */
+      }
+    },
+    [moveRow]
+  );
+
   const handleImagePaste = useCallback(
     (e: React.ClipboardEvent, sectionIndex: number, itemIndex: number) => {
       const items = e.clipboardData?.items;
@@ -319,7 +445,11 @@ export default function MaterialListPage() {
   );
 
   const handleImageDrop = useCallback(
-    (e: React.DragEvent, sectionIndex: number, itemIndex: number) => {
+    (e: React.DragEvent, sectionIndex: number, itemIndex: number, itemCount: number) => {
+      if (e.dataTransfer.types.includes("application/x-material-row")) {
+        handleMaterialRowDrop(e, sectionIndex, itemIndex, itemCount);
+        return;
+      }
       e.preventDefault();
       const files = e.dataTransfer.files;
       if (!files?.length) return;
@@ -335,10 +465,15 @@ export default function MaterialListPage() {
         }
       }
     },
-    [setItem]
+    [setItem, handleMaterialRowDrop]
   );
 
   const handleImageDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/x-material-row")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      return;
+    }
     e.preventDefault();
     e.dataTransfer.dropEffect = "copy";
   }, []);
@@ -426,9 +561,9 @@ export default function MaterialListPage() {
         </div>
       )}
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">현장(견적) 선택</label>
-        <div className="flex flex-wrap items-center gap-3 mb-1.5">
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <label className="text-sm font-medium text-gray-700">현장(견적) 선택</label>
           <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
             <input
               type="checkbox"
@@ -439,25 +574,75 @@ export default function MaterialListPage() {
             완료된 항목 보기
           </label>
         </div>
-        <select
-          value={selectedId ?? ""}
-          onChange={(e) => setSelectedId(Number(e.target.value) || null)}
-          disabled={estimateListLoading}
-          className="w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white disabled:opacity-50"
-        >
-          {estimatesForSelect.length === 0 ? (
-            <option value="">{estimateListLoading ? "불러오는 중…" : "견적이 없습니다."}</option>
-          ) : (
-            <>
-              <option value="">선택하세요</option>
-              {estimatesForSelect.map((est) => (
-                <option key={est.id} value={est.id}>
-                  {est.customerName || "고객"} / {est.title || "제목 없음"} ({est.estimateDate || "-"})
-                </option>
-              ))}
-            </>
-          )}
-        </select>
+        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
+              <tr>
+                <th className="p-2 sm:p-3 font-semibold">견적일자</th>
+                <th className="p-2 sm:p-3 font-semibold">고객명</th>
+                <th className="p-2 sm:p-3 font-semibold">연락처</th>
+                <th className="p-2 sm:p-3 font-semibold">제목</th>
+                <th className="p-2 sm:p-3 text-right font-semibold">합계</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {estimateListLoading ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    불러오는 중…
+                  </td>
+                </tr>
+              ) : estimates.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    저장된 견적이 없습니다. 견적서 작성에서 먼저 견적을 저장해 주세요.
+                  </td>
+                </tr>
+              ) : estimatesForTable.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-8 text-center text-gray-500">
+                    표시할 견적이 없습니다. &apos;완료된 항목 보기&apos;를 켜 보세요.
+                  </td>
+                </tr>
+              ) : (
+                estimatesForTable.map((est) => {
+                  const total = estimateTotal(est);
+                  const isSelected = selectedId === est.id;
+                  return (
+                    <tr
+                      key={est.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedId(est.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedId(est.id);
+                        }
+                      }}
+                      className={`group cursor-pointer text-gray-700 transition-colors ${
+                        isSelected ? "bg-blue-50/80 ring-1 ring-inset ring-blue-200" : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
+                      <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                      <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
+                      <td className="p-2 sm:p-3">
+                        <span className="text-left text-blue-600 font-medium group-hover:underline">
+                          {est.title?.trim() ? est.title : "제목 없음"}
+                        </span>
+                      </td>
+                      <td className="p-2 sm:p-3 text-right tabular-nums">{formatNumber(total)}원</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-xs text-gray-500">
+          행을 클릭하면 해당 견적의 자재리스트를 편집합니다. 선택된 행은 연한 파란색으로 표시됩니다.
+        </p>
       </div>
 
       {itemsLoading && (
@@ -529,6 +714,9 @@ export default function MaterialListPage() {
               인쇄
             </button>
           </div>
+          <p className="text-xs text-gray-500">
+            같은 큰 항목 안에서 <strong>품목</strong> 줄 왼쪽의 세로 점(⋮⋮) 아이콘을 끌어 놓으면 행 순서가 바뀝니다. 다른 줄의 <strong>위쪽 절반</strong>에 놓으면 그 줄 앞에, <strong>아래쪽 절반</strong>에 놓으면 그 줄 뒤에 끼워 넣습니다. 변경 후 <strong>저장</strong>하면 순서가 반영됩니다.
+          </p>
 
           {sections.length === 0 && (
             <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
@@ -577,15 +765,70 @@ export default function MaterialListPage() {
                       </tr>
                     )}
                     {section.items.map((row, itemIndex) => (
-                      <tr key={itemIndex} className="hover:bg-gray-50/70">
+                      <tr
+                        key={row.id != null ? `id-${row.id}` : row._clientKey ?? `s${sectionIndex}-i${itemIndex}`}
+                        className={`hover:bg-gray-50/70 ${
+                          draggingRow?.sectionIndex === sectionIndex && draggingRow?.itemIndex === itemIndex
+                            ? "opacity-50"
+                            : ""
+                        } ${
+                          dragOverRow?.sectionIndex === sectionIndex && dragOverRow?.itemIndex === itemIndex
+                            ? "bg-blue-50/80"
+                            : ""
+                        }`}
+                        onDragOver={(e) => {
+                          if (e.dataTransfer.types.includes("application/x-material-row")) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = "move";
+                          }
+                        }}
+                        onDrop={(e) => handleMaterialRowDrop(e, sectionIndex, itemIndex, section.items.length)}
+                        onDragEnter={(e) => {
+                          if (e.dataTransfer.types.includes("application/x-material-row")) {
+                            setDragOverRow({ sectionIndex, itemIndex });
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                            setDragOverRow((prev) =>
+                              prev?.sectionIndex === sectionIndex && prev?.itemIndex === itemIndex
+                                ? null
+                                : prev
+                            );
+                          }
+                        }}
+                      >
                         <td className="p-2 align-top border-r border-gray-200">
-                          <input
-                            type="text"
-                            value={row.itemName}
-                            onChange={(e) => setItem(sectionIndex, itemIndex, "itemName", e.target.value)}
-                            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                            placeholder="예: 인덕션"
-                          />
+                          <div className="flex items-start gap-1.5">
+                            <button
+                              type="button"
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData(
+                                  "application/x-material-row",
+                                  JSON.stringify({ sectionIndex, itemIndex })
+                                );
+                                e.dataTransfer.effectAllowed = "move";
+                                setDraggingRow({ sectionIndex, itemIndex });
+                              }}
+                              onDragEnd={() => {
+                                setDraggingRow(null);
+                                setDragOverRow(null);
+                              }}
+                              className="mt-1 shrink-0 cursor-grab rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 active:cursor-grabbing"
+                              title="끌어서 순서 변경"
+                              aria-label="행 순서 변경"
+                            >
+                              <GripVertical className="h-4 w-4" />
+                            </button>
+                            <input
+                              type="text"
+                              value={row.itemName}
+                              onChange={(e) => setItem(sectionIndex, itemIndex, "itemName", e.target.value)}
+                              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                              placeholder="예: 인덕션"
+                            />
+                          </div>
                         </td>
                         <td className="p-2 align-top border-r border-gray-200">
                           <div
@@ -595,7 +838,7 @@ export default function MaterialListPage() {
                             <div
                               className="h-[70px] w-[70px] flex-shrink-0 overflow-hidden rounded border-2 border-gray-300 bg-gray-100 flex items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-gray-50"
                               onDragOver={handleImageDragOver}
-                              onDrop={(e) => handleImageDrop(e, sectionIndex, itemIndex)}
+                              onDrop={(e) => handleImageDrop(e, sectionIndex, itemIndex, section.items.length)}
                               onClick={() => document.getElementById(`material-list-img-${sectionIndex}-${itemIndex}`)?.click()}
                               title="이미지 붙여넣기(Ctrl+V), 끌어다 놓기, 또는 클릭해서 선택 (자동으로 줄여서 저장)"
                             >
@@ -724,29 +967,22 @@ export default function MaterialListPage() {
         </div>
       )}
 
-      {!itemsLoading && selectedId == null && estimates.length > 0 && (
-        <p className="py-6 text-sm text-gray-500">위에서 현장(견적)을 선택해 주세요.</p>
+      {!itemsLoading && selectedId == null && estimates.length > 0 && estimatesForTable.length > 0 && (
+        <p className="py-4 text-sm text-gray-500">위 목록에서 제목을 눌러 현장(견적)을 선택해 주세요.</p>
       )}
 
-      {showPrintPreview && (
-        <>
-          <style
-            dangerouslySetInnerHTML={{
-              __html: `
-                @media print {
-                  body * { visibility: hidden; }
-                  #material-list-print-area, #material-list-print-area * { visibility: visible; }
-                  #material-list-print-area .no-print { display: none !important; }
-                  #material-list-print-area { position: fixed !important; left: 0 !important; top: 0 !important; width: 100% !important; background: white !important; z-index: 99999 !important; }
-                }
-              `,
-            }}
-          />
+      {showPrintPreview &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
             id="material-list-print-area"
             className="fixed inset-0 z-[9999] bg-white overflow-auto p-6"
           >
             <div className="no-print flex flex-wrap items-center gap-3 border-b border-gray-200 pb-4 mb-6">
+              <p className="w-full text-xs text-gray-500">
+                인쇄 창에서 <strong>방향: 가로</strong>, <strong>용지: A4</strong>, <strong>확대/축소: 용지에 맞춤</strong>(또는 100% 이하)을 확인하세요. 표는 가로 폭에 맞게 줄어듭니다. 사진이 안 나오면{" "}
+                <strong>배경 그래픽</strong>(Chrome) / <strong>배경 인쇄</strong>(Edge)을 켜 보세요.
+              </p>
               <button
                 type="button"
                 onClick={() => window.print()}
@@ -777,19 +1013,27 @@ export default function MaterialListPage() {
                   : ""}
               </p>
               {sections.map((section, sectionIndex) => (
-                <div key={sectionIndex} className="mb-8 break-inside-avoid">
+                <div key={sectionIndex} className="mb-8 print:mb-4">
                   <h2 className="text-base font-semibold text-gray-800 border-b border-gray-300 pb-2 mb-3">
                     {section.title || "(항목 제목)"}
                   </h2>
-                  <table className="w-full text-sm border-collapse border border-gray-300">
+                  <table className="material-list-print-table w-full text-sm border-collapse border border-gray-300">
+                    <colgroup>
+                      <col style={{ width: "17%" }} />
+                      <col style={{ width: "11%" }} />
+                      <col style={{ width: "19%" }} />
+                      <col style={{ width: "15%" }} />
+                      <col style={{ width: "21%" }} />
+                      <col style={{ width: "17%" }} />
+                    </colgroup>
                     <thead>
                       <tr className="bg-gray-100">
-                        <th className="border border-gray-300 p-2 text-left font-semibold w-24">품목</th>
-                        <th className="border border-gray-300 p-2 text-left font-semibold w-28">이미지</th>
+                        <th className="border border-gray-300 p-2 text-left font-semibold">품목</th>
+                        <th className="border border-gray-300 p-2 text-left font-semibold">이미지</th>
                         <th className="border border-gray-300 p-2 text-left font-semibold">제품명(코드)</th>
-                        <th className="border border-gray-300 p-2 text-left font-semibold min-w-[100px]">사이즈</th>
-                        <th className="border border-gray-300 p-2 text-left font-semibold min-w-[120px]">비고</th>
-                        <th className="border border-gray-300 p-2 text-left font-semibold min-w-[120px]">쇼핑링크</th>
+                        <th className="border border-gray-300 p-2 text-left font-semibold">사이즈</th>
+                        <th className="border border-gray-300 p-2 text-left font-semibold">비고</th>
+                        <th className="border border-gray-300 p-2 text-left font-semibold">쇼핑링크</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -798,7 +1042,12 @@ export default function MaterialListPage() {
                           <td className="border border-gray-300 p-2 align-top">{row.itemName || "-"}</td>
                           <td className="border border-gray-300 p-2 align-top">
                             {row.imageUrl.trim() ? (
-                              <img src={row.imageUrl} alt="" className="max-h-16 max-w-20 object-contain" />
+                              <img
+                                src={row.imageUrl}
+                                alt=""
+                                className="material-list-print-img max-h-16 max-w-20 object-contain"
+                                decoding="async"
+                              />
                             ) : (
                               "-"
                             )}
@@ -824,9 +1073,9 @@ export default function MaterialListPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import {
@@ -19,27 +19,91 @@ type Consultation = {
   status?: string;
   constructionStartAt?: string;
   moveInAt?: string;
-  schedulePhases?: { start?: string; end?: string }[];
+  schedulePhases?: { name?: string; start?: string; end?: string }[];
 };
+
+/** DB·구라벨 → 상담 페이지와 동일한 진행상태 */
+function normalizeConsultationStatus(status: string | undefined): string {
+  if (!status) return "접수";
+  const map: Record<string, string> = {
+    상담종단: "접수",
+    현장실측: "현장상담실측",
+    견적미팅: "견적서작성",
+    견적완료: "견적서작성",
+    자재미팅: "자재리스트",
+    "계약서 작성": "계약서작성",
+    디자인미팅: "디자인",
+    계약완료: "계약",
+    취소: "완료및정산",
+    "취소/보류": "완료및정산",
+    완료: "완료및정산",
+  };
+  return map[status] || status;
+}
+
+/** (접수, 상담): 접수 ~ 견적 단계 */
+const STATUS_RECEPTION_AND_CONSULT = new Set(["접수", "현장상담실측", "견적서작성"]);
+/** (자재, 디자인, 계약) */
+const STATUS_MATERIAL_DESIGN_CONTRACT = new Set(["자재리스트", "계약서작성", "디자인", "계약"]);
+/** (공사, 진행) */
+const STATUS_CONSTRUCTION = new Set(["공사진행"]);
 
 type Estimate = {
   id: number;
+  consultationId?: number;
   customerName?: string;
   title?: string;
 };
 
-function getThisWeekRange() {
+/** 전체일정 `/schedule` 과 동일한 날짜 파싱 */
+function schedulePhaseToDateValue(value: string | undefined): string {
+  if (!value || !value.trim()) return "";
+  const s = value.trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const d = new Date(value.trim());
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * 공정(schedulePhases) 구간이 이번 주(월~일)와 하루라도 겹치면 true.
+ * 캘린더는 공정이 있는 날만 표시하므로, 카운트도 공사기간만이 아니라 이 기준으로 맞춤.
+ */
+function consultationHasSchedulePhaseOverlappingWeek(
+  c: Consultation,
+  weekStart: string,
+  weekEnd: string
+): boolean {
+  const phases = c.schedulePhases;
+  if (!Array.isArray(phases) || phases.length === 0) return false;
+  return phases.some((p) => {
+    const start = schedulePhaseToDateValue(p.start);
+    const end = schedulePhaseToDateValue(p.end);
+    if (!start) return false;
+    const endVal = end && end >= start ? end : start;
+    return start <= weekEnd && endVal >= weekStart;
+  });
+}
+
+/**
+ * 로컬 달력 기준 "이번 주": 월요일 ~ 일요일 (ISO/한국 흔한 주간 정의).
+ * 구간은 YYYY-MM-DD 문자열로 비교.
+ */
+function getThisWeekMondayThroughSundayRange(): { start: string; end: string } {
   const now = new Date();
-  const mon = new Date(now);
-  mon.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  const sun = new Date(mon);
-  sun.setDate(mon.getDate() + 6);
-  const y = mon.getFullYear();
-  const m = String(mon.getMonth() + 1).padStart(2, "0");
-  const d = String(mon.getDate()).padStart(2, "0");
-  const y2 = sun.getFullYear();
-  const m2 = String(sun.getMonth() + 1).padStart(2, "0");
-  const d2 = String(sun.getDate()).padStart(2, "0");
+  const dayOfWeek = now.getDay(); // 0=일, 1=월, … 6=토
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 월요일이면 0, 일요일이면 6
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday);
+  const sunday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 6);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, "0");
+  const d = String(monday.getDate()).padStart(2, "0");
+  const y2 = sunday.getFullYear();
+  const m2 = String(sunday.getMonth() + 1).padStart(2, "0");
+  const d2 = String(sunday.getDate()).padStart(2, "0");
   return { start: `${y}-${m}-${d}`, end: `${y2}-${m2}-${d2}` };
 }
 
@@ -65,20 +129,36 @@ export function ProgressPanel() {
       .finally(() => setLoading(false));
   }, []);
 
-  const projectCount = consultations.filter(
-    (c) =>
-      (c.constructionStartAt && c.constructionStartAt.trim()) ||
-      (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
-  ).length;
-
-  const thisWeek = getThisWeekRange();
-  const thisWeekCount = consultations.filter((c) => {
-    const start = c.constructionStartAt?.trim().slice(0, 10);
-    const end = (c.moveInAt || c.constructionStartAt)?.trim().slice(0, 10);
-    if (!start) return false;
-    const e = end && end >= start ? end : start;
-    return start <= thisWeek.end && e >= thisWeek.start;
+  const receptionConsultCount = consultations.filter((c) => {
+    const s = normalizeConsultationStatus(c.status);
+    if (s === "완료및정산") return false;
+    return STATUS_RECEPTION_AND_CONSULT.has(s);
   }).length;
+
+  const materialDesignContractCount = consultations.filter((c) => {
+    const s = normalizeConsultationStatus(c.status);
+    if (s === "완료및정산") return false;
+    return STATUS_MATERIAL_DESIGN_CONTRACT.has(s);
+  }).length;
+
+  const constructionCount = consultations.filter((c) => {
+    const s = normalizeConsultationStatus(c.status);
+    if (s === "완료및정산") return false;
+    return STATUS_CONSTRUCTION.has(s);
+  }).length;
+
+  const thisWeek = getThisWeekMondayThroughSundayRange();
+  /** 전체일정 기본 규칙과 동일: 완료 제외, 견적 연결된 상담만, 공정 일정이 이번 주에 겹치는 건만 */
+  const thisWeekCount = useMemo(() => {
+    const consultationIdsWithEstimate = new Set(
+      estimates.filter((e) => e.consultationId != null).map((e) => e.consultationId as number)
+    );
+    return consultations.filter((c) => {
+      if (normalizeConsultationStatus(c.status) === "완료및정산") return false;
+      if (!consultationIdsWithEstimate.has(c.id)) return false;
+      return consultationHasSchedulePhaseOverlappingWeek(c, thisWeek.start, thisWeek.end);
+    }).length;
+  }, [consultations, estimates, thisWeek.start, thisWeek.end]);
 
   return (
     <aside
@@ -128,24 +208,24 @@ export function ProgressPanel() {
                   >
                     <MessageSquare className="h-4 w-4 shrink-0 text-slate-600" />
                     <span className="flex-1 truncate text-gray-700">
-                      진행 중인 상담
+                      (접수,상담)
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
-                      {loading ? "—" : consultations.length}
+                      {loading ? "—" : receptionConsultCount}
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link
-                    href="/estimate"
+                    href="/consulting"
                     className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm hover:border-blue-200 hover:bg-blue-50/50"
                   >
                     <FileText className="h-4 w-4 shrink-0 text-slate-600" />
                     <span className="flex-1 truncate text-gray-700">
-                      진행 중인 견적
+                      (자재,디자인,계약)
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
-                      {loading ? "—" : estimates.length}
+                      {loading ? "—" : materialDesignContractCount}
                     </span>
                   </Link>
                 </li>
@@ -156,21 +236,22 @@ export function ProgressPanel() {
                   >
                     <FolderKanban className="h-4 w-4 shrink-0 text-slate-600" />
                     <span className="flex-1 truncate text-gray-700">
-                      진행 중인 프로젝트
+                      (공사,진행)
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
-                      {loading ? "—" : projectCount}
+                      {loading ? "—" : constructionCount}
                     </span>
                   </Link>
                 </li>
                 <li>
                   <Link
                     href="/schedule"
+                    title="전체일정에 공정(일정 막대)이 이번 주(월~일)에 있는 현장 수입니다. 공사 시작일만 있고 공정이 없으면 집계되지 않습니다."
                     className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm hover:border-blue-200 hover:bg-blue-50/50"
                   >
                     <Calendar className="h-4 w-4 shrink-0 text-slate-600" />
                     <span className="flex-1 truncate text-gray-700">
-                      이번 주 일정
+                      (이번주 일정)
                     </span>
                     <span className="shrink-0 text-sm font-semibold tabular-nums text-gray-900">
                       {loading ? "—" : thisWeekCount}

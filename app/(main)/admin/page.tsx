@@ -18,7 +18,16 @@ type DefaultEstimateTemplate = {
   note?: string;
 };
 
-type ModalKind = null | "pics" | "password-change" | "drawing-api" | "estimate-templates" | "logo-stamp" | "company-contract" | "company-info";
+type ModalKind =
+  | null
+  | "pics"
+  | "password-change"
+  | "company-login-password"
+  | "drawing-api"
+  | "estimate-templates"
+  | "logo-stamp"
+  | "company-contract"
+  | "company-info";
 
 export default function AdminPage() {
   const searchParams = useSearchParams();
@@ -45,6 +54,11 @@ export default function AdminPage() {
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
   const [pwMessage, setPwMessage] = useState("");
+
+  const [companyPwCurrent, setCompanyPwCurrent] = useState("");
+  const [companyPwNew, setCompanyPwNew] = useState("");
+  const [companyPwConfirm, setCompanyPwConfirm] = useState("");
+  const [companyPwMessage, setCompanyPwMessage] = useState("");
 
   const [drawingApiUrl, setDrawingApiUrl] = useState("");
   const [drawingApiLoading, setDrawingApiLoading] = useState(false);
@@ -441,6 +455,46 @@ export default function AdminPage() {
         }
       })
       .catch(() => setPwMessage("오류가 발생했습니다."));
+  };
+
+  const handleCompanyLoginPasswordChange = () => {
+    const neu = companyPwNew.trim();
+    const conf = companyPwConfirm.trim();
+    if (neu.length < 6) {
+      setCompanyPwMessage("새 비밀번호는 6자 이상이어야 합니다.");
+      return;
+    }
+    if (neu !== conf) {
+      setCompanyPwMessage("새 비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    setCompanyPwMessage("");
+    fetch("/api/company/company-password", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        currentPassword: companyPwCurrent,
+        newPassword: neu,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setCompanyPwCurrent("");
+          setCompanyPwNew("");
+          setCompanyPwConfirm("");
+          setCompanyPwMessage(
+            (data as { message?: string }).message || "비밀번호가 변경되었습니다."
+          );
+          setTimeout(() => {
+            setModal(null);
+            setCompanyPwMessage("");
+          }, 1500);
+        } else {
+          setCompanyPwMessage((data as { error?: string }).error || "변경 실패");
+        }
+      })
+      .catch(() => setCompanyPwMessage("오류가 발생했습니다."));
   };
 
   const handleAddEstimateTemplate = () => {
@@ -934,6 +988,18 @@ export default function AdminPage() {
           >
             자재발주 서식관리
           </Link>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => {
+              setCompanyPwMessage("");
+              setModal("company-login-password");
+            }}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            회사 로그인 비밀번호 변경
+          </button>
         </li>
         <li>
           <button
@@ -1615,6 +1681,85 @@ export default function AdminPage() {
                   </>
                 )}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 회사 로그인 비밀번호 변경 모달 */}
+      {modal === "company-login-password" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">회사 로그인 비밀번호 변경</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-gray-600">
+              직원이 개인 비밀번호 없이 로그인할 때 사용하는 회사 공통 비밀번호입니다. 새 비밀번호는 6자 이상입니다.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">현재 비밀번호</label>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={companyPwCurrent}
+                  onChange={(e) => setCompanyPwCurrent(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">새 비밀번호</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={companyPwNew}
+                  onChange={(e) => setCompanyPwNew(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600">새 비밀번호 확인</label>
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={companyPwConfirm}
+                  onChange={(e) => setCompanyPwConfirm(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            {companyPwMessage && (
+              <p
+                className={`mt-3 text-sm ${
+                  companyPwMessage.includes("되었습니다") ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {companyPwMessage}
+              </p>
+            )}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleCompanyLoginPasswordChange}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                변경
+              </button>
             </div>
           </div>
         </div>

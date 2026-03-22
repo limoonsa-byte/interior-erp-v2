@@ -29,7 +29,6 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/estimate", label: "견적서 작성", icon: FileText },
   { href: "/schedule", label: "일정작성", icon: Calendar },
   { href: "/contract", label: "계약서 작성", icon: Signature },
-  { href: "/sign-test", label: "서명 PDF 테스트", icon: FileText },
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재 발주", icon: Package },
   { href: "/material-list", label: "현장용 자재리스트", icon: ListChecks },
@@ -71,7 +70,12 @@ export function Sidebar() {
     ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
       ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink as React.ComponentType<{ className?: string }>, external: true as const }]
       : []),
-    ...(isMaster ? [{ href: "/admin/master", label: "마스터 관리", icon: Shield, external: false as const }] : []),
+    ...(isMaster
+      ? [
+          { href: "/sign-test", label: "서명 PDF 테스트", icon: FileText, external: false as const },
+          { href: "/admin/master", label: "마스터 관리", icon: Shield, external: false as const },
+        ]
+      : []),
   ];
 
   return (

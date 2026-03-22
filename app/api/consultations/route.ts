@@ -65,6 +65,11 @@ export async function GET() {
         materialOrderedAt: (row as { material_ordered_at?: string }).material_ordered_at != null ? String((row as { material_ordered_at?: string }).material_ordered_at) : undefined,
         contractMeetingDone: Boolean((row as { contract_meeting_done?: boolean }).contract_meeting_done),
         designMeetingDone: Boolean((row as { design_meeting_done?: boolean }).design_meeting_done),
+        scheduleListColor:
+          (row as { schedule_list_color?: string }).schedule_list_color != null &&
+          String((row as { schedule_list_color?: string }).schedule_list_color).trim() !== ""
+            ? String((row as { schedule_list_color?: string }).schedule_list_color).trim()
+            : undefined,
       };
     });
 

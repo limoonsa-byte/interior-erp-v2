@@ -55,16 +55,16 @@ function formatNum(n: number): string {
 }
 
 /** 발주 유형 10개 (고정 순서). 공정/품목 키워드로 매칭 */
-const ORDER_CATEGORIES: { label: string; keywords: string[] }[] = [
-  { label: "목재발주", keywords: ["목재"] },
+const ORDER_CATEGORIES: { label: string; keywords: string[]; shopLines?: string[] }[] = [
+  { label: "목재발주", keywords: ["목재"], shopLines: ["목재"] },
   { label: "중문발주", keywords: ["중문"] },
-  { label: "조명", keywords: ["조명", "전기조명"] },
-  { label: "전기부자재 발주", keywords: ["전기"] },
-  { label: "타일(화장실용품)발주", keywords: ["타일", "도기", "화장실"] },
-  { label: "목공방재발주", keywords: ["목공", "목공방재"] },
-  { label: "도배발주", keywords: ["도배"] },
-  { label: "바닥재발주", keywords: ["마루", "바닥", "바닥재"] },
-  { label: "필름발주", keywords: ["필름"] },
+  { label: "조명", keywords: ["조명", "전기조명"], shopLines: ["조명"] },
+  { label: "전기부자재 발주", keywords: ["전기"], shopLines: ["전기"] },
+  { label: "타일(화장실용품)발주", keywords: ["타일", "도기", "화장실"], shopLines: ["타일"] },
+  { label: "목공방재발주", keywords: ["목공", "목공방재"], shopLines: ["목재"] },
+  { label: "도배발주", keywords: ["도배"], shopLines: ["도배"] },
+  { label: "바닥재발주", keywords: ["마루", "바닥", "바닥재"], shopLines: ["마루", "장판"] },
+  { label: "필름발주", keywords: ["필름"], shopLines: ["필름"] },
   { label: "싱크가구발주", keywords: ["싱크", "싱크대"] },
 ];
 
@@ -94,6 +94,17 @@ type AddedOrderRow = {
   qty: string;
   materialUnitPrice: string;
   note: string;
+};
+
+type ShopProduct = {
+  id: number;
+  sku: string;
+  name: string;
+  shopLine?: string;
+  category?: string;
+  spec?: string;
+  productUrl?: string;
+  isActive?: boolean;
 };
 
 function createEmptyAddedRow(): AddedOrderRow {
@@ -146,6 +157,10 @@ export default function MaterialOrderPage() {
     ...ORDER_CATEGORIES.map((c) => c.label),
     "기타",
   ]);
+  /** 비밀몰 상품 목록(품목별 링크 선택용) */
+  const [shopProducts, setShopProducts] = useState<ShopProduct[]>([]);
+  /** 행별 선택된 비밀몰 SKU */
+  const [shopSkuByRowKey, setShopSkuByRowKey] = useState<Record<string, string>>({});
   /** 방향키로 발주 테이블 셀 이동 (견적서와 동일). 같은 열에서 위/아래, 같은 행에서 좌/우 */
   const handleOrderTableKeyDown = useCallback((e: React.KeyboardEvent) => {
     const target = e.target as HTMLElement;
@@ -201,15 +216,18 @@ export default function MaterialOrderPage() {
       fetch("/api/company/pics").then((r) => r.json()),
       fetch("/api/company/me").then((r) => r.json()),
       fetch("/api/company/order-default-items").then((r) => r.json()),
-    ]).then(([estRes, consRes, picsRes, meRes, defaultRes]) => {
+      fetch("/api/company/shop-products?limit=500").then((r) => (r.ok ? r.json() : { products: [] })),
+    ]).then(([estRes, consRes, picsRes, meRes, defaultRes, shopRes]) => {
       const est = estRes.status === "fulfilled" ? estRes.value : [];
       const cons = consRes.status === "fulfilled" ? consRes.value : [];
       const pics = picsRes.status === "fulfilled" ? picsRes.value : [];
       const me = meRes.status === "fulfilled" ? meRes.value : null;
       const defaultData = defaultRes.status === "fulfilled" ? defaultRes.value : { itemsByLabel: {} };
+      const shopData = shopRes.status === "fulfilled" ? shopRes.value : { products: [] };
       setEstimates(Array.isArray(est) ? est : []);
       setConsultations(Array.isArray(cons) ? cons : []);
       setPicList(Array.isArray(pics) ? pics : []);
+      setShopProducts(Array.isArray((shopData as { products?: unknown[] }).products) ? ((shopData as { products: ShopProduct[] }).products) : []);
       const company = (me as { company?: { name?: string; code?: string } } | null)?.company;
       setCompanyName(company?.name ?? company?.code ?? "");
       if (defaultData?.itemsByLabel && typeof defaultData.itemsByLabel === "object" && Object.keys(defaultData.itemsByLabel).length > 0) {
@@ -328,6 +346,35 @@ export default function MaterialOrderPage() {
     () => visibleOrderLabels.map((label) => ({ label, items: [] as EstimateItem[] })),
     [visibleOrderLabels]
   );
+
+  const getShopCandidates = useCallback((orderLabel: string, itemName: string, spec: string) => {
+    const catEntry = ORDER_CATEGORIES.find((c) => c.label === orderLabel);
+    const allowedLines = catEntry?.shopLines;
+    const name = itemName.trim().toLowerCase();
+    const specText = spec.trim().toLowerCase();
+    const scored = shopProducts
+      .filter((p) => p.isActive !== false)
+      .filter((p) => {
+        const sl = String(p.shopLine ?? "").trim();
+        if (!sl) return true;
+        if (!allowedLines || allowedLines.length === 0) return true;
+        return allowedLines.includes(sl);
+      })
+      .map((p) => {
+        let score = 0;
+        const n = String(p.name || "").toLowerCase();
+        const c = String(p.category || "").toLowerCase();
+        const s = String(p.spec || "").toLowerCase();
+        if (name && n.includes(name)) score += 3;
+        if (name && c.includes(name)) score += 2;
+        if (specText && s.includes(specText)) score += 2;
+        if (specText && n.includes(specText)) score += 1;
+        return { p, score };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score || String(a.p.name).localeCompare(String(b.p.name), "ko"));
+    return scored.slice(0, 12).map((x) => x.p);
+  }, [shopProducts]);
 
   /** 모든 발주 유형에 기본 행 1개씩 추가 (목재발주 폼과 동일) */
   useEffect(() => {
@@ -460,6 +507,29 @@ export default function MaterialOrderPage() {
       })
       .catch(() => alert("우리회사 템플릿 불러오기에 실패했습니다."))
       .finally(() => setTemplateLoadType(null));
+  }, []);
+
+  /** 템플릿 불러오기: 빈 서식(기본 발주 유형만, 행은 비움) */
+  const loadEmptyTemplate = useCallback(() => {
+    const labels = [...ORDER_CATEGORIES.map((c) => c.label), "기타"];
+    const rows: Record<string, AddedOrderRow[]> = {};
+    labels.forEach((label) => {
+      rows[label] = [createEmptyAddedRow()];
+    });
+    setVisibleOrderLabels(labels);
+    setAddedRowsByLabel(rows);
+    setDeliveryDateByLabel(Object.fromEntries(labels.map((l) => [l, ""])));
+    setCollapsedByLabel({});
+    setPreviewLabel(null);
+    setMemoByKey((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) {
+        if (k.startsWith("added-")) delete next[k];
+      }
+      return next;
+    });
+    setShopSkuByRowKey({});
+    alert("빈 템플릿을 불러왔습니다.");
   }, []);
 
   const totalMaterialAmount = useMemo(() => {
@@ -903,6 +973,15 @@ export default function MaterialOrderPage() {
                     >
                       {templateLoadType === "company" ? "불러오는 중…" : "우리회사 템플릿"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={loadEmptyTemplate}
+                      disabled={templateLoadType !== null}
+                      className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                      title="마스터/우리회사에 저장된 품목 없이, 기본 발주 유형만 두고 빈 행으로 시작합니다."
+                    >
+                      빈 템플릿
+                    </button>
                     <span className="text-gray-400">|</span>
                     <button
                       type="button"
@@ -1019,12 +1098,15 @@ export default function MaterialOrderPage() {
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={{ border: "1px solid #374151" }}>단가</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={{ border: "1px solid #374151" }}>자재 금액</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[140px]" style={{ border: "1px solid #374151" }}>비고</th>
+                                <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[220px]" style={{ border: "1px solid #374151" }}>비밀몰 링크</th>
                                 <th className="w-14 border border-gray-500 px-1 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>삭제</th>
                               </tr>
                             </thead>
                             <tbody>
                               {catItems.map((it, idx) => {
                                 const rowKey = selectedEstimateId != null ? `${selectedEstimateId}-${label}-${idx}` : "";
+                                const candidates = getShopCandidates(label, String(it.category ?? ""), String(it.spec ?? ""));
+                                const selectedSku = shopSkuByRowKey[rowKey] ?? (candidates[0]?.sku ?? "");
                                 return (
                                   <tr key={`est-${idx}`} className="bg-white hover:bg-gray-50/80">
                                     <td className="border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
@@ -1052,12 +1134,38 @@ export default function MaterialOrderPage() {
                                         className="h-full min-h-[28px] w-full min-w-[120px] border-0 bg-transparent px-2 py-1 text-sm text-gray-700 focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
+                                    <td className="border border-gray-300 px-2 py-1">
+                                      <div className="flex items-center gap-1">
+                                        <select
+                                          value={selectedSku}
+                                          onChange={(e) => setShopSkuByRowKey((prev) => ({ ...prev, [rowKey]: e.target.value }))}
+                                          className="min-w-0 flex-1 rounded border border-gray-300 px-1 py-1 text-xs"
+                                        >
+                                          <option value="">선택 없음</option>
+                                          {candidates.map((p) => (
+                                            <option key={p.sku} value={p.sku}>
+                                              {p.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() => window.open(`/shop-secret/products/${encodeURIComponent(selectedSku)}`, "_blank")}
+                                          disabled={!selectedSku}
+                                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+                                        >
+                                          이동
+                                        </button>
+                                      </div>
+                                    </td>
                                     <td className="border border-gray-300 px-1 py-1" />
                                   </tr>
                                 );
                               })}
                               {(addedRowsByLabel[label] ?? []).map((row, idx) => {
                                 const rowKey = `added-${label}-${row.id}`;
+                                const candidates = getShopCandidates(label, row.category, row.spec);
+                                const selectedSku = shopSkuByRowKey[rowKey] ?? (candidates[0]?.sku ?? "");
                                 const qtyNum = Number(row.qty) || 0;
                                 const unitNum = Number(row.materialUnitPrice) || 0;
                                 const amount = qtyNum * unitNum;
@@ -1179,6 +1287,30 @@ export default function MaterialOrderPage() {
                                         onKeyDown={handleOrderTableKeyDown}
                                         className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
+                                    </td>
+                                    <td className="border border-gray-300 px-2 py-1">
+                                      <div className="flex items-center gap-1">
+                                        <select
+                                          value={selectedSku}
+                                          onChange={(e) => setShopSkuByRowKey((prev) => ({ ...prev, [rowKey]: e.target.value }))}
+                                          className="min-w-0 flex-1 rounded border border-gray-300 px-1 py-1 text-xs"
+                                        >
+                                          <option value="">선택 없음</option>
+                                          {candidates.map((p) => (
+                                            <option key={p.sku} value={p.sku}>
+                                              {p.name}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          onClick={() => window.open(`/shop-secret/products/${encodeURIComponent(selectedSku)}`, "_blank")}
+                                          disabled={!selectedSku}
+                                          className="rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 disabled:opacity-50"
+                                        >
+                                          이동
+                                        </button>
+                                      </div>
                                     </td>
                                     <td className="border border-gray-300 px-1 py-1">
                                       <button

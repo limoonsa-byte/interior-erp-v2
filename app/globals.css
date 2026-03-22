@@ -60,8 +60,8 @@ body {
   .no-print {
     display: none !important;
   }
-  /* 인쇄/PDF 저장 시 사진(이미지) 제외 — 계약서 인쇄용 이미지는 예외 */
-  img:not(.contract-print-stamp):not(.contract-print-stamp-sig):not(.contract-print-doc-img):not(.contract-print-signature-overlay),
+  /* 인쇄/PDF 저장 시 사진(이미지) 제외 — 계약서·현장 자재리스트 미리보기 등 예외 */
+  img:not(.contract-print-stamp):not(.contract-print-stamp-sig):not(.contract-print-doc-img):not(.contract-print-signature-overlay):not(.material-list-print-img),
   picture {
     display: none !important;
   }
@@ -1792,5 +1792,138 @@ body {
   }
   body.settlement-print #settlement-print-root tr {
     page-break-inside: avoid;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/* 현장용 자재리스트 인쇄: 미리보기 열릴 때 body에 material-list-print-open 추가 */
+/* (전역 img 숨김·@page 충돌·포털 내 <style> 무시 등으로 미리보기가 하얗게 나오는 경우 방지) */
+@page material-list-landscape {
+  size: 297mm 210mm;
+  margin: 6mm;
+}
+
+@media print {
+  html:has(body.material-list-print-open),
+  body.material-list-print-open {
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.material-list-print-open #material-list-print-area {
+    page: material-list-landscape;
+  }
+  /* display:none으로 형제를 끄면 일부 브라우저 PDF 미리보기에서 내용 전체가 비는 경우 있음 → sr-only 방식 */
+  body.material-list-print-open > *:not(#material-list-print-area) {
+    visibility: hidden !important;
+    position: absolute !important;
+    clip: rect(0, 0, 0, 0) !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    border: 0 !important;
+    pointer-events: none !important;
+  }
+  body.material-list-print-open #material-list-print-area,
+  body.material-list-print-open #material-list-print-area * {
+    visibility: visible !important;
+  }
+  body.material-list-print-open #material-list-print-area {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    clip: auto !important;
+  }
+  body.material-list-print-open #material-list-print-area .no-print {
+    display: none !important;
+  }
+  body.material-list-print-open #material-list-print-area .print-content {
+    max-width: 100% !important;
+    padding: 4mm 5mm !important;
+    box-sizing: border-box !important;
+  }
+  body.material-list-print-open #material-list-print-area h1 {
+    font-size: 14pt !important;
+    margin: 0 0 2mm 0 !important;
+    color: #000 !important;
+  }
+  body.material-list-print-open #material-list-print-area .print-content > p {
+    font-size: 9pt !important;
+    margin: 0 0 4mm 0 !important;
+    color: #000 !important;
+  }
+  body.material-list-print-open #material-list-print-area .material-list-print-table {
+    table-layout: fixed !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 7.5pt !important;
+    line-height: 1.25 !important;
+    color: #000 !important;
+  }
+  body.material-list-print-open #material-list-print-area .material-list-print-table th,
+  body.material-list-print-open #material-list-print-area .material-list-print-table td {
+    min-width: 0 !important;
+    padding: 2px 3px !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    vertical-align: top !important;
+    box-sizing: border-box !important;
+    color: #000 !important;
+  }
+  body.material-list-print-open #material-list-print-area .material-list-print-table th {
+    font-weight: 700 !important;
+  }
+  body.material-list-print-open #material-list-print-area .material-list-print-table img.material-list-print-img {
+    display: block !important;
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: 22mm !important;
+    margin: 0 auto !important;
+    object-fit: contain !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.material-list-print-open #material-list-print-area thead {
+    display: table-header-group !important;
+  }
+  body.material-list-print-open #material-list-print-area tr {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+  body.material-list-print-open #material-list-print-area h2 {
+    font-size: 10pt !important;
+    page-break-after: avoid !important;
+    margin: 3mm 0 2mm 0 !important;
+    color: #000 !important;
+  }
+}
+
+@media screen {
+  #material-list-print-area .print-content {
+    max-width: 100%;
+    overflow-x: auto;
+    box-sizing: border-box;
+  }
+  #material-list-print-area .material-list-print-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+  }
+  #material-list-print-area .material-list-print-table th,
+  #material-list-print-area .material-list-print-table td {
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 }

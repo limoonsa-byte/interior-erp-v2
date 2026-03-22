@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
@@ -637,6 +638,39 @@ export default function MasterAdminPage() {
           시스템 전역 설정입니다. 기본 품목·자재 발주·기본 견적 템플릿을 여기서 등록하면 모든 회사가 사용할 수 있습니다.
         </p>
       </div>
+
+      {/* 업자들의 비밀창고 */}
+      <section className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
+        <h2 className="mb-2 text-base font-semibold text-gray-900">업자들의 비밀창고</h2>
+        <p className="mb-3 text-sm text-gray-600">
+          비밀 링크 또는 회사 로그인 세션으로 고객용 목록·상세를 볼 수 있습니다. 상품 등록·엑셀 반영·비밀 링크 발급은 상품관리에서 합니다.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/shop-secret"
+            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+          >
+            고객용 상품 목록
+          </Link>
+          <Link
+            href="/shop-secret/about"
+            className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+          >
+            소개 페이지
+          </Link>
+          <Link
+            href="/shop-secret/admin/products"
+            className="inline-flex items-center rounded-lg border border-amber-700/40 bg-white px-4 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-50"
+          >
+            상품관리 (등록·엑셀·링크 발급) →
+          </Link>
+        </div>
+        <p className="mt-3 text-xs text-gray-500">
+          경로: <code className="rounded bg-white/80 px-1">/shop-secret</code> ·{" "}
+          <code className="rounded bg-white/80 px-1">/shop-secret/about</code> ·{" "}
+          <code className="rounded bg-white/80 px-1">/shop-secret/admin/products</code>
+        </p>
+      </section>
 
       {/* 마스터 메일(OAuth) */}
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

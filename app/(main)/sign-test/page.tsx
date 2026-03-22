@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
 import type { SignedContractSummaryContract } from "@/components/contract/SignedContractSummary";
 
@@ -86,6 +87,8 @@ async function mergePdf(summaryImage: string, documentArrayBuffer: ArrayBuffer |
 }
 
 export default function SignTestPage() {
+  const router = useRouter();
+  const [masterOk, setMasterOk] = useState<boolean | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [selectedId, setSelectedId] = useState<number | "">("");
   const [email, setEmail] = useState("");
@@ -95,6 +98,17 @@ export default function SignTestPage() {
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   useEffect(() => {
+    fetch("/api/company/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.company?.isMaster) setMasterOk(true);
+        else router.replace("/consulting");
+      })
+      .catch(() => router.replace("/consulting"));
+  }, [router]);
+
+  useEffect(() => {
+    if (masterOk !== true) return;
     fetch("/api/contracts")
       .then((res) => res.json())
       .then((list: Contract[]) => {
@@ -104,7 +118,7 @@ export default function SignTestPage() {
       })
       .catch(() => setContracts([]))
       .finally(() => setLoading(false));
-  }, [selectedId]);
+  }, [selectedId, masterOk]);
 
   const openPreview = async () => {
     if (!selectedId) {
@@ -171,6 +185,14 @@ export default function SignTestPage() {
       setSending(false);
     }
   };
+
+  if (masterOk !== true) {
+    return (
+      <div className="p-6">
+        <p className="text-gray-600">권한 확인 중...</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
