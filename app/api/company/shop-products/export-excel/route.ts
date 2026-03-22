@@ -75,8 +75,9 @@ export async function GET(request: Request) {
     }
 
     const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const body = new Uint8Array(buf);
     const name = templateOnly ? `비밀몰_상품_양식_${filenameDate()}.xlsx` : `비밀몰_상품_목록_${filenameDate()}.xlsx`;
-    return new NextResponse(buf, {
+    return new NextResponse(body, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
