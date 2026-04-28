@@ -6,6 +6,7 @@ const SAVE_LOGIN_KEY = "erp_save_login";
 const SAVE_CODE_KEY = "erp_login_code";
 const SAVE_EMPLOYEE_KEY = "erp_login_employee";
 const SAVE_PASSWORD_KEY = "erp_login_password";
+const MOBILE_USER_AGENT_RE = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i;
 
 type SignupState = {
   name: string;
@@ -129,7 +130,8 @@ export default function LoginPage() {
         } catch (_) {}
       }
       // 쿠키는 서버에서 설정되므로 여기서는 메인 페이지로 이동만 수행
-      window.location.href = "/consulting";
+      const isMobile = MOBILE_USER_AGENT_RE.test(window.navigator.userAgent || "");
+      window.location.href = isMobile ? "/mobile/consulting" : "/consulting";
     } catch {
       alert("서버 오류가 발생했습니다.");
     } finally {

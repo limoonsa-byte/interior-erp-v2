@@ -12,6 +12,7 @@ import {
   Wallet,
   Calendar,
   ClipboardList,
+  CreditCard,
   BarChart3,
   Settings,
   Shield,
@@ -33,6 +34,7 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/material-order", label: "자재 발주", icon: Package },
   { href: "/material-list", label: "현장용 자재리스트", icon: ListChecks },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
+  { href: "/payment", label: "결제 승인 관리", icon: CreditCard },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/chat", label: "채팅", icon: MessageCircle },
@@ -91,7 +93,7 @@ export function Sidebar() {
             type="button"
             onClick={() => {
               document.cookie =
-                "company=; Max-Age=0; path=/; SameSite=Lax; Secure";
+                "company=; Max-Age=0; path=/; SameSite=Lax";
               window.location.href = "/login";
             }}
             className="flex flex-col items-start text-left"

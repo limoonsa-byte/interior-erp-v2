@@ -3,6 +3,7 @@ import { SidebarProvider } from "@/components/layout/SidebarContext";
 import { RightPanelProvider } from "@/components/layout/RightPanelContext";
 import { ProgressPanel } from "@/components/layout/ProgressPanel";
 import { MainContent } from "@/components/layout/MainContent";
+import { MobileAutoRedirect } from "@/components/layout/MobileAutoRedirect";
 
 export default function MainLayout({
   children,
@@ -13,6 +14,7 @@ export default function MainLayout({
     <SidebarProvider>
       <RightPanelProvider>
         <div className="min-h-screen bg-gray-50">
+          <MobileAutoRedirect />
           <Sidebar />
           <MainContent>{children}</MainContent>
           <ProgressPanel />

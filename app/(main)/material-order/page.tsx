@@ -120,7 +120,7 @@ function createEmptyAddedRow(): AddedOrderRow {
   };
 }
 
-export default function MaterialOrderPage() {
+export function MaterialOrderPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [picList, setPicList] = useState<PicItem[]>([]);
@@ -1091,8 +1091,8 @@ export default function MaterialOrderPage() {
                           >
                             <thead>
                               <tr className="bg-gray-200 text-gray-800">
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
+                                <th className="w-56 border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
+                                <th className="w-48 border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium w-12" style={{ border: "1px solid #374151" }}>단위</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-16" style={{ border: "1px solid #374151" }}>수량</th>
                                 <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={{ border: "1px solid #374151" }}>단가</th>
@@ -1109,8 +1109,8 @@ export default function MaterialOrderPage() {
                                 const selectedSku = shopSkuByRowKey[rowKey] ?? (candidates[0]?.sku ?? "");
                                 return (
                                   <tr key={`est-${idx}`} className="bg-white hover:bg-gray-50/80">
-                                    <td className="border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
-                                    <td className="border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
+                                    <td className="min-w-[220px] border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
+                                    <td className="min-w-[180px] border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
                                     <td className="border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
                                     <td className="border border-gray-300 px-2 py-1 text-right text-gray-800">{formatNum(Number(it.qty) || 0)}</td>
                                     <td className="border border-gray-300 px-2 py-1 text-right text-gray-800">
@@ -1188,7 +1188,7 @@ export default function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={0}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full min-w-[220px] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                         title="마스터관리에서 등록한 품목 목록에서 선택하거나 직접 입력할 수 있습니다."
                                       />
                                     </td>
@@ -1208,7 +1208,7 @@ export default function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={1}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full min-w-[180px] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
                                     <td className="border border-gray-300 p-0">
@@ -1588,3 +1588,5 @@ export default function MaterialOrderPage() {
     </div>
   );
 }
+
+export default MaterialOrderPage;
