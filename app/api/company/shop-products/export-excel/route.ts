@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCompanyIdFromLoginCookie, requireSecretSession } from "@/lib/shop-secret-auth";
+import { ensureShopProductsHitColumn } from "@/lib/ensure-shop-products-hit";
 import { SHOP_PRODUCT_KO_HEADERS } from "@/lib/shop-product-excel";
 
 const MAX_ROWS = 10_000;
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   const templateOnly = url.searchParams.get("template") === "1";
 
   try {
+    await ensureShopProductsHitColumn();
     const wb = XLSX.utils.book_new();
 
     if (templateOnly) {
@@ -28,10 +30,10 @@ export async function GET(request: Request) {
       XLSX.utils.book_append_sheet(wb, ws, "상품");
     } else {
       const result = await sql`
-        SELECT sku, name, shop_line, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, is_active
+        SELECT sku, name, shop_line, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, is_active, COALESCE(is_hit, false) AS is_hit
         FROM shop_products
         WHERE company_id = ${companyId}
-        ORDER BY is_active DESC, updated_at DESC, id DESC
+        ORDER BY is_hit DESC, is_active DESC, updated_at DESC, id DESC
         LIMIT ${MAX_ROWS}
       `;
       const rows = result.rows as {
@@ -48,6 +50,7 @@ export async function GET(request: Request) {
         image_url: string | null;
         product_url: string | null;
         is_active: boolean;
+        is_hit: boolean;
       }[];
 
       const aoa: (string | number)[][] = [Array.from(SHOP_PRODUCT_KO_HEADERS)];
@@ -68,6 +71,7 @@ export async function GET(request: Request) {
           r.image_url ?? "",
           r.product_url ?? "",
           r.is_active ? "Y" : "N",
+          r.is_hit ? "Y" : "N",
         ]);
       }
       const ws = XLSX.utils.aoa_to_sheet(aoa);

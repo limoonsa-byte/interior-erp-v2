@@ -70,6 +70,10 @@ export async function GET() {
           String((row as { schedule_list_color?: string }).schedule_list_color).trim() !== ""
             ? String((row as { schedule_list_color?: string }).schedule_list_color).trim()
             : undefined,
+        scheduleMemo:
+          (row as { schedule_memo?: string }).schedule_memo != null
+            ? String((row as { schedule_memo?: string }).schedule_memo)
+            : undefined,
       };
     });
 

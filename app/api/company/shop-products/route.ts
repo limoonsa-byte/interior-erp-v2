@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { getCompanyIdFromLoginCookie, requireSecretSession } from "@/lib/shop-secret-auth";
+import { ensureShopProductsHitColumn } from "@/lib/ensure-shop-products-hit";
 import { ensureShopTaxonomySeeded } from "@/lib/shop-taxonomy-seed";
 
 type ShopProductRow = {
@@ -18,6 +19,7 @@ type ShopProductRow = {
   product_url: string | null;
   shop_line: string | null;
   is_active: boolean;
+  is_hit: boolean;
   updated_at: string | Date;
 };
 
@@ -40,7 +42,7 @@ export async function GET(request: Request) {
     const likeQ = hasQ ? `%${q}%` : "%";
 
     const result = await sql`
-      SELECT id, sku, name, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, shop_line, is_active, updated_at,
+      SELECT id, sku, name, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, shop_line, is_active, COALESCE(is_hit, false) AS is_hit, updated_at,
         (length(trim(COALESCE(image_data, ''))) > 0) AS has_image_blob
       FROM shop_products
       WHERE company_id = ${companyId}
@@ -48,7 +50,7 @@ export async function GET(request: Request) {
         AND (${hasLine} = false OR shop_line = ${line})
         AND (${hasCat} = false OR category = ${category})
         AND (name ILIKE ${likeQ} OR sku ILIKE ${likeQ} OR COALESCE(spec,'') ILIKE ${likeQ})
-      ORDER BY is_active DESC, updated_at DESC, id DESC
+      ORDER BY is_hit DESC, is_active DESC, updated_at DESC, id DESC
       LIMIT ${limit}
     `;
 
@@ -74,6 +76,7 @@ export async function GET(request: Request) {
         productUrl: r.product_url ?? "",
         shopLine: r.shop_line ?? "",
         isActive: Boolean(r.is_active),
+        isHit: Boolean(r.is_hit),
         updatedAt: r.updated_at != null ? String(r.updated_at) : "",
       };
     });
@@ -109,6 +112,7 @@ export async function POST(request: Request) {
     const session = await requireSecretSession();
     const companyId = session?.companyId ?? (await getCompanyIdFromLoginCookie());
     if (!companyId) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
+    await ensureShopProductsHitColumn();
     const body = (await request.json().catch(() => ({}))) as JsonBody;
     const sku = String(body.sku ?? "").trim();
     const name = String(body.name ?? "").trim();
@@ -133,6 +137,7 @@ export async function POST(request: Request) {
     const imageUrl = String(body.imageUrl ?? "").trim() || null;
     const productUrl = String(body.productUrl ?? "").trim() || null;
     const isActive = !(body.isActive === false || body.isActive === "false" || body.isActive === 0);
+    const isHit = body.isHit === true || body.isHit === "true" || body.isHit === 1;
     const dup = await sql`
       SELECT 1 FROM shop_products WHERE company_id = ${companyId} AND sku = ${sku} LIMIT 1
     `;
@@ -142,11 +147,11 @@ export async function POST(request: Request) {
     await sql`
       INSERT INTO shop_products (
         company_id, sku, name, shop_line, category, brand, spec, unit,
-        price, sale_price, stock_status, image_url, product_url, is_active, updated_at
+        price, sale_price, stock_status, image_url, product_url, is_active, is_hit, updated_at
       )
       VALUES (
         ${companyId}, ${sku}, ${name}, ${shopLine}, ${category}, ${brand}, ${spec}, ${unit},
-        ${price}, ${salePrice}, ${stockStatus}, ${imageUrl}, ${productUrl}, ${isActive}, NOW()
+        ${price}, ${salePrice}, ${stockStatus}, ${imageUrl}, ${productUrl}, ${isActive}, ${isHit}, NOW()
       )
     `;
     return NextResponse.json({ ok: true }, { status: 201 });

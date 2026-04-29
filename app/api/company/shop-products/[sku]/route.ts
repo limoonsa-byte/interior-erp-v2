@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
+import { ensureShopProductsHitColumn } from "@/lib/ensure-shop-products-hit";
 import { getCompanyIdFromLoginCookie, requireSecretSession } from "@/lib/shop-secret-auth";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ sku: string }> }) {
@@ -10,8 +11,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
     const { sku } = await params;
     const cleanSku = decodeURIComponent(String(sku || "")).trim();
     if (!cleanSku) return NextResponse.json({ error: "sku 누락" }, { status: 400 });
+    await ensureShopProductsHitColumn();
     const result = await sql`
-      SELECT id, sku, name, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, shop_line, is_active, updated_at,
+      SELECT id, sku, name, category, brand, spec, unit, price, sale_price, stock_status, image_url, product_url, shop_line, is_active, COALESCE(is_hit, false) AS is_hit, updated_at,
         (length(trim(COALESCE(image_data, ''))) > 0) AS has_image_blob
       FROM shop_products
       WHERE company_id = ${companyId}
@@ -36,6 +38,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
       product_url: string | null;
       shop_line: string | null;
       is_active: boolean;
+      is_hit: boolean;
       updated_at: string | Date;
       has_image_blob?: boolean;
     };
@@ -60,6 +63,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ sku
           productUrl: r.product_url ?? "",
           shopLine: r.shop_line ?? "",
           isActive: Boolean(r.is_active),
+          isHit: Boolean(r.is_hit),
           updatedAt: String(r.updated_at ?? ""),
         },
       },
@@ -86,6 +90,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sk
     const { sku } = await params;
     const cleanSku = decodeURIComponent(String(sku || "")).trim();
     if (!cleanSku) return NextResponse.json({ error: "sku 누락" }, { status: 400 });
+    await ensureShopProductsHitColumn();
     const body = (await request.json().catch(() => ({}))) as JsonBody;
     const name = String(body.name ?? "").trim();
     const price = parsePrice(body.price);
@@ -108,6 +113,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sk
     const imageUrl = String(body.imageUrl ?? "").trim() || null;
     const productUrl = String(body.productUrl ?? "").trim() || null;
     const isActive = !(body.isActive === false || body.isActive === "false" || body.isActive === 0);
+    const isHit = body.isHit === true || body.isHit === "true" || body.isHit === 1;
     const expectedStoredImageUrl = `/api/company/shop-product-image?sku=${encodeURIComponent(cleanSku)}`;
     const keepStoredImage = imageUrl === expectedStoredImageUrl;
     const upd = await sql`
@@ -126,6 +132,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ sk
         image_mime = CASE WHEN ${keepStoredImage} THEN image_mime ELSE NULL END,
         product_url = ${productUrl},
         is_active = ${isActive},
+        is_hit = ${isHit},
         updated_at = NOW()
       WHERE company_id = ${companyId} AND sku = ${cleanSku}
       RETURNING id

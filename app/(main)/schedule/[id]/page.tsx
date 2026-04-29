@@ -70,6 +70,8 @@ type Consultation = {
   constructionStartAt?: string;
   moveInAt?: string;
   schedulePhases?: SchedulePhase[];
+  /** 공사 일정 화면 메모 — 인쇄/미리보기에 포함 */
+  scheduleMemo?: string;
 };
 
 type Estimate = {
@@ -277,6 +279,7 @@ export default function ScheduleDetailPage() {
             const hasColor = p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color);
             return { name: p.name || "", start: toDateValue(p.start), end: toDateValue(p.end), color: hasColor ? p.color : PHASE_COLORS[idx % PHASE_COLORS.length] };
           }) : []);
+          setScheduleMemo(typeof c.scheduleMemo === "string" ? c.scheduleMemo : "");
           if (startVal) setCalendarMonth(startVal.slice(0, 7));
         }
         const estimates = Array.isArray(est) ? est : [];
@@ -298,6 +301,7 @@ export default function ScheduleDetailPage() {
           constructionStartAt: constructionStartAt || null,
           moveInAt: moveInAt || null,
           schedulePhases: phases.filter((p) => p.name.trim() || p.start || p.end).map((p) => ({ ...p, color: p.color || undefined })),
+          scheduleMemo: scheduleMemo.trim() || "",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -312,6 +316,7 @@ export default function ScheduleDetailPage() {
               constructionStartAt: constructionStartAt || undefined,
               moveInAt: moveInAt || undefined,
               schedulePhases: phases,
+              scheduleMemo: scheduleMemo.trim() || undefined,
             }
           : null
       );
@@ -326,6 +331,7 @@ export default function ScheduleDetailPage() {
   const addPhase = () => {
     setPhases((prev) => [...prev, { name: "", start: "", end: "", color: PHASE_COLORS[prev.length % PHASE_COLORS.length] }]);
   };
+  const [scheduleMemo, setScheduleMemo] = useState("");
   const [openColorForIndex, setOpenColorForIndex] = useState<number | null>(null);
   /** 색상 팔레트 위치(버튼 기준) - fixed로 표시해 스크롤/overflow에 묻히지 않게 함 */
   const [openColorAnchorRect, setOpenColorAnchorRect] = useState<{ top: number; left: number; bottom: number } | null>(null);
@@ -505,6 +511,22 @@ export default function ScheduleDetailPage() {
     return { kind: "month" as const, month: m };
   }, [phases, constructionStartAt, calendarMonth]);
 
+  /** 인쇄/미리보기용 페이지 목록 (헤더+첫 쪽 / 이후 쪽 분리 레이아웃) */
+  const schedulePrintChunks = useMemo(() => {
+    if (previewPrintData.kind === "span") {
+      return {
+        kind: "span" as const,
+        title: previewPrintData.title,
+        pages: chunkDaysForPrint(previewPrintData.days),
+      };
+    }
+    const mDays = trimPreviewCalendarWeeks(
+      getCalendarDaysForMonth(previewPrintData.month),
+      (d) => phasesOnDay(d).length > 0
+    );
+    return { kind: "month" as const, month: previewPrintData.month, pages: chunkDaysForPrint(mDays) };
+  }, [previewPrintData, phases]);
+
   const handlePrint = () => {
     printScheduleCalendarContent(document.getElementById("schedule-detail-print-content"));
   };
@@ -528,6 +550,205 @@ export default function ScheduleDetailPage() {
     );
   }
 
+  const schedulePrintHeader = (
+    <>
+      <p className="text-center text-sm text-gray-600 mb-0.5">
+        {estimateTitle} · {consultation.customerName}
+      </p>
+      {consultation.address && <p className="text-center text-sm text-gray-500 mb-2">{consultation.address}</p>}
+      {!consultation.address && <div className="schedule-print-memo-spacer" />}
+      {scheduleMemo.trim() ? (
+        <div className="schedule-print-memo rounded border border-gray-200 bg-gray-50 text-gray-800">
+          {scheduleMemo.trim()}
+        </div>
+      ) : (
+        <div className="schedule-print-memo-spacer" />
+      )}
+    </>
+  );
+
+  type SpanDay = { date: string; dayNum: number; muted: boolean };
+  type MonthDay = { date: string; isCurrentMonth: boolean; dayNum: number };
+
+  const renderSchedulePrintPageBlock = (
+    chunk: SpanDay[] | MonthDay[],
+    pageIdx: number,
+    totalP: number,
+    follow: boolean
+  ) => {
+    const padded = padChunkToWeekRows(chunk as (SpanDay | MonthDay)[]);
+    const pageBreakStyle =
+      pageIdx < totalP - 1 ? ({ pageBreakAfter: "always" as const, breakAfter: "page" as const }) : undefined;
+
+    const title =
+      schedulePrintChunks.kind === "span" ? (
+        <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
+          {schedulePrintChunks.title}
+          {totalP > 1 && (
+            <span className="mt-0.5 block text-sm font-normal text-gray-600">
+              {pageIdx + 1} / {totalP}쪽 (한쪽당 {SCHEDULE_PRINT_WEEK_COLS}×{SCHEDULE_PRINT_WEEKS_PER_PAGE}칸)
+            </span>
+          )}
+        </h2>
+      ) : (
+        <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
+          {schedulePrintChunks.month.slice(0, 4)}년 {Number(schedulePrintChunks.month.slice(5, 7))}월
+          {totalP > 1 && (
+            <span className="mt-0.5 block text-sm font-normal text-gray-600">
+              {pageIdx + 1} / {totalP}쪽
+            </span>
+          )}
+        </h2>
+      );
+
+    return (
+      <div
+        key={pageIdx}
+        className={`schedule-print-page-block mb-6${follow ? " schedule-print-page-follow" : ""}`}
+        style={pageBreakStyle}
+      >
+        {title}
+        <div className="schedule-print-calendar-frame rounded border border-gray-300 overflow-hidden flex flex-col min-h-0">
+          <div className="schedule-print-week-header grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-semibold shrink-0">
+            {WEEKDAYS.map((wd, i) => (
+              <div
+                key={wd}
+                className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}
+              >
+                {wd}
+              </div>
+            ))}
+          </div>
+          <div className="schedule-print-grid-body grid grid-cols-7 flex-1 min-h-0">
+            {padded.map((cell, ci) => {
+              if (cell == null) {
+                return (
+                  <div
+                    key={`p-${pageIdx}-${ci}`}
+                    className="schedule-print-day-pad min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
+                    aria-hidden
+                  />
+                );
+              }
+              if (schedulePrintChunks.kind === "span") {
+                const { date, dayNum, muted } = cell as SpanDay;
+                const onDay = phasesOnDay(date);
+                const inRange = isInConstructionRange(date);
+                const dow = new Date(date + "T12:00:00").getDay();
+                const hol = getHolidayName(date);
+                const isOff = dow === 0 || dow === 6 || !!hol;
+                const cellBg = muted ? "bg-gray-50/80" : isOff ? "bg-red-50/40" : inRange ? "bg-blue-50/40" : "";
+                const dayClr = muted
+                  ? "text-gray-400"
+                  : dow === 0 || !!hol
+                    ? "text-red-500 font-semibold"
+                    : dow === 6
+                      ? "text-blue-500 font-semibold"
+                      : "text-gray-800";
+                return (
+                  <div
+                    key={date}
+                    className={`schedule-print-day-cell schedule-print-day-cell-inner min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}
+                  >
+                    <div className={`text-right text-xs ${dayClr}`}>
+                      {dayNum}
+                      {hol && (
+                        <span className="schedule-print-holiday-label ml-1 text-[9px] text-red-400 font-normal">
+                          {hol}
+                        </span>
+                      )}
+                    </div>
+                    <div className="schedule-print-phase-stack mt-1 space-y-0.5 min-h-0">
+                      {onDay.map((p, pi) => {
+                        const bg =
+                          p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : "#93C5FD";
+                        const r = parseInt(bg.slice(1, 3), 16),
+                          g = parseInt(bg.slice(3, 5), 16),
+                          b = parseInt(bg.slice(5, 7), 16);
+                        const tc =
+                          (r * 299 + g * 587 + b * 114) / 1000 > 180 ? "text-gray-900" : "text-white";
+                        return (
+                          <div
+                            key={`${p.name}-${pi}`}
+                            className={`schedule-print-phase-pill rounded px-1.5 py-0.5 text-[11px] font-medium truncate ${tc}`}
+                            style={{ backgroundColor: bg }}
+                          >
+                            {p.name}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+              {
+                const { date, isCurrentMonth, dayNum } = cell as MonthDay;
+                const onDay = phasesOnDay(date);
+                const inRange = isInConstructionRange(date);
+                const dow = new Date(date + "T12:00:00").getDay();
+                const hol = getHolidayName(date);
+                const isOff = dow === 0 || dow === 6 || !!hol;
+                const cellBg = isOff
+                  ? "bg-red-50/40"
+                  : !isCurrentMonth
+                    ? "bg-gray-50"
+                    : inRange
+                      ? "bg-blue-50/40"
+                      : "";
+                const dayClr = !isCurrentMonth
+                  ? "text-gray-300"
+                  : dow === 0 || !!hol
+                    ? "text-red-500 font-semibold"
+                    : dow === 6
+                      ? "text-blue-500 font-semibold"
+                      : "text-gray-800";
+                return (
+                  <div
+                    key={date}
+                    className={`schedule-print-day-cell schedule-print-day-cell-inner min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}
+                  >
+                    <div className={`text-right text-xs ${dayClr}`}>
+                      {dayNum}
+                      {hol && isCurrentMonth && (
+                        <span className="schedule-print-holiday-label ml-1 text-[9px] text-red-400 font-normal">
+                          {hol}
+                        </span>
+                      )}
+                    </div>
+                    <div className="schedule-print-phase-stack mt-1 space-y-0.5 min-h-0">
+                      {onDay.map((p, pi) => {
+                        const bg =
+                          p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : "#93C5FD";
+                        const r = parseInt(bg.slice(1, 3), 16),
+                          g = parseInt(bg.slice(3, 5), 16),
+                          b = parseInt(bg.slice(5, 7), 16);
+                        const tc =
+                          (r * 299 + g * 587 + b * 114) / 1000 > 180 ? "text-gray-900" : "text-white";
+                        return (
+                          <div
+                            key={`${p.name}-${pi}`}
+                            className={`schedule-print-phase-pill rounded px-1.5 py-0.5 text-[11px] font-medium truncate ${tc}`}
+                            style={{ backgroundColor: bg }}
+                          >
+                            {p.name}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const printPages = schedulePrintChunks.pages;
+  const printFirst = printPages[0];
+  const printRest = printPages.slice(1);
+
   return (
     <div className="p-4 sm:p-6">
       <div className="mb-6 flex items-center justify-between no-print">
@@ -548,6 +769,15 @@ export default function ScheduleDetailPage() {
         {consultation.address && (
           <p className="text-sm text-gray-500 truncate">{consultation.address}</p>
         )}
+        <label className="mt-3 block text-xs font-medium text-gray-600">메모 (인쇄·미리보기에 포함)</label>
+        <textarea
+          value={scheduleMemo}
+          onChange={(e) => setScheduleMemo(e.target.value)}
+          rows={3}
+          maxLength={4000}
+          placeholder="현장 전달 사항 등"
+          className="mt-1 w-full resize-y rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 placeholder:text-gray-400"
+        />
       </div>
 
       {/* 캘린더 */}
@@ -892,7 +1122,10 @@ export default function ScheduleDetailPage() {
 
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8" onClick={() => setShowPreview(false)}>
-          <div className="w-full max-w-4xl my-4 rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="schedule-preview-viewport w-full max-w-6xl my-4 rounded-lg bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-lg border-b border-gray-200 bg-white px-6 py-4 no-print">
               <h2 className="text-lg font-semibold text-gray-900">일정 미리보기</h2>
               <div className="flex gap-2">
@@ -900,175 +1133,18 @@ export default function ScheduleDetailPage() {
                 <button type="button" onClick={() => setShowPreview(false)} className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">닫기</button>
               </div>
             </div>
-            <div id="schedule-detail-print-content" className="p-6">
-              <p className="text-center text-sm text-gray-600 mb-0.5">{estimateTitle} · {consultation.customerName}</p>
-              {consultation.address && <p className="text-center text-sm text-gray-500 mb-4">{consultation.address}</p>}
-              {!consultation.address && <div className="mb-4" />}
-              {previewPrintData.kind === "span" ? (
-                <>
-                  {chunkDaysForPrint(previewPrintData.days).map((chunk, pageIdx, pages) => {
-                    const padded = padChunkToWeekRows(chunk);
-                    const totalP = pages.length;
-                    return (
-                      <div
-                        key={pageIdx}
-                        className="mb-6"
-                        style={
-                          pageIdx < totalP - 1
-                            ? { pageBreakAfter: "always", breakAfter: "page" }
-                            : undefined
-                        }
-                      >
-                        <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
-                          {previewPrintData.title}
-                          {totalP > 1 && (
-                            <span className="mt-0.5 block text-sm font-normal text-gray-600">
-                              {pageIdx + 1} / {totalP}쪽 (한쪽당 {SCHEDULE_PRINT_WEEK_COLS}×{SCHEDULE_PRINT_WEEKS_PER_PAGE}칸)
-                            </span>
-                          )}
-                        </h2>
-                        <div className="rounded border border-gray-300 overflow-hidden">
-                          <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-semibold">
-                            {WEEKDAYS.map((wd, i) => (
-                              <div key={wd} className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}>{wd}</div>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-7">
-                            {padded.map((cell, ci) => {
-                              if (cell == null) {
-                                return (
-                                  <div
-                                    key={`pad-${pageIdx}-${ci}`}
-                                    className="min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
-                                    aria-hidden
-                                  />
-                                );
-                              }
-                              const { date, dayNum, muted } = cell;
-                              const onDay = phasesOnDay(date);
-                              const inRange = isInConstructionRange(date);
-                              const dow = new Date(date + "T12:00:00").getDay();
-                              const hol = getHolidayName(date);
-                              const isOff = dow === 0 || dow === 6 || !!hol;
-                              const cellBg = muted
-                                ? "bg-gray-50/80"
-                                : isOff
-                                  ? "bg-red-50/40"
-                                  : inRange
-                                    ? "bg-blue-50/40"
-                                    : "";
-                              const dayClr = muted
-                                ? "text-gray-400"
-                                : (dow === 0 || !!hol)
-                                  ? "text-red-500 font-semibold"
-                                  : dow === 6
-                                    ? "text-blue-500 font-semibold"
-                                    : "text-gray-800";
-                              return (
-                                <div key={date} className={`min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}>
-                                  <div className={`text-right text-xs ${dayClr}`}>
-                                    {dayNum}
-                                    {hol && <span className="ml-1 text-[9px] text-red-400 font-normal">{hol}</span>}
-                                  </div>
-                                  <div className="mt-1 space-y-0.5">
-                                    {onDay.map((p, pi) => {
-                                      const bg = p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : "#93C5FD";
-                                      const r = parseInt(bg.slice(1, 3), 16), g = parseInt(bg.slice(3, 5), 16), b = parseInt(bg.slice(5, 7), 16);
-                                      const tc = (r * 299 + g * 587 + b * 114) / 1000 > 180 ? "text-gray-900" : "text-white";
-                                      return <div key={`${p.name}-${pi}`} className={`rounded px-1.5 py-0.5 text-[11px] font-medium truncate ${tc}`} style={{ backgroundColor: bg }}>{p.name}</div>;
-                                    })}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : (
-                (() => {
-                  const month = previewPrintData.month;
-                  const mDays = trimPreviewCalendarWeeks(
-                    getCalendarDaysForMonth(month),
-                    (d) => phasesOnDay(d).length > 0
-                  );
-                  const pages = chunkDaysForPrint(mDays);
-                  return (
-                    <>
-                      {pages.map((chunk, pageIdx) => {
-                        const padded = padChunkToWeekRows(chunk);
-                        const totalP = pages.length;
-                        return (
-                          <div
-                            key={pageIdx}
-                            className="mb-6"
-                            style={
-                              pageIdx < totalP - 1
-                                ? { pageBreakAfter: "always", breakAfter: "page" }
-                                : undefined
-                            }
-                          >
-                            <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
-                              {month.slice(0, 4)}년 {Number(month.slice(5, 7))}월
-                              {totalP > 1 && (
-                                <span className="mt-0.5 block text-sm font-normal text-gray-600">
-                                  {pageIdx + 1} / {totalP}쪽
-                                </span>
-                              )}
-                            </h2>
-                            <div className="rounded border border-gray-300 overflow-hidden">
-                              <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-semibold">
-                                {WEEKDAYS.map((wd, i) => (
-                                  <div key={wd} className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}>{wd}</div>
-                                ))}
-                              </div>
-                              <div className="grid grid-cols-7">
-                                {padded.map((cell, ci) => {
-                                  if (cell == null) {
-                                    return (
-                                      <div
-                                        key={`mpad-${pageIdx}-${ci}`}
-                                        className="min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
-                                        aria-hidden
-                                      />
-                                    );
-                                  }
-                                  const { date, isCurrentMonth, dayNum } = cell;
-                                  const onDay = phasesOnDay(date);
-                                  const inRange = isInConstructionRange(date);
-                                  const dow = new Date(date + "T12:00:00").getDay();
-                                  const hol = getHolidayName(date);
-                                  const isOff = dow === 0 || dow === 6 || !!hol;
-                                  const cellBg = isOff ? "bg-red-50/40" : !isCurrentMonth ? "bg-gray-50" : inRange ? "bg-blue-50/40" : "";
-                                  const dayClr = !isCurrentMonth ? "text-gray-300" : (dow === 0 || !!hol) ? "text-red-500 font-semibold" : dow === 6 ? "text-blue-500 font-semibold" : "text-gray-800";
-                                  return (
-                                    <div key={date} className={`min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}>
-                                      <div className={`text-right text-xs ${dayClr}`}>
-                                        {dayNum}
-                                        {hol && isCurrentMonth && <span className="ml-1 text-[9px] text-red-400 font-normal">{hol}</span>}
-                                      </div>
-                                      <div className="mt-1 space-y-0.5">
-                                        {onDay.map((p, pi) => {
-                                          const bg = p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : "#93C5FD";
-                                          const r = parseInt(bg.slice(1, 3), 16), g = parseInt(bg.slice(3, 5), 16), b = parseInt(bg.slice(5, 7), 16);
-                                          const tc = (r * 299 + g * 587 + b * 114) / 1000 > 180 ? "text-gray-900" : "text-white";
-                                          return <div key={`${p.name}-${pi}`} className={`rounded px-1.5 py-0.5 text-[11px] font-medium truncate ${tc}`} style={{ backgroundColor: bg }}>{p.name}</div>;
-                                        })}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  );
-                })()
-              )}
+            <div className="px-3 pb-3 sm:px-4 sm:pb-4">
+              <div id="schedule-detail-print-content" className="schedule-print-compact">
+                <div className="schedule-print-sheet-first">
+                  <div className="schedule-print-header-block">{schedulePrintHeader}</div>
+                  {printFirst
+                    ? renderSchedulePrintPageBlock(printFirst, 0, printPages.length, false)
+                    : null}
+                </div>
+                {printRest.map((chunk, i) =>
+                  renderSchedulePrintPageBlock(chunk, i + 1, printPages.length, true)
+                )}
+              </div>
             </div>
           </div>
         </div>

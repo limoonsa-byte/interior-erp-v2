@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { getCompanyIdFromLoginCookie, requireSecretSession } from "@/lib/shop-secret-auth";
+import { ensureShopProductsHitColumn } from "@/lib/ensure-shop-products-hit";
 import { normalizeShopProductRow } from "@/lib/shop-product-excel";
 
 const MAX_SIZE = 6 * 1024 * 1024;
@@ -20,6 +21,9 @@ type ImportRow = {
   imageUrl: string;
   productUrl: string;
   isActive: boolean;
+  /** 엑셀에 히트 열이 있었을 때만 true — 없으면 기존 DB 값 유지 */
+  hasHitExplicit: boolean;
+  isHit: boolean;
 };
 
 function toBoolYN(value: unknown): boolean {
@@ -28,6 +32,13 @@ function toBoolYN(value: unknown): boolean {
   if (v === "n" || v === "0" || v === "false" || v === "no") return false;
   if (v === "아니오" || v === "미판매" || v === "미노출" || v === "숨김") return false;
   return true;
+}
+
+function parseHitFromRow(n: Record<string, unknown>): { hasHitExplicit: boolean; isHit: boolean } {
+  if (n.is_hit === undefined || n.is_hit === null) return { hasHitExplicit: false, isHit: false };
+  const s = String(n.is_hit).trim();
+  if (!s) return { hasHitExplicit: false, isHit: false };
+  return { hasHitExplicit: true, isHit: toBoolYN(n.is_hit) };
 }
 
 function toNum(value: unknown): number {
@@ -40,6 +51,7 @@ export async function POST(request: Request) {
   const companyId = session?.companyId ?? (await getCompanyIdFromLoginCookie());
   if (!companyId) return NextResponse.json({ error: "인증 필요" }, { status: 401 });
   try {
+    await ensureShopProductsHitColumn();
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     if (!file || !(file instanceof File)) {
@@ -86,6 +98,7 @@ export async function POST(request: Request) {
         return;
       }
       const shopLineRaw = n.shop_line ?? "";
+      const hitParsed = parseHitFromRow(n);
       parsed.push({
         sku,
         name,
@@ -100,19 +113,22 @@ export async function POST(request: Request) {
         imageUrl: String(n.image_url ?? "").trim(),
         productUrl: String(n.product_url ?? "").trim(),
         isActive: toBoolYN(n.is_active),
+        hasHitExplicit: hitParsed.hasHitExplicit,
+        isHit: hitParsed.isHit,
       });
     });
 
     let success = 0;
     for (const item of parsed) {
+      const insertHit = item.hasHitExplicit ? item.isHit : false;
       await sql`
         INSERT INTO shop_products (
           company_id, sku, name, shop_line, category, brand, spec, unit,
-          price, sale_price, stock_status, image_url, product_url, is_active, updated_at
+          price, sale_price, stock_status, image_url, product_url, is_active, is_hit, updated_at
         )
         VALUES (
           ${companyId}, ${item.sku}, ${item.name}, ${item.shopLine || null}, ${item.category || null}, ${item.brand || null}, ${item.spec || null}, ${item.unit || null},
-          ${item.price}, ${item.salePrice}, ${item.stockStatus || null}, ${item.imageUrl || null}, ${item.productUrl || null}, ${item.isActive}, NOW()
+          ${item.price}, ${item.salePrice}, ${item.stockStatus || null}, ${item.imageUrl || null}, ${item.productUrl || null}, ${item.isActive}, ${insertHit}, NOW()
         )
         ON CONFLICT (company_id, sku) DO UPDATE SET
           name = EXCLUDED.name,
@@ -127,6 +143,7 @@ export async function POST(request: Request) {
           image_url = EXCLUDED.image_url,
           product_url = EXCLUDED.product_url,
           is_active = EXCLUDED.is_active,
+          is_hit = CASE WHEN ${item.hasHitExplicit} THEN EXCLUDED.is_hit ELSE shop_products.is_hit END,
           updated_at = NOW()
       `;
       success += 1;

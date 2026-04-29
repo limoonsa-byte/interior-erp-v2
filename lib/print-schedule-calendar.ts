@@ -41,8 +41,14 @@ export function printScheduleCalendarContent(element: HTMLElement | null): void 
 
   const pageStyle = doc.createElement("style");
   pageStyle.textContent = `
-    @page { size: A4 landscape !important; margin: 10mm !important; }
-    html, body { margin: 0; padding: 0; background: #fff !important; }
+    @page { size: A4 landscape !important; margin: 5mm !important; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #fff !important;
+      height: 100%;
+      box-sizing: border-box;
+    }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
   `;
   doc.head.appendChild(pageStyle);

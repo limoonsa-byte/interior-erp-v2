@@ -71,6 +71,7 @@ body {
   /* 기본 인쇄: 계약서는 handlePrint에서 동적으로 @page margin 주입 */
   @page {
     size: A4;
+    margin: 0;
     @top-left { content: none; }
     @top-center { content: none; }
     @top-right { content: none; }
@@ -81,7 +82,7 @@ body {
   /* 견적서만: 미리보기=인쇄(WYSIWYG). 브라우저 여백 없이 본문 padding만 적용 */
   @page estimate-print {
     size: A4;
-    margin: 0;
+    margin: 12.7mm;
     @top-left { content: none; }
     @top-center { content: none; }
     @top-right { content: none; }
@@ -939,10 +940,21 @@ body {
   body.contract-print-pages-mode {
     background: white !important;
   }
+  @page contract-clean-print {
+    size: A4;
+    margin: 0;
+    @top-left { content: none; }
+    @top-center { content: none; }
+    @top-right { content: none; }
+    @bottom-left { content: none; }
+    @bottom-center { content: none; }
+    @bottom-right { content: none; }
+  }
   body.contract-print-pages-mode > *:not(#contract-print-pages) {
     display: none !important;
   }
   #contract-print-pages {
+    page: contract-clean-print;
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -973,8 +985,17 @@ body {
   }
   #contract-print-pages .contract-print-doc-pages-wrapper {
     display: block !important;
-    page-break-before: always;
+    page-break-before: auto;
+    break-before: auto;
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
     margin-top: 0 !important;
+  }
+  #contract-print-pages .contract-sign-summary + .contract-print-doc-pages-wrapper {
+    page-break-before: always;
+    break-before: page;
   }
   #contract-print-pages .contract-print-doc-pages-wrapper img {
     display: block !important;
@@ -984,6 +1005,17 @@ body {
     page-break-after: always;
     border: none !important;
     box-shadow: none !important;
+  }
+  #contract-print-pages .contract-a4-paper-sheet {
+    width: 100% !important;
+    max-width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 auto !important;
+    background: white !important;
+  }
+  #contract-print-pages .contract-a4-paper-sheet .prose {
+    margin: 0 !important;
+    max-width: none !important;
   }
   #contract-print-pages .contract-print-doc-pages-wrapper img:last-child {
     page-break-after: auto;
@@ -1003,6 +1035,7 @@ body {
     display: none !important;
   }
   #contract-print-only {
+    page: contract-clean-print;
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -1307,7 +1340,7 @@ body {
     overflow: visible !important;
     height: auto !important;
     width: 100% !important;
-    padding: 0.5in;
+    padding: 0;
     background: white;
     box-shadow: none;
     font-size: 11px;
@@ -1796,6 +1829,71 @@ body {
 }
 
 /* -------------------------------------------------------------------------- */
+/* 결제 승인서 인쇄: 미리보기 열릴 때 body.payment-approval-print-open (포털 #payment-approval-print-area만 출력) */
+@page payment-approval-print {
+  size: A4;
+  margin: 12mm;
+}
+
+@media print {
+  html:has(body.payment-approval-print-open),
+  body.payment-approval-print-open {
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area {
+    page: payment-approval-print;
+  }
+  body.payment-approval-print-open > *:not(#payment-approval-print-area) {
+    display: none !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area,
+  body.payment-approval-print-open #payment-approval-print-area * {
+    visibility: visible !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area {
+    position: static !important;
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: white !important;
+    box-shadow: none !important;
+    clip: auto !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area .no-print {
+    display: none !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area .payment-approval-print-content {
+    max-width: 100% !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 10pt !important;
+    color: #000 !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area th,
+  body.payment-approval-print-open #payment-approval-print-area td {
+    border: 1px solid #333 !important;
+    padding: 6px 8px !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area tr {
+    page-break-inside: avoid;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
 /* 현장용 자재리스트 인쇄: 미리보기 열릴 때 body에 material-list-print-open 추가 */
 /* (전역 img 숨김·@page 충돌·포털 내 <style> 무시 등으로 미리보기가 하얗게 나오는 경우 방지) */
 @page material-list-landscape {
@@ -1807,24 +1905,17 @@ body {
   html:has(body.material-list-print-open),
   body.material-list-print-open {
     background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
   body.material-list-print-open #material-list-print-area {
     page: material-list-landscape;
   }
-  /* display:none으로 형제를 끄면 일부 브라우저 PDF 미리보기에서 내용 전체가 비는 경우 있음 → sr-only 방식 */
+  /* 일부 PC/브라우저에서 sr-only 숨김이 "빈 1페이지"를 만들 수 있어 인쇄 시에는 완전히 제외 */
   body.material-list-print-open > *:not(#material-list-print-area) {
-    visibility: hidden !important;
-    position: absolute !important;
-    clip: rect(0, 0, 0, 0) !important;
-    width: 1px !important;
-    height: 1px !important;
-    margin: -1px !important;
-    overflow: hidden !important;
-    padding: 0 !important;
-    border: 0 !important;
-    pointer-events: none !important;
+    display: none !important;
   }
   body.material-list-print-open #material-list-print-area,
   body.material-list-print-open #material-list-print-area * {
@@ -1906,6 +1997,262 @@ body {
     page-break-after: avoid !important;
     margin: 3mm 0 2mm 0 !important;
     color: #000 !important;
+  }
+}
+
+/* 공사 일정 인쇄·미리보기: 한 장에 맞추되 글자·칩은 읽을 수 있게 */
+#schedule-detail-print-content.schedule-print-compact {
+  padding: 3mm 4mm;
+  box-sizing: border-box;
+  max-width: 100%;
+}
+#schedule-detail-print-content.schedule-print-compact > p {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  margin: 0 0 1mm;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-memo {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 2mm;
+  padding: 2mm 3mm;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-memo-spacer {
+  margin-bottom: 1mm;
+  min-height: 0;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-page-block {
+  margin-bottom: 3mm !important;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-page-block:last-child {
+  margin-bottom: 0 !important;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-week-header > div {
+  padding-top: 0.35rem !important;
+  padding-bottom: 0.35rem !important;
+  font-size: 0.75rem !important;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
+#schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
+  min-height: 62px !important;
+  padding: 4px 5px !important;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell .text-xs {
+  font-size: 0.75rem !important;
+  line-height: 1.2 !important;
+}
+#schedule-detail-print-content.schedule-print-compact .schedule-print-holiday-label {
+  font-size: 0.65rem !important;
+}
+/* 공정명 잘림 방지 — 여러 줄로 표시 */
+#schedule-detail-print-content.schedule-print-compact .schedule-print-phase-pill {
+  font-size: 0.6875rem !important;
+  line-height: 1.25 !important;
+  padding: 2px 5px !important;
+  border-radius: 3px !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+#schedule-detail-print-content.schedule-print-compact h2 {
+  font-size: 0.9375rem;
+  line-height: 1.25;
+  margin: 0 0 1.5mm;
+}
+
+@media screen {
+  /* 화면 미리보기는 인쇄보다 한 단계 더 키워 가독성 우선 */
+  #schedule-detail-print-content.schedule-print-compact > p {
+    font-size: 0.875rem;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-memo {
+    font-size: 0.875rem;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-week-header > div {
+    font-size: 0.8125rem !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
+    min-height: 72px !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell .text-xs {
+    font-size: 0.8125rem !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-phase-pill {
+    font-size: 0.75rem !important;
+    padding: 3px 6px !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact h2 {
+    font-size: 1rem;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-holiday-label {
+    font-size: 0.6875rem !important;
+  }
+
+  /* 미리보기 모달: 가로 시트 비율에 가깝게 한 화면에 캘린더가 세로로 꽉 참 */
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact {
+    display: flex;
+    flex-direction: column;
+    min-height: min(78vh, 680px);
+    max-height: 78vh;
+    aspect-ratio: 297 / 210;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact > .schedule-print-sheet-first {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-header-block {
+    flex-shrink: 0;
+  }
+  .schedule-preview-viewport
+    #schedule-detail-print-content.schedule-print-compact
+    .schedule-print-sheet-first
+    > .schedule-print-page-block {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0 !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-calendar-frame {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-grid-body {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr) !important;
+    grid-auto-rows: 1fr !important;
+    align-content: stretch !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
+    min-height: 0 !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-phase-stack {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: auto !important;
+  }
+  .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-page-follow {
+    margin-top: 1.25rem;
+    min-height: min(72vh, 620px);
+    display: flex !important;
+    flex-direction: column !important;
+    margin-bottom: 0 !important;
+  }
+  .schedule-preview-viewport
+    #schedule-detail-print-content.schedule-print-compact
+    .schedule-print-page-follow
+    > .schedule-print-calendar-frame {
+    flex: 1 !important;
+    min-height: 0 !important;
+  }
+}
+
+@media print {
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-memo {
+    max-height: 42mm;
+    overflow: hidden;
+  }
+
+  /* 가로 A4 한 장 높이를 헤더·캘린더가 나눠 쓰고, 요일 칸은 남는 높이를 균등 분할 */
+  #schedule-detail-print-content.schedule-print-compact {
+    min-height: 100vh;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 1.5mm 2.5mm !important;
+    box-sizing: border-box;
+  }
+  #schedule-detail-print-content.schedule-print-compact > .schedule-print-sheet-first {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-header-block {
+    flex-shrink: 0;
+  }
+  #schedule-detail-print-content.schedule-print-compact
+    .schedule-print-sheet-first
+    > .schedule-print-page-block {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0 !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-calendar-frame {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-grid-body {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr) !important;
+    grid-auto-rows: 1fr !important;
+    align-content: stretch !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
+    min-height: 0 !important;
+    height: 100% !important;
+    box-sizing: border-box !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell-inner {
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-phase-stack {
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact .schedule-print-page-block.schedule-print-page-follow {
+    page-break-before: always !important;
+    break-before: page !important;
+    min-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+  }
+  #schedule-detail-print-content.schedule-print-compact
+    .schedule-print-page-follow
+    > .schedule-print-calendar-frame {
+    flex: 1 !important;
+    min-height: 0 !important;
   }
 }
 

@@ -17,7 +17,14 @@ type Product = {
   imageUrl: string;
   stockStatus: string;
   shopLine: string;
+  isHit?: boolean;
 };
+
+type SortKey = "recent" | "priceAsc" | "priceDesc" | "name";
+
+function effectivePrice(p: Product): number {
+  return p.salePrice != null && p.salePrice > 0 ? p.salePrice : p.price;
+}
 
 export default function ShopSecretListClient() {
   const searchParams = useSearchParams();
@@ -30,6 +37,7 @@ export default function ShopSecretListClient() {
   const [line, setLine] = useState(() => (searchParams.get("line") || "").trim());
   const [lineChips, setLineChips] = useState<string[]>([]);
   const [lineSubCategories, setLineSubCategories] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<SortKey>("recent");
 
   const verifyByToken = useCallback(async () => {
     const token = (searchParams.get("token") || "").trim();
@@ -83,12 +91,12 @@ export default function ShopSecretListClient() {
   }, [authReady, load]);
 
   useEffect(() => {
-    setCategory("");
+    queueMicrotask(() => setCategory(""));
   }, [line]);
 
   useEffect(() => {
     if (!authReady || !line.trim()) {
-      setLineSubCategories([]);
+      queueMicrotask(() => setLineSubCategories([]));
       return;
     }
     let cancelled = false;
@@ -131,7 +139,29 @@ export default function ShopSecretListClient() {
     return Array.from(set.values());
   }, [products]);
 
-  /** 상세·소개로 갈 때 token 유지 (쿠키 미설정 환경 대비) */
+  const sortedProducts = useMemo(() => {
+    const withIdx = products.map((p, i) => ({ p, i }));
+    const hitFirst = (a: { p: Product; i: number }, b: { p: Product; i: number }) => {
+      const ah = a.p.isHit ? 1 : 0;
+      const bh = b.p.isHit ? 1 : 0;
+      if (bh !== ah) return bh - ah;
+      return 0;
+    };
+    withIdx.sort((a, b) => {
+      const hf = hitFirst(a, b);
+      if (hf !== 0) return hf;
+      if (sortBy === "recent") return a.i - b.i;
+      if (sortBy === "priceAsc") {
+        return effectivePrice(a.p) - effectivePrice(b.p) || a.p.name.localeCompare(b.p.name, "ko");
+      }
+      if (sortBy === "priceDesc") {
+        return effectivePrice(b.p) - effectivePrice(a.p) || a.p.name.localeCompare(b.p.name, "ko");
+      }
+      return a.p.name.localeCompare(b.p.name, "ko");
+    });
+    return withIdx.map(({ p }) => p);
+  }, [products, sortBy]);
+
   const tokenSuffix = useMemo(() => {
     const t = (searchParams.get("token") || "").trim();
     return t ? `?token=${encodeURIComponent(t)}` : "";
@@ -141,9 +171,9 @@ export default function ShopSecretListClient() {
   const chipOff = "border-zinc-600 bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800";
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 pb-10">
+    <div className="space-y-4 p-4 pb-10 sm:p-6">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-end gap-x-3 gap-y-1">
           <SecretWarehouseTitle size="lg" />
           <Link
             href={`/shop-secret/about${tokenSuffix}`}
@@ -152,18 +182,64 @@ export default function ShopSecretListClient() {
             소개
           </Link>
         </div>
-        <button
-          type="button"
-          onClick={() => fetch("/api/company/shop-secret/logout", { method: "POST" }).finally(() => location.reload())}
-          className="rounded border border-zinc-600 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800"
-        >
-          세션 종료
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={() => fetch("/api/company/shop-secret/logout", { method: "POST" }).finally(() => location.reload())}
+            className="rounded border border-zinc-600 bg-zinc-900 px-3 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800"
+          >
+            세션 종료
+          </button>
+          <div className="flex w-[min(100vw-2rem,18rem)] flex-col gap-1.5 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="상품명·SKU 검색"
+              className="w-full rounded border border-zinc-600 bg-zinc-950 px-2 py-1 text-xs text-zinc-100 placeholder:text-zinc-500 sm:w-36"
+            />
+            {!line ? (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded border border-zinc-600 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100 sm:w-auto sm:min-w-[6.5rem]"
+              >
+                <option value="">전체 카테고리</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => load().catch(() => {})}
+                className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1 text-xs text-zinc-100 hover:bg-zinc-700"
+              >
+                조회
+              </button>
+              <span className="text-[10px] text-zinc-500">정렬</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortKey)}
+                className="rounded border border-zinc-600 bg-zinc-950 px-1.5 py-1 text-xs text-zinc-100"
+              >
+                <option value="recent">최신순</option>
+                <option value="priceAsc">낮은 가격</option>
+                <option value="priceDesc">높은 가격</option>
+                <option value="name">상품명</option>
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
+
       {authError && (
         <div className="rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">{authError}</div>
       )}
-      <div className="rounded-lg border border-zinc-700/80 bg-zinc-900/50 p-3 space-y-3">
+
+      <div className="space-y-3 rounded-lg border border-zinc-700/80 bg-zinc-900/50 p-3">
         <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1">
           <span className="shrink-0 text-xs font-medium text-neutral-500">구분</span>
           <button
@@ -178,13 +254,14 @@ export default function ShopSecretListClient() {
               key={preset}
               type="button"
               onClick={() => setLine(preset)}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[10rem] truncate ${line === preset ? chipOn : chipOff}`}
+              className={`max-w-[10rem] shrink-0 truncate rounded-full border px-3 py-1 text-xs font-medium ${line === preset ? chipOn : chipOff}`}
               title={preset}
             >
               {preset}
             </button>
           ))}
         </div>
+
         {line ? (
           <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1">
             <span className="shrink-0 text-xs font-medium text-neutral-500">하부</span>
@@ -200,7 +277,7 @@ export default function ShopSecretListClient() {
                 key={c}
                 type="button"
                 onClick={() => setCategory(c)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium border max-w-[9rem] truncate ${category === c ? chipOn : chipOff}`}
+                className={`max-w-[9rem] shrink-0 truncate rounded-full border px-3 py-1 text-xs font-medium ${category === c ? chipOn : chipOff}`}
                 title={c}
               >
                 {c}
@@ -208,75 +285,72 @@ export default function ShopSecretListClient() {
             ))}
           </div>
         ) : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="상품명/sku 검색"
-            className="rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500"
-          />
-          {!line ? (
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100"
-            >
-              <option value="">전체 카테고리</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          ) : null}
-          <button
-            onClick={() => load().catch(() => {})}
-            className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700"
-          >
-            조회
-          </button>
-        </div>
       </div>
+
+      <p className="text-xs text-zinc-500">
+        상품 <span className="font-medium text-zinc-300">{sortedProducts.length}</span>개
+      </p>
+
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
         {loading ? (
           <p className="col-span-full text-sm text-neutral-500">불러오는 중…</p>
-        ) : products.length === 0 ? (
+        ) : sortedProducts.length === 0 ? (
           <p className="col-span-full text-sm text-neutral-500">표시할 상품이 없습니다.</p>
         ) : (
-          products.map((p) => (
-            <Link
-              href={`/shop-secret/products/${encodeURIComponent(p.sku)}${tokenSuffix}`}
-              key={p.id}
-              className="flex flex-col rounded-lg border border-zinc-700/80 bg-zinc-900/40 p-2 min-w-0 hover:border-amber-800/50"
-            >
-              <div className="relative aspect-square w-full shrink-0 overflow-hidden rounded-md bg-zinc-800">
-                {p.imageUrl ? (
-                  <img src={p.imageUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <span className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-zinc-500">
-                    이미지 없음
-                  </span>
-                )}
-              </div>
-              <p className="mt-1.5 text-xs font-medium leading-snug text-zinc-100 line-clamp-2 min-h-[2.25rem]">{p.name}</p>
-              <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
-                {p.shopLine ? (
-                  <span className="rounded border border-amber-800/60 bg-amber-950/50 px-1 py-0.5 text-[9px] font-medium text-amber-200">
-                    {p.shopLine}
-                  </span>
-                ) : null}
-                {p.category || p.brand ? (
-                  <span className="text-[10px] text-zinc-500 line-clamp-1 min-w-0">
-                    {[p.category, p.brand].filter(Boolean).join(" · ")}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-auto pt-0.5 text-[11px] font-semibold text-white tabular-nums">
-                {(p.salePrice ?? p.price).toLocaleString("ko-KR")}원
-              </p>
-              {p.stockStatus ? <p className="text-[10px] text-zinc-500 line-clamp-1">{p.stockStatus}</p> : null}
-            </Link>
-          ))
+          sortedProducts.map((p) => {
+            const sale = p.salePrice != null && p.salePrice > 0 && p.salePrice < p.price;
+            const show = effectivePrice(p);
+            return (
+              <Link
+                href={`/shop-secret/products/${encodeURIComponent(p.sku)}${tokenSuffix}`}
+                key={p.id}
+                className="flex min-w-0 flex-col rounded-lg border border-zinc-700/80 bg-zinc-900/40 p-2 hover:border-amber-800/50"
+              >
+                <div className="relative aspect-square w-full shrink-0 overflow-hidden rounded-md bg-zinc-800">
+                  {p.imageUrl ? (
+                    <img src={p.imageUrl} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="absolute inset-0 flex items-center justify-center px-1 text-center text-[10px] leading-tight text-zinc-500">
+                      이미지 없음
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1.5 line-clamp-2 min-h-[2.25rem] text-xs font-medium leading-snug text-zinc-100">
+                  {p.isHit ? (
+                    <span className="mr-1 inline-block shrink-0 rounded border border-zinc-500 bg-zinc-800/80 px-1 py-0 align-middle text-[9px] font-medium text-zinc-200">
+                      히트
+                    </span>
+                  ) : null}
+                  {p.name}
+                </p>
+                <div className="mt-0.5 flex flex-wrap items-center gap-0.5">
+                  {p.shopLine ? (
+                    <span className="rounded border border-amber-800/60 bg-amber-950/50 px-1 py-0.5 text-[9px] font-medium text-amber-200">
+                      {p.shopLine}
+                    </span>
+                  ) : null}
+                  {p.category || p.brand ? (
+                    <span className="line-clamp-1 min-w-0 text-[10px] text-zinc-500">
+                      {[p.category, p.brand].filter(Boolean).join(" · ")}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-auto pt-0.5">
+                  {sale ? (
+                    <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0">
+                      <span className="text-[11px] font-semibold tabular-nums text-white">{show.toLocaleString("ko-KR")}원</span>
+                      <span className="text-[9px] tabular-nums text-zinc-500 line-through">{p.price.toLocaleString("ko-KR")}</span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] font-semibold tabular-nums text-white">
+                      {show.toLocaleString("ko-KR")}원
+                    </p>
+                  )}
+                </div>
+                {p.stockStatus ? <p className="line-clamp-1 text-[10px] text-zinc-500">{p.stockStatus}</p> : null}
+              </Link>
+            );
+          })
         )}
       </div>
     </div>

@@ -16,6 +16,7 @@ export const SHOP_PRODUCT_KO_HEADERS = [
   "이미지URL",
   "상품링크",
   "판매여부",
+  "히트",
 ] as const;
 
 /** 공백·BOM 제거 후 조회용 키 */
@@ -72,6 +73,9 @@ const HEADER_TO_FIELD: Record<string, string> = {
   판매여부: "is_active",
   노출: "is_active",
   활성: "is_active",
+  is_hit: "is_hit",
+  히트: "is_hit",
+  hit: "is_hit",
 };
 
 for (const k of Object.keys(HEADER_TO_FIELD)) {

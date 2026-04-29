@@ -16,6 +16,7 @@ export type EditorProductForm = {
   imageUrl: string;
   productUrl: string;
   isActive: boolean;
+  isHit: boolean;
 };
 
 const EMPTY: EditorProductForm = {
@@ -32,6 +33,7 @@ const EMPTY: EditorProductForm = {
   imageUrl: "",
   productUrl: "",
   isActive: true,
+  isHit: false,
 };
 
 type Props = {
@@ -87,6 +89,7 @@ export default function AdminProductEditor({ open, mode, editSku, onClose, onSav
           imageUrl: String(p.imageUrl ?? ""),
           productUrl: String(p.productUrl ?? ""),
           isActive: Boolean(p.isActive),
+          isHit: Boolean(p.isHit),
         });
       })
       .catch((e) => setError(e instanceof Error ? e.message : "오류"))
@@ -136,6 +139,7 @@ export default function AdminProductEditor({ open, mode, editSku, onClose, onSav
         imageUrl: form.imageUrl.trim(),
         productUrl: form.productUrl.trim(),
         isActive: form.isActive,
+        isHit: form.isHit,
       };
       if (mode === "create") {
         const sku = form.sku.trim();
@@ -323,6 +327,15 @@ export default function AdminProductEditor({ open, mode, editSku, onClose, onSav
                 className="rounded border-zinc-500 bg-zinc-950 text-amber-600"
               />
               활성 (비밀창고에 노출)
+            </label>
+            <label className="flex items-center gap-2 text-zinc-300">
+              <input
+                type="checkbox"
+                checked={form.isHit}
+                onChange={(e) => set("isHit", e.target.checked)}
+                className="rounded border-zinc-500 bg-zinc-950 text-amber-600"
+              />
+              히트 (목록 상단·비밀몰 우선)
             </label>
             <div className="flex flex-wrap justify-end gap-2 border-t border-zinc-700/80 pt-4">
               <button type="button" onClick={onClose} className="rounded border border-zinc-600 bg-zinc-800 px-4 py-2 text-sm text-zinc-100 hover:bg-zinc-700">

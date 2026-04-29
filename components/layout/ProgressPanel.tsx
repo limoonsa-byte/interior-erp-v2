@@ -68,24 +68,18 @@ function schedulePhaseToDateValue(value: string | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
-/**
- * 공정(schedulePhases) 구간이 이번 주(월~일)와 하루라도 겹치면 true.
- * 캘린더는 공정이 있는 날만 표시하므로, 카운트도 공사기간만이 아니라 이 기준으로 맞춤.
- */
-function consultationHasSchedulePhaseOverlappingWeek(
-  c: Consultation,
-  weekStart: string,
-  weekEnd: string
-): boolean {
+/** 공정 막대(phase) 개수를 주간 기준으로 카운트 */
+function countSchedulePhasesOverlappingWeek(c: Consultation, weekStart: string, weekEnd: string): number {
   const phases = c.schedulePhases;
-  if (!Array.isArray(phases) || phases.length === 0) return false;
-  return phases.some((p) => {
+  if (!Array.isArray(phases) || phases.length === 0) return 0;
+  return phases.reduce((count, p) => {
     const start = schedulePhaseToDateValue(p.start);
     const end = schedulePhaseToDateValue(p.end);
-    if (!start) return false;
+    if (!start) return count;
     const endVal = end && end >= start ? end : start;
-    return start <= weekEnd && endVal >= weekStart;
-  });
+    if (start <= weekEnd && endVal >= weekStart) return count + 1;
+    return count;
+  }, 0);
 }
 
 /**
@@ -148,16 +142,16 @@ export function ProgressPanel() {
   }).length;
 
   const thisWeek = getThisWeekMondayThroughSundayRange();
-  /** 전체일정 기본 규칙과 동일: 완료 제외, 견적 연결된 상담만, 공정 일정이 이번 주에 겹치는 건만 */
+  /** 전체일정 기본 규칙과 동일: 완료 제외, 견적 연결된 상담만, 공정 일정 "건수"를 주간 기준 합산 */
   const thisWeekCount = useMemo(() => {
     const consultationIdsWithEstimate = new Set(
       estimates.filter((e) => e.consultationId != null).map((e) => e.consultationId as number)
     );
-    return consultations.filter((c) => {
-      if (normalizeConsultationStatus(c.status) === "완료및정산") return false;
-      if (!consultationIdsWithEstimate.has(c.id)) return false;
-      return consultationHasSchedulePhaseOverlappingWeek(c, thisWeek.start, thisWeek.end);
-    }).length;
+    return consultations.reduce((sum, c) => {
+      if (normalizeConsultationStatus(c.status) === "완료및정산") return sum;
+      if (!consultationIdsWithEstimate.has(c.id)) return sum;
+      return sum + countSchedulePhasesOverlappingWeek(c, thisWeek.start, thisWeek.end);
+    }, 0);
   }, [consultations, estimates, thisWeek.start, thisWeek.end]);
 
   return (
@@ -246,7 +240,7 @@ export function ProgressPanel() {
                 <li>
                   <Link
                     href="/schedule"
-                    title="전체일정에 공정(일정 막대)이 이번 주(월~일)에 있는 현장 수입니다. 공사 시작일만 있고 공정이 없으면 집계되지 않습니다."
+                    title="전체일정의 이번 주(월~일) 공정 막대(일정) 건수입니다. 같은 현장에 일정이 여러 개면 각각 집계됩니다."
                     className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm hover:border-blue-200 hover:bg-blue-50/50"
                   >
                     <Calendar className="h-4 w-4 shrink-0 text-slate-600" />

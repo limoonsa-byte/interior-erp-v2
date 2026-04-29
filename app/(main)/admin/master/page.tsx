@@ -643,7 +643,7 @@ export default function MasterAdminPage() {
       <section className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-6 shadow-sm">
         <h2 className="mb-2 text-base font-semibold text-gray-900">업자들의 비밀창고</h2>
         <p className="mb-3 text-sm text-gray-600">
-          비밀 링크 또는 회사 로그인 세션으로 고객용 목록·상세를 볼 수 있습니다. 상품 등록·엑셀 반영·비밀 링크 발급은 상품관리에서 합니다.
+          비밀 링크 또는 회사 로그인 세션으로 고객용 목록·상세를 볼 수 있습니다. 상품 등록·엑셀 반영은 상품관리에서 합니다.
         </p>
         <div className="flex flex-wrap gap-2">
           <Link
@@ -662,7 +662,7 @@ export default function MasterAdminPage() {
             href="/shop-secret/admin/products"
             className="inline-flex items-center rounded-lg border border-amber-700/40 bg-white px-4 py-2 text-sm font-medium text-amber-950 shadow-sm hover:bg-amber-50"
           >
-            상품관리 (등록·엑셀·링크 발급) →
+            상품관리 (등록·엑셀) →
           </Link>
         </div>
         <p className="mt-3 text-xs text-gray-500">

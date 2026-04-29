@@ -78,6 +78,11 @@ export async function PATCH(
     const schedulePhasesJson = Array.isArray(schedulePhases)
       ? JSON.stringify(schedulePhases.map((p: { name?: string; start?: string; end?: string; color?: string }) => ({ name: String(p?.name ?? "").trim() || "공정", start: String(p?.start ?? "").slice(0, 10) || null, end: String(p?.end ?? "").slice(0, 10) || null, color: typeof p?.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : null })))
       : null;
+    const scheduleMemoProvided = Object.prototype.hasOwnProperty.call(body, "scheduleMemo");
+    const scheduleMemoRaw = (body as { scheduleMemo?: unknown }).scheduleMemo;
+    const scheduleMemoVal = scheduleMemoProvided
+      ? String(scheduleMemoRaw ?? "").trim().slice(0, 4000) || null
+      : null;
 
     await ensureConsultationsColumns();
 
@@ -112,7 +117,8 @@ export async function PATCH(
           estimate_meeting_done = ${estimateMeetingDone === true},
           material_meeting_done = ${materialMeetingDone === true},
           contract_meeting_done = ${contractMeetingDone === true},
-          design_meeting_done = ${designMeetingDone === true}
+          design_meeting_done = ${designMeetingDone === true},
+          schedule_memo = CASE WHEN ${scheduleMemoProvided} THEN ${scheduleMemoVal} ELSE schedule_memo END
         WHERE id = ${consultationId} AND company_id = ${company.id}
         RETURNING id
       `;

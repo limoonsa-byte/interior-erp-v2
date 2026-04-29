@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 type EstimateItem = {
@@ -57,8 +57,38 @@ type CustomerPaymentRow = {
   memo: string;
 };
 
+function customerPaymentRowsFromStoredJson(raw: string): CustomerPaymentRow[] {
+  const oneEmpty = (): CustomerPaymentRow[] => [{ item: "", date: "", amount: 0, memo: "" }];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0) return oneEmpty();
+      return (parsed as { item?: unknown; date?: unknown; amount?: unknown; memo?: unknown }[]).map((r) => ({
+        item: typeof r?.item === "string" ? r.item : "",
+        date: typeof r?.date === "string" ? r.date.trim().slice(0, 10) : "",
+        amount: Number(r?.amount) || 0,
+        memo: typeof r?.memo === "string" ? r.memo : "",
+      }));
+    }
+    /** 결제 승인서(approval_v1)는 별도 컬럼으로 분리됨 — 여기서는 배열만 처리 */
+  } catch {
+    /* ignore */
+  }
+  return oneEmpty();
+}
+
 function formatNum(n: number): string {
   return n.toLocaleString("ko-KR");
+}
+
+/** 직접 입력 하부항목 — 내용·날짜·금액이 모두 비었으면 저장 시 제외 */
+function isManualSubItemEmpty(s: PhaseSubItem): boolean {
+  if (s.fromWorkLog === true) return false;
+  return (Number(s.amount) || 0) === 0 && !(s.dateUsed || "").trim() && !(s.content || "").trim();
+}
+
+function stripEmptyManualSubItems(list: PhaseSubItem[]): PhaseSubItem[] {
+  return list.filter((s) => s.fromWorkLog === true || !isManualSubItemEmpty(s));
 }
 
 function formatDateYMD(dateStr: string | undefined): string {
@@ -137,6 +167,8 @@ export default function SettlementPage() {
   const [customerPaymentTotalsByEstimate, setCustomerPaymentTotalsByEstimate] = useState<Record<string, number>>(
     {}
   );
+  /** 견적 전환·재요청 시 늦게 도착한 응답이 폼을 덮어쓰지 않도록 */
+  const settlementDetailRequestId = useRef(0);
 
   const phasesFromEstimate = useMemo(() => {
     if (!estimate) return [];
@@ -194,6 +226,7 @@ export default function SettlementPage() {
 
   const loadDetail = useCallback(() => {
     if (selectedId == null) return;
+    const requestId = ++settlementDetailRequestId.current;
     setDetailLoading(true);
     setError(null);
     Promise.all([
@@ -214,6 +247,7 @@ export default function SettlementPage() {
       ),
     ])
       .then(([estData, setData, workLogs]) => {
+        if (requestId !== settlementDetailRequestId.current) return;
         if ((estData as { error?: string }).error) {
           setError((estData as { error: string }).error);
           setEstimate(null);
@@ -251,29 +285,14 @@ export default function SettlementPage() {
             ? (setData as { settledAt: string }).settledAt
             : ""
         );
-        (() => {
+        {
           const raw = (setData as { customerPayment?: string })?.customerPayment;
           if (typeof raw !== "string" || !raw.trim()) {
             setCustomerPaymentRows([{ item: "", date: "", amount: 0, memo: "" }]);
-            return;
+          } else {
+            setCustomerPaymentRows(customerPaymentRowsFromStoredJson(raw));
           }
-          try {
-            const parsed = JSON.parse(raw) as unknown;
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const rows = (parsed as { item?: string; date?: string; amount?: number; memo?: string }[]).map((r) => ({
-                item: typeof r?.item === "string" ? r.item : "",
-                date: typeof r?.date === "string" ? r.date.trim().slice(0, 10) : "",
-                amount: Number(r?.amount) || 0,
-                memo: typeof r?.memo === "string" ? r.memo : "",
-              }));
-              setCustomerPaymentRows(rows);
-            } else {
-              setCustomerPaymentRows([{ item: "", date: "", amount: 0, memo: "" }]);
-            }
-          } catch {
-            setCustomerPaymentRows([{ item: "", date: "", amount: 0, memo: "" }]);
-          }
-        })();
+        }
         setPhaseRows(
           phasesWithAmount.map((p, i) => {
             const originalIndex = phases.findIndex((ph) => ph.phaseName === p.phaseName);
@@ -296,7 +315,11 @@ export default function SettlementPage() {
               if (s.fromWorkLog === true) return;
               mergedSub.push(s);
             });
-            const subItems = mergedSub;
+            let subItems = mergedSub;
+            /** 작업일지 행만 있으면 바로 입력할 수 있도록 빈 직접입력 행 1줄 */
+            if (subItems.length > 0 && subItems.every((s) => s.fromWorkLog === true)) {
+              subItems = [...subItems, { amount: 0, dateUsed: "", content: "" }];
+            }
             const usedAmount = subItems.reduce((sum, s) => sum + (Number(s.amount) || 0), 0) || (saved != null ? Number((saved as { amount?: number }).amount) || 0 : 0);
             return {
               phaseName: p.phaseName,
@@ -309,12 +332,15 @@ export default function SettlementPage() {
         );
       })
       .catch((err) => {
+        if (requestId !== settlementDetailRequestId.current) return;
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg && msg !== "Failed to fetch" ? msg : "견적/정산 정보를 불러올 수 없습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.");
         setEstimate(null);
         setPhaseRows([]);
       })
-      .finally(() => setDetailLoading(false));
+      .finally(() => {
+        if (requestId === settlementDetailRequestId.current) setDetailLoading(false);
+      });
   }, [selectedId]);
 
   useEffect(() => {
@@ -398,7 +424,9 @@ export default function SettlementPage() {
     setSaveLoading(true);
     setError(null);
     const items = phaseRows.map((r) => {
-      const subItems = r.subItems && r.subItems.length > 0 ? r.subItems : undefined;
+      const raw =
+        r.subItems && r.subItems.length > 0 ? stripEmptyManualSubItems(r.subItems) : [];
+      const subItems = raw.length > 0 ? raw : undefined;
       const amount = subItems ? subItems.reduce((s, x) => s + (Number(x.amount) || 0), 0) : r.usedAmount;
       return { amount, memo: r.memo, ...(subItems ? { subItems } : {}) };
     });
@@ -778,13 +806,18 @@ export default function SettlementPage() {
                                         <span className="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-800">
                                           작업일지
                                         </span>
-                                      ) : null}
+                                      ) : (
+                                        <span className="inline-flex items-center rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-700">
+                                          직접입력
+                                        </span>
+                                      )}
                                     </td>
                                     <td className="py-1.5 align-top" />
                                     <td className="py-1.5 pr-2 align-top">
                                       <input
                                         type="text"
                                         inputMode="numeric"
+                                        readOnly={!!sub.fromWorkLog}
                                         value={sub.amount === 0 ? "" : sub.amount.toLocaleString("ko-KR")}
                                         onChange={(e) => {
                                           const raw = e.target.value.replace(/\D/g, "");
@@ -792,31 +825,48 @@ export default function SettlementPage() {
                                           if (!Number.isNaN(num)) setPhaseSubItem(i, origIndex, "amount", num);
                                         }}
                                         placeholder="0"
-                                        className="w-full rounded border border-gray-200 px-2 py-1.5 text-right"
+                                        title={sub.fromWorkLog ? "작업일지 화면에서 금액을 수정합니다." : undefined}
+                                        className={`w-full rounded border px-2 py-1.5 text-right ${
+                                          sub.fromWorkLog ? "border-gray-200 bg-gray-50 text-gray-700 cursor-default" : "border-gray-200"
+                                        }`}
                                       />
                                     </td>
                                     <td className="py-1.5 pr-2 align-top">
                                       <input
                                         type="date"
+                                        readOnly={!!sub.fromWorkLog}
                                         value={sub.dateUsed}
                                         onChange={(e) => setPhaseSubItem(i, origIndex, "dateUsed", e.target.value.slice(0, 10))}
-                                        className="w-full rounded border border-gray-200 px-2 py-1.5"
+                                        title={sub.fromWorkLog ? "작업일지 화면에서 날짜를 수정합니다." : undefined}
+                                        className={`w-full rounded border px-2 py-1.5 ${
+                                          sub.fromWorkLog ? "border-gray-200 bg-gray-50 cursor-default" : "border-gray-200"
+                                        }`}
                                       />
                                     </td>
                                     <td className="py-1.5 px-2 align-top min-w-0">
                                       <input
                                         type="text"
+                                        readOnly={!!sub.fromWorkLog}
                                         value={sub.content}
                                         onChange={(e) => setPhaseSubItem(i, origIndex, "content", e.target.value)}
                                         placeholder="내용"
-                                        className="w-full rounded border border-gray-200 px-2 py-1.5"
+                                        title={sub.fromWorkLog ? "작업일지 화면에서 내용을 수정합니다." : undefined}
+                                        className={`w-full rounded border px-2 py-1.5 ${
+                                          sub.fromWorkLog ? "border-gray-200 bg-gray-50 cursor-default" : "border-gray-200"
+                                        }`}
                                       />
                                     </td>
                                     <td className="py-1.5 pr-3 align-top text-center whitespace-nowrap no-print">
                                       <button
                                         type="button"
+                                        disabled={!!sub.fromWorkLog}
                                         onClick={() => removePhaseSubItem(i, origIndex)}
-                                        className="text-red-600 hover:text-red-700 text-xs font-medium no-print"
+                                        title={sub.fromWorkLog ? "작업일지에서 해당 지출을 삭제하면 여기서도 빠집니다." : undefined}
+                                        className={`text-xs font-medium no-print ${
+                                          sub.fromWorkLog
+                                            ? "cursor-not-allowed text-gray-400"
+                                            : "text-red-600 hover:text-red-700"
+                                        }`}
                                       >
                                         삭제
                                       </button>
@@ -891,7 +941,7 @@ export default function SettlementPage() {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saveLoading || phaseRows.length === 0}
+              disabled={saveLoading}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 no-print"
             >
               {saveLoading ? "저장 중…" : "저장"}
@@ -1010,7 +1060,9 @@ export default function SettlementPage() {
                 {phaseRows.map((row, i) => {
                   const subSum = (row.subItems || []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
                   const usedDisplay = row.subItems?.length ? subSum : row.usedAmount;
-                  const subs = (row.subItems || []).sort((a, b) => (a.dateUsed || "").localeCompare(b.dateUsed || ""));
+                  const subs = (row.subItems || [])
+                    .filter((s) => s.fromWorkLog === true || !isManualSubItemEmpty(s))
+                    .sort((a, b) => (a.dateUsed || "").localeCompare(b.dateUsed || ""));
                   return (
                     <React.Fragment key={i}>
                       <tr>

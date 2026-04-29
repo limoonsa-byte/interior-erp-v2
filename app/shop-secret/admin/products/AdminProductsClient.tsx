@@ -18,6 +18,7 @@ type Product = {
   category: string;
   price: number;
   isActive: boolean;
+  isHit: boolean;
   updatedAt: string;
 };
 
@@ -44,8 +45,6 @@ export default function AdminProductsClient() {
   const [taxonomyBusy, setTaxonomyBusy] = useState(false);
   const [customLineDraft, setCustomLineDraft] = useState("");
   const [showInactive, setShowInactive] = useState(true);
-  const [tokenDays, setTokenDays] = useState("30");
-  const [issuedLink, setIssuedLink] = useState("");
   const [editor, setEditor] = useState<null | { mode: "create" } | { mode: "edit"; sku: string }>(null);
   const [selectedSkus, setSelectedSkus] = useState<Set<string>>(() => new Set());
   const [bulkShopLine, setBulkShopLine] = useState("");
@@ -55,6 +54,7 @@ export default function AdminProductsClient() {
   const [bulkCategoryClear, setBulkCategoryClear] = useState(false);
   const [bulkMergedSubNames, setBulkMergedSubNames] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [hitSavingSku, setHitSavingSku] = useState<string | null>(null);
   const selectAllRef = useRef<HTMLInputElement>(null);
   const lineChangeSkipClear = useRef(true);
 
@@ -296,6 +296,28 @@ export default function AdminProductsClient() {
     });
   }, [filtered]);
 
+  const patchProductHit = useCallback(
+    async (sku: string, isHit: boolean) => {
+      setHitSavingSku(sku);
+      try {
+        const res = await fetch(`/api/company/shop-products/${encodeURIComponent(sku)}/hit`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isHit }),
+          credentials: "include",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data as { error?: string }).error || "히트 저장 실패");
+        await loadProducts();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : "히트 저장 실패");
+      } finally {
+        setHitSavingSku(null);
+      }
+    },
+    [loadProducts]
+  );
+
   const batchDeleteSelected = useCallback(async () => {
     const skus = [...selectedSkus];
     if (skus.length === 0) {
@@ -422,25 +444,6 @@ export default function AdminProductsClient() {
     }
   }, []);
 
-  const issueSecretLink = useCallback(async () => {
-    setIssuedLink("");
-    const days = Math.max(1, Number(tokenDays) || 30);
-    const res = await fetch("/api/company/shop-secret/tokens", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ days }),
-      credentials: "include",
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setUploadResult(`링크 발급 실패: ${(data as { error?: string }).error || "권한 확인"}`);
-      return;
-    }
-    const token = String((data as { token?: string }).token || "");
-    if (!token) return;
-    setIssuedLink(`${window.location.origin}/shop-secret?token=${token}`);
-  }, [tokenDays]);
-
   const addTaxonomyLine = useCallback(async () => {
     const name = newLineName.trim();
     if (!name) return;
@@ -559,7 +562,8 @@ export default function AdminProductsClient() {
         <code className="rounded border border-zinc-700 bg-zinc-900 px-1 text-xs text-zinc-300">
           sku,name,shop_line,category,brand,spec,unit,price,sale_price,…
         </code>{" "}
-        모두 됩니다. 필수: <span className="text-zinc-300">품목코드·상품명·정가</span>. 같은 품목코드면 업로드 시 수정(덮어쓰기)됩니다. 구분·하부는 관리 화면과 동일하게 쓰면 필터에 맞습니다.
+        모두 됩니다. 필수: <span className="text-zinc-300">품목코드·상품명·정가</span>. 같은 품목코드면 업로드 시 수정(덮어쓰기)됩니다. 구분·하부는 관리 화면과 동일하게 쓰면 필터에 맞습니다.{" "}
+        <span className="text-zinc-500">히트(Y/N) 열은 선택이며, 열이 없으면 기존 히트 설정을 유지합니다.</span>
       </p>
       {authError && (
         <div className="rounded border border-red-900/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">{authError}</div>
@@ -765,7 +769,7 @@ export default function AdminProductsClient() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="상품명/sku 검색"
+              placeholder="상품명·SKU 검색"
               className="rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 placeholder:text-zinc-500"
             />
             <label className="inline-flex items-center gap-1 text-sm text-zinc-300">
@@ -786,31 +790,6 @@ export default function AdminProductsClient() {
             </button>
           </div>
         </div>
-      </div>
-      <div className="space-y-2 rounded-lg border border-zinc-700/80 bg-zinc-900/50 p-3">
-        <p className="text-sm font-medium text-zinc-200">비밀 링크 발급</p>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={tokenDays}
-            onChange={(e) => setTokenDays(e.target.value)}
-            inputMode="numeric"
-            className="w-24 rounded border border-zinc-600 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100"
-          />
-          <span className="text-sm text-zinc-400">일 유효</span>
-          <button
-            onClick={() => issueSecretLink().catch(() => {})}
-            className="rounded border border-zinc-600 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-100 hover:bg-zinc-700"
-          >
-            링크 발급
-          </button>
-        </div>
-        {issuedLink && (
-          <textarea
-            readOnly
-            value={issuedLink}
-            className="h-20 w-full rounded border border-zinc-600 bg-zinc-950 p-2 text-xs text-zinc-200"
-          />
-        )}
       </div>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -980,7 +959,22 @@ export default function AdminProductsClient() {
                     />
                   </td>
                   <td className="p-2 font-mono text-xs text-zinc-300">{p.sku}</td>
-                  <td className="p-2 text-zinc-100">{p.name}</td>
+                  <td className="p-2 text-zinc-100">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(p.isHit)}
+                        disabled={bulkBusy || hitSavingSku === p.sku}
+                        onChange={(e) => {
+                          patchProductHit(p.sku, e.target.checked).catch(() => {});
+                        }}
+                        aria-label={`${p.name} 히트 상단 노출`}
+                        title="히트(목록·비밀몰 상단)"
+                        className="shrink-0 rounded border-zinc-500 bg-zinc-950 text-amber-600"
+                      />
+                      <span className="min-w-0">{p.name}</span>
+                    </div>
+                  </td>
                   <td className="p-2">{p.shopLine || "-"}</td>
                   <td className="p-2">{p.category || "-"}</td>
                   <td className="p-2 text-right tabular-nums">{p.price.toLocaleString("ko-KR")}원</td>

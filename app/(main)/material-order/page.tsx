@@ -317,24 +317,26 @@ export function MaterialOrderPage() {
         }
         if (draft.addedRowsByLabel && typeof draft.addedRowsByLabel === "object") {
           const raw = draft.addedRowsByLabel as Record<string, unknown[]>;
-          const normalized: Record<string, AddedOrderRow[]> = {};
-          Object.entries(raw).forEach(([label, rows]) => {
-            if (!Array.isArray(rows)) return;
-            normalized[label] = rows.map((r: unknown, i: number) => {
-              const x = r as Record<string, unknown>;
-              return {
-                id: (x.id && String(x.id).trim()) ? String(x.id) : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
-                processGroup: String(x.processGroup ?? "").trim(),
-                category: String(x.category ?? "").trim(),
-                spec: String(x.spec ?? "").trim(),
-                unit: String(x.unit ?? "").trim(),
-                qty: String(x.qty ?? "").trim(),
-                materialUnitPrice: String(x.materialUnitPrice ?? "").trim(),
-                note: String(x.note ?? "").trim(),
-              };
+          setAddedRowsByLabel((prev) => {
+            const normalized: Record<string, AddedOrderRow[]> = {};
+            Object.entries(raw).forEach(([label, rows]) => {
+              if (!Array.isArray(rows)) return;
+              normalized[label] = rows.map((r: unknown, i: number) => {
+                const x = r as Record<string, unknown>;
+                return {
+                  id: (x.id && String(x.id).trim()) ? String(x.id) : `row-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+                  processGroup: String(x.processGroup ?? "").trim(),
+                  category: String(x.category ?? "").trim(),
+                  spec: String(x.spec ?? "").trim(),
+                  unit: String(x.unit ?? "").trim(),
+                  qty: String(x.qty ?? "").trim(),
+                  materialUnitPrice: String(x.materialUnitPrice ?? "").trim(),
+                  note: String(x.note ?? "").trim(),
+                };
+              });
             });
+            return { ...prev, ...normalized };
           });
-          setAddedRowsByLabel(normalized);
         }
       })
       .catch(() => {})
@@ -376,22 +378,22 @@ export function MaterialOrderPage() {
     return scored.slice(0, 12).map((x) => x.p);
   }, [shopProducts]);
 
-  /** 모든 발주 유형에 기본 행 1개씩 추가 (목재발주 폼과 동일) */
+  /** 견적 선택·발주 유형 목록 변경 시에만 빈 유형에 기본 행 1개 보장. `addedRowsByLabel`에 의존하면 행 전체 삭제 직후 다시 채워져 삭제가 안 되는 것처럼 보임 */
   useEffect(() => {
     if (!selectedEstimateId) return;
-    const next: Record<string, AddedOrderRow[]> = {};
-    let changed = false;
-    visibleOrderLabels.forEach((label) => {
-      const current = addedRowsByLabel[label] ?? [];
-      if (current.length === 0) {
-        next[label] = [createEmptyAddedRow()];
-        changed = true;
-      }
+    setAddedRowsByLabel((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      visibleOrderLabels.forEach((label) => {
+        const current = prev[label] ?? [];
+        if (current.length === 0) {
+          next[label] = [createEmptyAddedRow()];
+          changed = true;
+        }
+      });
+      return changed ? { ...prev, ...next } : prev;
     });
-    if (changed) {
-      setAddedRowsByLabel((prev) => ({ ...prev, ...next }));
-    }
-  }, [selectedEstimateId, visibleOrderLabels, addedRowsByLabel]);
+  }, [selectedEstimateId, visibleOrderLabels]);
 
   /** 발주 유형 추가 */
   const handleAddOrderType = () => {
@@ -1334,22 +1336,20 @@ export function MaterialOrderPage() {
                                 </div>
                                 )}
                               </div>
-                              {!(catItems.length === 0 && (addedRowsByLabel[label] ?? []).length === 0) && (
-                                <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setAddedRowsByLabel((prev) => ({
-                                        ...prev,
-                                        [label]: [...(prev[label] ?? []), createEmptyAddedRow()],
-                                      }))
-                                    }
-                                    className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
-                                  >
-                                    + 행 추가
-                                  </button>
-                                </div>
-                              )}
+                              <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setAddedRowsByLabel((prev) => ({
+                                      ...prev,
+                                      [label]: [...(prev[label] ?? []), createEmptyAddedRow()],
+                                    }))
+                                  }
+                                  className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100"
+                                >
+                                  + 행 추가
+                                </button>
+                              </div>
                             </>
                           )}
                       </div>

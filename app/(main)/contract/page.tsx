@@ -678,10 +678,6 @@ function ContractForm({
     const wrap = document.createElement("div");
     wrap.id = printRootId;
     wrap.className = "contract-print-only-root";
-    const mt = bodyMargins.top;
-    const mr = bodyMargins.right;
-    const mb = bodyMargins.bottom;
-    const ml = bodyMargins.left;
     wrap.style.cssText = `box-sizing: border-box;`;
     wrap.innerHTML = `<div class="contract-print-first-page" style="padding:0;box-sizing:border-box">${firstPageHtml}</div>${docSection || bodyHtmlSection}`;
     document.body.appendChild(wrap);
@@ -689,8 +685,8 @@ function ContractForm({
     const noHeaderFooterStyle = document.createElement("style");
     noHeaderFooterStyle.setAttribute("media", "print");
     noHeaderFooterStyle.id = "contract-print-no-header-footer";
-    const contentH = 297 - mt - mb;
-    noHeaderFooterStyle.textContent = `@page { size: A4; margin: ${mt}mm ${mr}mm ${mb}mm ${ml}mm; } #contract-print-only.contract-print-only-root { width: 100%; margin: 0; padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 100%; } #contract-print-only .contract-print-summary { height: ${contentH}mm !important; min-height: ${contentH}mm !important; max-height: ${contentH}mm !important; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-body-section { page-break-before: always; padding: 0; box-sizing: border-box; font-size: 14px; line-height: 1.75; } #contract-print-only .contract-print-body-section .contract-print-body-from-page2 { padding: 0; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 100%; height: ${contentH}mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
+    const contentH = 297;
+    noHeaderFooterStyle.textContent = `@page { size: A4; margin: 0; } #contract-print-only.contract-print-only-root { width: 100%; margin: 0; padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-first-page { box-sizing: border-box; width: 100%; } #contract-print-only .contract-print-summary { height: ${contentH}mm !important; min-height: ${contentH}mm !important; max-height: ${contentH}mm !important; } #contract-print-only .contract-print-first-page .contract-print-body-from-page2 { padding: 0; box-sizing: border-box; } #contract-print-only .contract-print-body-section { page-break-before: always; padding: 0; box-sizing: border-box; font-size: 14px; line-height: 1.75; } #contract-print-only .contract-print-body-section .contract-print-body-from-page2 { padding: 0; } #contract-print-only .contract-print-doc-page { page-break-after: always; box-sizing: border-box; width: 100%; height: ${contentH}mm; padding: 0; margin: 0; overflow: hidden; } #contract-print-only .contract-print-doc-page:last-child { page-break-after: auto; } #contract-print-only .contract-print-doc-page .contract-print-doc-img { width: 100%; height: 100%; display: block; object-fit: contain; margin: 0; padding: 0; }`;
     document.head.appendChild(noHeaderFooterStyle);
     const prevTitle = document.title;
     const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
@@ -1589,8 +1585,9 @@ export default function ContractPage() {
                 const c = signViewContract;
                 const hasBody = Boolean(c.body?.trim());
                 const docPath = c.documentPath;
-                const showPdf = Boolean(docPath && !(viewBodyPdfFallback && hasBody));
-                const showBodyHtml = hasBody && (!docPath || viewBodyPdfFallback);
+                /** 계약서 보기 일관성: 저장된 본문(HTML)이 있으면 항상 본문 우선 표시 */
+                const showBodyHtml = hasBody;
+                const showPdf = Boolean(docPath && !hasBody);
                 const margins = c.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 };
                 return (
                   <>
@@ -1607,11 +1604,7 @@ export default function ContractPage() {
                     {showBodyHtml && c.body?.trim() && (
                       <div className="contract-print-doc-pages-wrapper mb-4">
                         <SignBodyA4Viewer bodyHtml={c.body} margins={margins} />
-                        {docPath && (
-                          <p className="mt-2 text-xs text-amber-700">
-                            본문 PDF 파일을 불러오지 못해 저장된 본문(HTML)으로 표시합니다. PDF가 필요하면 계약서를 한 번 더 저장해 주세요.
-                          </p>
-                        )}
+                        {docPath ? <p className="mt-2 text-xs text-gray-500">계약서 보기는 저장된 본문(HTML) 기준으로 표시됩니다.</p> : null}
                       </div>
                     )}
                   </>

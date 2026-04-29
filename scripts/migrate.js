@@ -103,6 +103,8 @@ async function migrate() {
     console.log("[migrate] schedule_phases OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_list_color TEXT`;
     console.log("[migrate] schedule_list_color OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_memo TEXT`;
+    console.log("[migrate] schedule_memo OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`
@@ -250,6 +252,29 @@ async function migrate() {
       )
     `;
     await sql`ALTER TABLE estimate_settlements ADD COLUMN IF NOT EXISTS customer_payment TEXT`;
+    await sql`ALTER TABLE estimate_settlements ADD COLUMN IF NOT EXISTS payment_approval_data TEXT`;
+    await sql`
+      CREATE TABLE IF NOT EXISTS estimate_payment_approvals (
+        estimate_id INT PRIMARY KEY REFERENCES estimates(id) ON DELETE CASCADE,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    try {
+      await sql`
+        INSERT INTO estimate_payment_approvals (estimate_id, company_id, data_json, updated_at)
+        SELECT s.estimate_id, s.company_id, s.payment_approval_data, NOW()
+        FROM estimate_settlements s
+        WHERE s.payment_approval_data IS NOT NULL
+          AND trim(s.payment_approval_data) <> ''
+          AND trim(s.payment_approval_data) <> '{}'
+        ON CONFLICT (estimate_id) DO NOTHING
+      `;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/estimate_payment_approvals|payment_approval_data/i.test(msg)) throw e;
+    }
     console.log("[migrate] estimate_settlements OK");
     await sql`
       CREATE TABLE IF NOT EXISTS company_chat_messages (
@@ -429,6 +454,7 @@ async function migrate() {
     await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS shop_line TEXT`;
     await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS image_data TEXT`;
     await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS image_mime TEXT`;
+    await sql`ALTER TABLE shop_products ADD COLUMN IF NOT EXISTS is_hit BOOLEAN NOT NULL DEFAULT false`;
     await sql`CREATE INDEX IF NOT EXISTS shop_products_company_active_idx ON shop_products(company_id, is_active, name)`;
     await sql`CREATE INDEX IF NOT EXISTS shop_products_company_line_idx ON shop_products(company_id, shop_line)`;
     console.log("[migrate] shop_products OK");
