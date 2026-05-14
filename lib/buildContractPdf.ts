@@ -2,6 +2,7 @@ import PDFDocumentKit from "pdfkit";
 import { PDFDocument } from "pdf-lib";
 import { readFile } from "fs/promises";
 import path from "path";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
 
 type ContractDetails = Record<string, string>;
 
@@ -162,33 +163,36 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
 
       const raw = Number(String(details.contractAmount ?? "").replace(/\D/g, "")) || 0;
       const downPct = String(details.downPaymentPercent ?? "").trim();
-      const balPct = String(details.balancePercent ?? "").trim();
+      const balPctLegacy = String(details.balancePercent ?? "").trim();
+      const interimList = parseInterimLinesFromDetails(details as unknown as Record<string, unknown>);
+      const schedule = computePaymentScheduleForDisplay(raw, downPct, interimList, balPctLegacy);
       const clientName = signerName || String(details.clientName ?? "");
       const contractorCompany = String(details.contractorCompanyName ?? "");
 
       const stampBuf = await loadStampImage(companyId);
       const parsedSig = signatureDataUrl ? parseSignatureDataUrl(signatureDataUrl) : null;
 
-      let interimList: Array<{ percent: string; daysAfter: string }>;
-      try {
-        const rawP = details.interimPayments;
-        if (rawP && typeof rawP === "string" && rawP.trim()) {
-          const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
-          interimList = Array.isArray(parsed) && parsed.length > 0
-            ? parsed.map((p) => ({ percent: String(p.percent ?? ""), daysAfter: String(p.daysAfter ?? "") }))
-            : [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
-        } else interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }];
-      } catch { interimList = [{ percent: String(details.interimPercent ?? ""), daysAfter: String(details.interimDaysAfter ?? "") }]; }
-
       const payRows: [string, string][] = [];
       payRows.push(["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 부가세별도` : "-"]);
-      payRows.push(["선 금", downPct ? `${fmtAmt(Math.round(raw * Number(downPct) / 100))}원 (${downPct} %) 계약이후 바로` : "-"]);
+      payRows.push(["선 금", downPct ? `${fmtAmt(schedule.downAmount)}원 (${downPct} %) 계약이후 바로` : "-"]);
       interimList.forEach((item, i) => {
-        const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+        const amt = fmtAmt(schedule.interimAmounts[i] ?? 0);
         const label = interimList.length > 1 ? `중도금${i + 1}차` : "중도금";
-        payRows.push([label, `${amt}원 (${item.percent} %) 공사로부터 ${item.daysAfter}일후`]);
+        const d = String(item.daysAfter ?? "").trim();
+        const mid = d ? `${d}일` : "   ";
+        payRows.push([label, `${amt}원 (${item.percent} %) 공사로부터 ${mid}후`]);
       });
-      payRows.push(["잔 금", balPct ? `${fmtAmt(Math.round(raw * Number(balPct) / 100))}원 (${balPct} %) 공사완료 시` : "-"]);
+      const hasAnyMoneyRow =
+        raw > 0 &&
+        (String(downPct).trim() !== "" ||
+          interimList.some((l) => String(l.percent).trim() !== "") ||
+          schedule.balanceAmount > 0 ||
+          String(balPctLegacy).trim() !== "");
+      const balancePctLabel = schedule.balancePercentLabel || balPctLegacy || "0";
+      payRows.push([
+        "잔 금",
+        hasAnyMoneyRow ? `${fmtAmt(schedule.balanceAmount)}원 (${balancePctLabel} %) 공사완료 시` : "-",
+      ]);
 
       // ────────────────────────────────────────
       //  섹션 1: 계약자 (2행) — 상단 (인) 칸에 서명·도장 배치

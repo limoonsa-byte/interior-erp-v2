@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
 
 export type SignedContractSummaryContract = {
   details: Record<string, unknown> | null;
@@ -71,42 +72,22 @@ export function SignedContractSummary({ contract }: { contract: SignedContractSu
   const fmtAmt = (n: number) => (n ? n.toLocaleString("ko-KR") : "");
   const contractAmountFormatted = raw ? raw.toLocaleString("ko-KR") : "-";
   const downPct = String(dStr.downPaymentPercent ?? "").trim();
-  const balPct = String(dStr.balancePercent ?? "").trim();
-  const downAmtFmt = fmtAmt(downPct ? Math.round((raw * Number(downPct)) / 100) : 0);
-  const balanceAmtFmt = fmtAmt(balPct ? Math.round((raw * Number(balPct)) / 100) : 0);
-  let interimList: Array<{ percent: string; daysAfter: string }>;
-  try {
-    const rawP = dStr.interimPayments;
-    if (rawP && typeof rawP === "string" && rawP.trim()) {
-      const parsed = JSON.parse(rawP) as Array<{ percent?: string; daysAfter?: string }>;
-      interimList =
-        Array.isArray(parsed) && parsed.length > 0
-          ? parsed.map((p) => ({
-              percent: String(p.percent ?? ""),
-              daysAfter: String(p.daysAfter ?? ""),
-            }))
-          : [
-              { percent: String(dStr.interimPercent ?? ""),
-                daysAfter: String(dStr.interimDaysAfter ?? "") },
-            ];
-    } else {
-      interimList = [
-        { percent: String(dStr.interimPercent ?? ""), daysAfter: String(dStr.interimDaysAfter ?? "") },
-      ];
-    }
-  } catch {
-    interimList = [
-      { percent: String(dStr.interimPercent ?? ""), daysAfter: String(dStr.interimDaysAfter ?? "") },
-    ];
-  }
+  const balPctLegacy = String(dStr.balancePercent ?? "").trim();
+  const interimList = parseInterimLinesFromDetails(dStr as unknown as Record<string, unknown>);
+  const schedule = computePaymentScheduleForDisplay(raw, downPct, interimList, balPctLegacy);
+  const downAmtFmt = fmtAmt(schedule.downAmount);
+  const balanceAmtFmt = fmtAmt(schedule.balanceAmount);
+  const sp = "\u00A0\u00A0";
   const interimRows = interimList
     .map((item, idx) => {
-      const amt = fmtAmt(raw && item.percent ? Math.round((raw * Number(item.percent)) / 100) : 0);
+      const amt = fmtAmt(schedule.interimAmounts[idx] ?? 0);
       const label = idx === 0 ? "중도금1차" : `중도금${idx + 1}차`;
-      return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter)}일후</span></td></tr>`;
+      const days = (item.daysAfter ?? "").trim();
+      const daysPart = days ? `${esc(days)}일` : "\u00A0\u00A0\u00A0";
+      return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(${sp}${esc(item.percent)}${sp}%) <span class="contract-print-red">공사로부터 ${daysPart}후</span></td></tr>`;
     })
     .join("");
-  const rowspanMoney = 3 + interimList.length + 1;
+  const rowspanMoney = 3 + interimList.length;
   const clientName = contract.signerName || String(dStr.clientName ?? "");
   const sigDisplay = String(
     dStr.contractorSignature ?? dStr.contractorName ?? dStr.contractorSignatureDirect ?? ""
@@ -116,6 +97,11 @@ export function SignedContractSummary({ contract }: { contract: SignedContractSu
     contract.signerResidentNumber || String(dStr.clientResidentNumber ?? dStr.client_resident_number ?? "").trim();
   const stampHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp" alt="" onerror="this.remove()" />`;
   const stampSigHtml = `<img src="/api/company/asset/stamp" class="contract-print-stamp-sig" alt="" onerror="this.remove()" />`;
+  const specialRaw = String(dStr.specialProvisions ?? "").trim();
+  const specialBlock =
+    specialRaw.length > 0
+      ? `<div class="contract-print-special-provisions"><div class="contract-print-special-title">특약사항</div><div class="contract-print-special-body">${esc(specialRaw).replace(/\n/g, "<br/>")}</div></div>`
+      : "";
   const html =
     `<div class="contract-print-summary contract-print-page1 contract-sign-summary-page">` +
     `<h1 class="contract-print-title">실내건축공사 표준도급 계약서</h1>` +
@@ -129,11 +115,12 @@ export function SignedContractSummary({ contract }: { contract: SignedContractSu
     `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(dStr.projectStartDate ?? "")}</td></tr>` +
     `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(dStr.projectEndDate ?? "")}</td></tr>` +
     `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
-    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPct)}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(${sp}${esc(downPct)}${sp}%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
     interimRows +
-    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balPct)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(${sp}${esc(schedule.balancePercentLabel)}${sp}%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
     `</tbody></table>` +
     stampHtml +
+    specialBlock +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
     `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddr)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientRrn)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +

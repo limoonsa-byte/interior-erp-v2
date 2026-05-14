@@ -48,14 +48,20 @@ export async function GET(
         const cRow = await sql`SELECT company_id FROM contracts WHERE id = ${contractId}`;
         const companyId = cRow.rows[0]?.company_id;
         if (companyId) {
-          const tplRow = await sql`SELECT document_path FROM company_contract_template WHERE company_id = ${companyId} LIMIT 1`;
+          const tplRow = await sql`SELECT document_path, document_data FROM company_contract_template WHERE company_id = ${companyId} LIMIT 1`;
           const tplPath = tplRow.rows[0]?.document_path;
+          const tplDataB64 = tplRow.rows[0]?.document_data;
           if (tplPath && typeof tplPath === "string" && tplPath.trim()) {
             const tplFileName = tplPath.startsWith("contracts/") ? tplPath.slice("contracts/".length) : path.basename(tplPath);
             const tplBaseDir = process.env.VERCEL ? path.join("/tmp", "contracts") : path.join(process.cwd(), "uploads", "contracts");
             try {
               return await readFile(path.join(tplBaseDir, tplFileName));
             } catch { /* file not found, continue */ }
+          }
+          if (tplDataB64 && typeof tplDataB64 === "string" && tplDataB64.trim().length > 0) {
+            try {
+              return Buffer.from(tplDataB64, "base64");
+            } catch { /* ignore */ }
           }
         }
       } catch { /* ignore */ }
@@ -110,6 +116,9 @@ export async function GET(
       headers: {
         "Content-Type": contentType,
         "Content-Disposition": `inline; filename="${encodeURIComponent(fileName)}"`,
+        /** 서명·pdf.js 미리보기가 예전 응답을 캐시하면 “다운로드 PDF는 1조부터인데 화면만 뒤에서 시작”처럼 보일 수 있음 */
+        "Cache-Control": "private, no-store, max-age=0, must-revalidate",
+        Pragma: "no-cache",
       },
     });
   } catch (error) {

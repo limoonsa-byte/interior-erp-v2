@@ -116,7 +116,7 @@ body {
   width: 100% !important;
   height: 100%;
   box-sizing: border-box !important;
-  overflow: hidden;
+  overflow: visible;
   background: white;
   font-size: 12px;
   display: flex;
@@ -132,9 +132,9 @@ body {
   min-height: 0;
 }
 .contract-sign-summary .contract-print-page1-top {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .contract-sign-summary .contract-print-page1 .contract-print-title {
   text-align: center;
@@ -196,6 +196,29 @@ body {
 .contract-sign-summary .contract-print-red {
   color: #c00;
   font-weight: 600;
+}
+/* 특약사항: 공사대금 표와 약관·서명 사이 (계약 작성 인쇄·서명 요약·이메일 캡처 공통 클래스) */
+.contract-print-special-provisions {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  /* flex-grow 금지: 1이면 빈 특약 영역이 한 장을 채우듯 커져 표가 다음 인쇄 페이지로 밀림 */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: visible;
+}
+.contract-print-special-title {
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.contract-print-special-body {
+  min-height: 1em;
 }
 .contract-sign-summary .contract-print-clause {
   font-size: 11px;
@@ -552,7 +575,7 @@ body {
   padding: 0.5in 0.4in !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
   page-break-after: always;
   min-height: 267mm;
 }
@@ -562,11 +585,12 @@ body {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+  overflow: visible;
 }
 .contract-preview-print-pages .contract-print-page1-top {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 .contract-preview-print-pages .contract-print-title {
   text-align: center;
@@ -663,6 +687,7 @@ body {
 .contract-preview-print-pages .contract-print-main-tbl th,
 .contract-preview-print-pages .contract-print-main-tbl td { border: 1px solid #333; padding: 8px; }
 .contract-preview-print-pages .contract-print-red { color: #c00; font-weight: 600; }
+.contract-preview-print-pages .contract-print-special-provisions { margin: 10px 0 12px; }
 .contract-preview-print-pages .contract-print-clause { font-size: 11px; line-height: 1.6; padding-top: 0.25in; }
 .contract-preview-print-pages .contract-print-signatures { display: flex; gap: 60px; margin-top: 0.15in; }
 .contract-preview-print-pages .contract-print-sig-block { flex: 1; font-size: 12px; }
@@ -682,7 +707,7 @@ body {
   padding: 0.5in 0.4in !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
 }
 .contract-email-capture-print-style .contract-print-page1 .contract-print-title {
   text-align: center;
@@ -741,6 +766,11 @@ body {
 .contract-email-capture-print-style .contract-print-red {
   color: #c00;
   font-weight: 600;
+}
+.contract-email-capture-print-style .contract-print-special-provisions {
+  margin: 10px 0 12px;
+  flex: 0 1 auto;
+  min-height: 0;
 }
 .contract-email-capture-print-style .contract-print-clause {
   font-size: 11px;
@@ -1044,16 +1074,16 @@ body {
     font-size: 12px;
     box-sizing: border-box;
   }
-  /* 요약 표(1페이지): A4 한 장 높이로 고정, 약관·서명란은 반드시 1페이지 맨 아래(2페이지로 넘어가면 안 됨) */
+  /* 요약 표(1페이지): 내용이 많으면 잘리지 않도록 높이 고정·overflow 제거 */
   #contract-print-only .contract-print-summary {
     padding: 0.5in 0.4in !important;
     max-width: 100% !important;
     box-sizing: border-box !important;
-    overflow: hidden !important;
+    overflow: visible !important;
     page-break-after: always;
-    height: 267mm;
     min-height: 267mm;
-    max-height: 267mm;
+    height: auto;
+    max-height: none;
     display: flex;
     flex-direction: column;
   }
@@ -1062,12 +1092,13 @@ body {
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: visible;
   }
-  /* 1페이지 상단(제목+표+도장): 남는 공간만 쓰고 넘치면 잘림 → 약관·서명란이 1페이지 맨 아래 고정 */
+  /* 1페이지 상단(제목+표+도장): 표가 길어져도 잘리지 않게 */
   #contract-print-only .contract-print-page1-top {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
   }
   /* 1페이지 표준도급 계약서 양식 */
   #contract-print-only .contract-print-page1 .contract-print-title {
@@ -1130,6 +1161,15 @@ body {
   #contract-print-only .contract-print-red {
     color: #c00;
     font-weight: 600;
+  }
+  #contract-print-only .contract-print-special-provisions {
+    margin: 8px 0 10px;
+    padding: 8px 10px;
+    font-size: 11px;
+    line-height: 1.55;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: visible;
   }
   #contract-print-only .contract-print-clause {
     font-size: 11px;

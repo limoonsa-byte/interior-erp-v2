@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { sameOriginApiUrl } from "@/lib/sameOriginUrl";
 
 const A4_WIDTH_PX = 595;
 
@@ -25,7 +26,9 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const effectiveUrl = documentUrl || (documentPath.trim() ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/company/contract-document?path=${encodeURIComponent(documentPath)}` : "");
+  const effectiveUrl =
+    (documentUrl ? sameOriginApiUrl(documentUrl) : "") ||
+    (documentPath.trim() ? `${typeof window !== "undefined" ? window.location.origin : ""}/api/company/contract-document?path=${encodeURIComponent(documentPath)}` : "");
 
   useEffect(() => {
     if (!effectiveUrl || typeof window === "undefined") {
@@ -68,11 +71,19 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
       } catch (e) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : String(e);
-          const is404 = msg.includes("404") || /retrieving PDF/i.test(msg);
+          const is404 = msg.includes("404") || /Missing PDF|404|retrieving PDF/i.test(msg);
           const isNetworkError = /failed to fetch|network|load/i.test(msg) || msg === "Failed to fetch";
-          setError(is404 || isNetworkError
-            ? "2페이지 이후 PDF가 아직 없습니다. 본문은 작성자가 계약서를 저장할 때 자동으로 PDF로 넣습니다. 계약 작성자에게 '계약서 저장 한 번 더 해 주세요'라고 요청하시거나, 위 요약을 확인하고 서명할 수 있습니다."
-            : msg || "PDF 로드 실패");
+          if (is404) {
+            setError(
+              "2페이지 이후 본문 PDF가 서버에 없습니다. 작성자가 계약서를 저장해 본문이 반영됐는지, 또는 관리 화면에 계약서 양식 PDF가 등록돼 있는지 확인해 주세요. 위 요약만으로도 서명은 가능합니다."
+            );
+          } else if (isNetworkError) {
+            setError(
+              "본문 PDF를 불러오지 못했습니다(네트워크 또는 주소 불일치). 페이지를 새로고침하거나, 잠시 후 «새 창에서 보기»로 직접 열어 보세요. 계속되면 브라우저 콘솔·네트워크 탭의 오류 내용을 개발자에게 전달해 주세요."
+            );
+          } else {
+            setError(msg || "PDF 로드 실패");
+          }
           onError?.();
         }
       } finally {

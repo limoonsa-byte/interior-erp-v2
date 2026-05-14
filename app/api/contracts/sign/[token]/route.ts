@@ -47,10 +47,12 @@ export async function GET(
     const c = result.rows[0];
     const info = rowToSignInfo(c);
     if (c.status === "signed") return NextResponse.json({ ...info, alreadySigned: true }, { status: 200 });
-    const baseUrl = getAppBaseUrl();
-    const documentUrl = c.document_path != null && String(c.document_path).trim() !== ""
-      ? `${baseUrl.replace(/\/$/, "")}/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`
-      : undefined;
+    /**
+     * 반드시 **경로만** 보냄 (앞에 /). 브라우저가 현재 호스트(localhost, 배포 도메인)로 요청하게 해야 pdf.js·fetch가 CORS 없이 동작함.
+     * 절대 URL(getAppBaseUrl)을 쓰면 로컬에서 NEXT_PUBLIC_APP_URL 이 배포 주소로만 잡혀 있을 때 서명 페이지는 localhost 인데 PDF만 다른 도메인으로 가서 전부 실패하고,
+     * PdfToA4Images 가 "PDF 없음" 메시지로 오인 표시하는 문제가 생김.
+     */
+    const documentUrl = `/api/contracts/document/${c.id}?token=${encodeURIComponent(token)}`;
     return NextResponse.json({ ...info, documentUrl }, { status: 200 });
   } catch (error) {
     console.error("contracts sign GET error:", error);

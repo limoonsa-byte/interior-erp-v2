@@ -6,6 +6,8 @@ import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
 import { SignBodyA4Viewer } from "@/components/contract/SignBodyA4Viewer";
 import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
 import type { SignedContractSummaryContract } from "@/components/contract/SignedContractSummary";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
+import { sameOriginApiUrl } from "@/lib/sameOriginUrl";
 
 type SignInfo = {
   id: number;
@@ -32,32 +34,28 @@ function buildSummaryPageHtml(
   const fmtAmt = (n: number) => (n ? n.toLocaleString("ko-KR") : "");
   const contractAmountFormatted = raw ? raw.toLocaleString("ko-KR") : "-";
   const downPaymentPercent = String(details.downPaymentPercent ?? "").trim();
-  const balancePercent = String(details.balancePercent ?? "").trim();
-  const downAmtFmt = fmtAmt(downPaymentPercent ? Math.round(raw * Number(downPaymentPercent) / 100) : 0);
-  const balanceAmtFmt = fmtAmt(balancePercent ? Math.round(raw * Number(balancePercent) / 100) : 0);
-  let interimList: Array<{ percent: string; daysAfter: string }>;
-  try {
-    const rawPayments = details.interimPayments;
-    if (rawPayments != null && typeof rawPayments === "string" && rawPayments.trim()) {
-      const parsed = JSON.parse(rawPayments) as Array<{ percent?: string; daysAfter?: string }>;
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        interimList = parsed.map((p) => ({ percent: String(p.percent ?? "").trim(), daysAfter: String(p.daysAfter ?? "").trim() }));
-      } else interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
-    } else if (Array.isArray(rawPayments) && rawPayments.length > 0) {
-      interimList = (rawPayments as Array<{ percent?: string; daysAfter?: string }>).map((p) => ({ percent: String(p.percent ?? "").trim(), daysAfter: String(p.daysAfter ?? "").trim() }));
-    } else interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
-  } catch {
-    interimList = [{ percent: String(details.interimPercent ?? "").trim(), daysAfter: String(details.interimDaysAfter ?? "").trim() }];
-  }
+  const balancePercentLegacy = String(details.balancePercent ?? "").trim();
+  const interimList = parseInterimLinesFromDetails(details as unknown as Record<string, unknown>);
+  const schedule = computePaymentScheduleForDisplay(raw, downPaymentPercent, interimList, balancePercentLegacy);
+  const downAmtFmt = fmtAmt(schedule.downAmount);
+  const balanceAmtFmt = fmtAmt(schedule.balanceAmount);
+  const sp = "\u00A0\u00A0";
   const interimRows = interimList.map((item, idx) => {
-    const amt = fmtAmt(raw && item.percent ? Math.round(raw * Number(item.percent) / 100) : 0);
+    const amt = fmtAmt(schedule.interimAmounts[idx] ?? 0);
     const label = idx === 0 ? "중도금1차" : idx === 1 ? "중도금2차" : idx === 2 ? "중도금3차" : `중도금${idx + 1}차`;
-    return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(&nbsp;&nbsp;${esc(item.percent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사로부터 ${esc(item.daysAfter)}일후</span></td></tr>`;
+    const days = (item.daysAfter || "").trim();
+    const daysPart = days ? `${esc(days)}일` : "\u00A0\u00A0\u00A0";
+    return `<tr><td class="contract-print-row-label">${label}</td><td colspan="3" class="contract-print-value">${amt}원(${sp}${esc(item.percent)}${sp}%) <span class="contract-print-red">공사로부터 ${daysPart}후</span></td></tr>`;
   }).join("");
-  const rowspanMoney = 3 + interimList.length + 1;
+  const rowspanMoney = 3 + interimList.length;
   const sigDisplay = String(details.contractorSignature ?? details.contractorName ?? details.contractorSignatureDirect ?? "").trim();
   const stampHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp" alt="" />` : "";
   const stampSigHtml = stampUrl ? `<img src="${esc(stampUrl)}" class="contract-print-stamp-sig" alt="" onerror="this.remove()" />` : "";
+  const specialRaw = String(details.specialProvisions ?? "").trim();
+  const specialBlock =
+    specialRaw.length > 0
+      ? `<div class="contract-print-special-provisions"><div class="contract-print-special-title">특약사항</div><div class="contract-print-special-body">${esc(specialRaw).replace(/\n/g, "<br/>")}</div></div>`
+      : "";
   const clientName = signer?.name?.trim() || String(details.clientName ?? "").trim();
   const clientAddress = signer?.address?.trim() || String(details.clientAddress ?? "").trim();
   const clientResidentNumber = signer?.residentNumber?.trim() || String(details.clientResidentNumber ?? "").trim();
@@ -75,12 +73,13 @@ function buildSummaryPageHtml(
     `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(details.projectStartDate ?? "")}</td></tr>` +
     `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(details.projectEndDate ?? "")}</td></tr>` +
     `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
-    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(&nbsp;&nbsp;${esc(downPaymentPercent)}&nbsp;&nbsp;%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(${sp}${esc(downPaymentPercent)}${sp}%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
     interimRows +
-    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(&nbsp;&nbsp;${esc(balancePercent)}&nbsp;&nbsp;%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
+    `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(${sp}${esc(schedule.balancePercentLabel)}${sp}%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
     `</tbody></table>` +
     (stampHtml ? stampHtml : "") +
     `</div>` +
+    specialBlock +
     `<p class="contract-print-clause">발주자(수급인, 이하 &quot;갑&quot;이라한다)와 시공자(하수급인, 이하 &quot;을&quot;이라 한다)는 상기와 같이 계약을 체결하고 전자계약으로 작성한다.</p>` +
     `<div class="contract-print-signatures">` +
     `<div class="contract-print-sig-block"><p class="contract-print-sig-title">발주자(수급인)</p><p class="contract-print-sig-line">주소 : ${esc(clientAddress)}</p><p class="contract-print-sig-line">주민번호 : ${esc(clientResidentNumber)}</p><p class="contract-print-sig-line contract-print-sig-line-name"><span class="contract-print-sig-name-text">성명 : ${esc(clientName)}</span><span class="contract-print-in-fixed contract-print-red">(인)</span></p></div>` +
@@ -371,7 +370,7 @@ export default function SignPage() {
         if (typeof window !== "undefined" && lib.GlobalWorkerOptions) {
           lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${lib.version || "4.0.379"}/build/pdf.worker.min.mjs`;
         }
-        const pdf = await lib.getDocument({ url: info.documentUrl }).promise;
+        const pdf = await lib.getDocument({ url: sameOriginApiUrl(info.documentUrl) }).promise;
         const scale = 2;
         const images: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
@@ -545,6 +544,9 @@ export default function SignPage() {
         {/* 1페이지: 요약(서명란). 2페이지부터: 본문 PDF */}
         <div className="mt-6">
           <h2 className="text-sm font-semibold text-gray-800">계약 내용</h2>
+          <p className="mt-0.5 text-xs text-gray-500">
+            맨 위 흰 장은 전자 요약(표·특약·서명란)이고, 그 아래부터가 등록된 PDF입니다. «새 창에서 보기»는 서버에 저장된 파일과 동일합니다.
+          </p>
           <p className="mt-0.5 text-xs text-gray-500">아래 내용을 확인한 후 하단에서 서명·이메일을 입력해 주세요.</p>
           <div className="mt-2 w-full">
             <div className="max-h-[70vh] overflow-y-auto overflow-x-hidden rounded-lg bg-[#e8e8e8] p-[8mm]">

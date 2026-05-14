@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
-import { ContractRichEditor } from "@/components/admin/ContractRichEditor";
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
 
@@ -83,45 +82,11 @@ export default function AdminPage() {
   const stampInputRef = useRef<HTMLInputElement>(null);
 
   const [companyContractTitle, setCompanyContractTitle] = useState("");
-  const [companyContractBody, setCompanyContractBody] = useState("");
   const [companyContractDocumentPath, setCompanyContractDocumentPath] = useState<string | null>(null);
-  const [companyContractMarginTop, setCompanyContractMarginTop] = useState(15);
-  const [companyContractMarginRight, setCompanyContractMarginRight] = useState(15);
-  const [companyContractMarginBottom, setCompanyContractMarginBottom] = useState(15);
-  const [companyContractMarginLeft, setCompanyContractMarginLeft] = useState(15);
   const [companyContractPdfFile, setCompanyContractPdfFile] = useState<File | null>(null);
   const [companyContractSaving, setCompanyContractSaving] = useState(false);
   const [companyContractUploading, setCompanyContractUploading] = useState(false);
   const companyContractPdfInputRef = useRef<HTMLInputElement>(null);
-  const companyContractModalScrollRef = useRef<HTMLDivElement>(null);
-  const companyContractEditorScrollRef = useRef<HTMLDivElement>(null);
-
-  const COMPANY_PAGE_GAP_MM = 8;
-  const companyRepeatMm = 297 + COMPANY_PAGE_GAP_MM;
-  const companyA4CornersSvg = useMemo(() => {
-    const mT = companyContractMarginTop;
-    const mR = companyContractMarginRight;
-    const mB = companyContractMarginBottom;
-    const mL = companyContractMarginLeft;
-    const c = 4;
-    const sc = "#c0c0c0";
-    const w = 210;
-    const h = 297;
-    const rH = companyRepeatMm;
-    const p = (d: string) => `<path d='${d}' fill='none' stroke='${sc}' stroke-width='0.3'/>`;
-    const svg = [
-      `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ${w} ${rH}'>`,
-      `<rect x='0' y='0' width='${w}' height='${h}' fill='#fff'/>`,
-      `<rect x='0' y='${h}' width='${w}' height='${COMPANY_PAGE_GAP_MM}' fill='#e8e8e8'/>`,
-      p(`M ${mL - c} ${mT} L ${mL} ${mT} L ${mL} ${mT - c}`),
-      p(`M ${w - mR + c} ${mT} L ${w - mR} ${mT} L ${w - mR} ${mT - c}`),
-      p(`M ${mL - c} ${h - mB} L ${mL} ${h - mB} L ${mL} ${h - mB + c}`),
-      p(`M ${w - mR + c} ${h - mB} L ${w - mR} ${h - mB} L ${w - mR} ${h - mB + c}`),
-      `</svg>`,
-    ].join("");
-    const encoded = svg.replace(/#/g, "%23");
-    return `url("data:image/svg+xml,${encoded}")`;
-  }, [companyContractMarginTop, companyContractMarginRight, companyContractMarginBottom, companyContractMarginLeft, companyRepeatMm]);
 
   const [companyInfoName, setCompanyInfoName] = useState("");
   const [companyInfoAddress, setCompanyInfoAddress] = useState("");
@@ -253,30 +218,16 @@ export default function AdminPage() {
         });
     }
     if (modal === "company-contract") {
-      const scrollToTop = () => {
-        companyContractModalScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-        companyContractEditorScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
-      };
-      requestAnimationFrame(scrollToTop);
-      setTimeout(scrollToTop, 150);
       fetch("/api/company/company-contract-template")
         .then((res) => res.json())
         .then((data) => {
           setCompanyContractTitle(data.title ?? "");
-          setCompanyContractBody(data.body ?? "");
           setCompanyContractDocumentPath(data.documentPath != null ? String(data.documentPath) : null);
           setCompanyContractPdfFile(null);
           if (companyContractPdfInputRef.current) companyContractPdfInputRef.current.value = "";
-          if (data.bodyMargins) {
-            setCompanyContractMarginTop(Number(data.bodyMargins.top) || 15);
-            setCompanyContractMarginRight(Number(data.bodyMargins.right) || 15);
-            setCompanyContractMarginBottom(Number(data.bodyMargins.bottom) || 15);
-            setCompanyContractMarginLeft(Number(data.bodyMargins.left) || 15);
-          }
         })
         .catch(() => {
           setCompanyContractTitle("");
-          setCompanyContractBody("");
           setCompanyContractDocumentPath(null);
         });
     }
@@ -759,15 +710,15 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: companyContractTitle.trim(),
-          body: companyContractBody,
-          documentPath: docPath || undefined,
-          bodyMargins: { top: companyContractMarginTop, right: companyContractMarginRight, bottom: companyContractMarginBottom, left: companyContractMarginLeft },
+          body: "",
+          documentPath: docPath ?? null,
+          bodyMargins: { top: 15, right: 15, bottom: 15, left: 15 },
         }),
       })
         .then((res) => res.json())
         .then((data) => {
           if (data.error) throw new Error(data.error);
-          alert("저장되었습니다. 계약서 작성에서 회사양식 불러오기로 사용할 수 있습니다.");
+          alert("저장되었습니다. 계약서 작성에서 회사양식 불러오기로 PDF를 적용할 수 있습니다.");
           setModal(null);
         })
         .catch((e) => alert(e?.message || "저장 실패"))
@@ -777,6 +728,7 @@ export default function AdminPage() {
       setCompanyContractUploading(true);
       const formData = new FormData();
       formData.append("file", companyContractPdfFile);
+      formData.append("companyTemplate", "1");
       fetch("/api/contracts/upload", { method: "POST", body: formData })
         .then((res) => res.json())
         .then((data) => {
@@ -1602,85 +1554,64 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 계약서 양식 모달 (회사별) */}
+      {/* 계약서 양식 모달 (회사별): PDF만 등록 */}
       {modal === "company-contract" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="flex h-[95vh] max-h-[95vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-            {/* 상단 고정 영역: 제목, PDF, 버튼, 툴바, 여백 설정 */}
-            <div className="shrink-0 border-b border-gray-200 p-6 pb-3">
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
+            <div className="border-b border-gray-200 p-6">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-gray-800">계약서 양식</h2>
                 <button type="button" onClick={() => setModal(null)} className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100" aria-label="닫기">✕</button>
               </div>
-              <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <input type="text" value={companyContractTitle} onChange={(e) => setCompanyContractTitle(e.target.value)} placeholder="계약서 제목 (기본값)" className="w-64 rounded-lg border border-gray-300 px-3 py-1.5 text-sm" />
-                  <input ref={companyContractPdfInputRef} type="file" accept=".pdf" className="hidden" onChange={(e) => setCompanyContractPdfFile(e.target.files?.[0] ?? null)} />
-                  <button type="button" onClick={() => companyContractPdfInputRef.current?.click()} className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">PDF 선택</button>
-                  {(companyContractDocumentPath || companyContractPdfFile) && (
-                    <button type="button" onClick={() => { setCompanyContractDocumentPath(null); setCompanyContractPdfFile(null); if (companyContractPdfInputRef.current) companyContractPdfInputRef.current.value = ""; }} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">PDF 삭제</button>
-                  )}
-                  {companyContractDocumentPath && !companyContractPdfFile && <span className="text-xs text-green-600">PDF 적용됨</span>}
-                  {companyContractPdfFile && <span className="text-xs text-gray-600">{companyContractPdfFile.name}</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  {companyContractBody.trim() ? (
-                    <button type="button" onClick={() => { if (confirm("계약서 본문을 모두 지우시겠습니까?")) setCompanyContractBody(""); }} className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100">본문 삭제</button>
-                  ) : null}
-                  <button type="button" onClick={() => setModal(null)} className="rounded-lg border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={companyContractSaving}>취소</button>
-                  <button type="button" onClick={handleSaveCompanyContract} disabled={companyContractSaving || companyContractUploading} className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">{companyContractSaving || companyContractUploading ? "저장 중..." : "저장"}</button>
+              <p className="mt-3 text-sm text-gray-600">
+                계약 일반 조건 등은 PDF로만 등록합니다. 이 화면에서는 글을 입력하지 않습니다.
+              </p>
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-600">계약서 제목 (기본값)</label>
+                  <input
+                    type="text"
+                    value={companyContractTitle}
+                    onChange={(e) => setCompanyContractTitle(e.target.value)}
+                    placeholder="예: 인테리어 계약서"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
                 </div>
               </div>
-            </div>
-            {/* A4 편집 영역: 이 부분만 독립 스크롤 */}
-            <div className="flex min-h-0 flex-1 flex-col">
-              <ContractRichEditor
-                value={companyContractBody}
-                onChange={setCompanyContractBody}
-                placeholder="계약 조건, 시공 범위 등 본문 내용을 입력하세요."
-                minHeight="280px"
-                pageContentHeightMm={297 - companyContractMarginTop - companyContractMarginBottom}
-                pageGapMm={companyContractMarginBottom + COMPANY_PAGE_GAP_MM + companyContractMarginTop}
-                contentWrapper={(toolbar, content) => (
-                  <>
-                    <div className="shrink-0 px-4 pt-2 pb-1">
-                      {toolbar}
-                      <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                        <span className="text-xs font-medium text-gray-700">여백(mm)</span>
-                        <label className="flex items-center gap-1">상 <input type="number" min={0} max={50} value={companyContractMarginTop} onChange={(e) => setCompanyContractMarginTop(Number(e.target.value) || 0)} className="w-12 rounded border border-gray-300 px-1 py-0.5 text-center text-sm" /></label>
-                        <label className="flex items-center gap-1">하 <input type="number" min={0} max={50} value={companyContractMarginBottom} onChange={(e) => setCompanyContractMarginBottom(Number(e.target.value) || 0)} className="w-12 rounded border border-gray-300 px-1 py-0.5 text-center text-sm" /></label>
-                        <label className="flex items-center gap-1">좌 <input type="number" min={0} max={50} value={companyContractMarginLeft} onChange={(e) => setCompanyContractMarginLeft(Number(e.target.value) || 0)} className="w-12 rounded border border-gray-300 px-1 py-0.5 text-center text-sm" /></label>
-                        <label className="flex items-center gap-1">우 <input type="number" min={0} max={50} value={companyContractMarginRight} onChange={(e) => setCompanyContractMarginRight(Number(e.target.value) || 0)} className="w-12 rounded border border-gray-300 px-1 py-0.5 text-center text-sm" /></label>
-                      </div>
-                    </div>
-                    <div ref={companyContractEditorScrollRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden bg-[#e8e8e8] px-4 pt-2 pb-4">
-                      <div
-                        className="contract-a4-paper-sheet relative mx-auto"
-                        style={{
-                          width: "210mm",
-                          maxWidth: "210mm",
-                          minHeight: "297mm",
-                          boxSizing: "border-box",
-                          paddingTop: `${companyContractMarginTop}mm`,
-                          paddingLeft: `${companyContractMarginLeft}mm`,
-                          paddingRight: `${companyContractMarginRight}mm`,
-                          paddingBottom: `${companyContractMarginBottom}mm`,
-                          backgroundImage: companyA4CornersSvg,
-                          backgroundSize: `100% ${companyRepeatMm}mm`,
-                          backgroundRepeat: "repeat-y",
-                          backgroundPosition: "0 0",
-                          "--body-ml": `${companyContractMarginLeft}mm`,
-                          "--body-mr": `${companyContractMarginRight}mm`,
-                          "--body-mt": `${companyContractMarginTop}mm`,
-                          "--body-mb": `${companyContractMarginBottom}mm`,
-                        } as React.CSSProperties}
-                      >
-                        {content}
-                      </div>
-                    </div>
-                  </>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <input ref={companyContractPdfInputRef} type="file" accept=".pdf" className="hidden" onChange={(e) => setCompanyContractPdfFile(e.target.files?.[0] ?? null)} />
+                <button type="button" onClick={() => companyContractPdfInputRef.current?.click()} className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                  PDF 선택
+                </button>
+                {(companyContractDocumentPath || companyContractPdfFile) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompanyContractDocumentPath(null);
+                      setCompanyContractPdfFile(null);
+                      if (companyContractPdfInputRef.current) companyContractPdfInputRef.current.value = "";
+                    }}
+                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
+                  >
+                    PDF 삭제
+                  </button>
                 )}
-              />
+                {companyContractDocumentPath && !companyContractPdfFile && <span className="text-xs text-green-600">저장된 PDF 있음</span>}
+                {companyContractPdfFile && <span className="max-w-[200px] truncate text-xs text-gray-600" title={companyContractPdfFile.name}>{companyContractPdfFile.name}</span>}
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-100 px-6 py-4">
+              <button type="button" onClick={() => setModal(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled={companyContractSaving}>
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveCompanyContract}
+                disabled={companyContractSaving || companyContractUploading}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {companyContractSaving || companyContractUploading ? "저장 중..." : "저장"}
+              </button>
             </div>
           </div>
         </div>

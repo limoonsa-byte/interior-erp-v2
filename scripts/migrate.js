@@ -359,6 +359,7 @@ async function migrate() {
       )
     `;
     await sql`ALTER TABLE company_contract_template ADD COLUMN IF NOT EXISTS body_margins TEXT`;
+    await sql`ALTER TABLE company_contract_template ADD COLUMN IF NOT EXISTS document_data TEXT`;
     console.log("[migrate] company_contract_template OK");
     await sql`
       CREATE TABLE IF NOT EXISTS site_material_list_items (
