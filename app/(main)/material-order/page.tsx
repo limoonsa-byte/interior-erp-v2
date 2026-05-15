@@ -54,6 +54,18 @@ function formatNum(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+function addedRowAmount(row: AddedOrderRow): number {
+  return (Number(row.qty) || 0) * (Number(row.materialUnitPrice) || 0);
+}
+
+/** 발주 유형별 자재 금액 합계 (견적 행 + 직접 추가 행) */
+function sumCategoryAmount(catItems: EstimateItem[], addedRows: AddedOrderRow[]): number {
+  let sum = 0;
+  for (const it of catItems) sum += materialAmount(it);
+  for (const row of addedRows) sum += addedRowAmount(row);
+  return sum;
+}
+
 /** 발주 유형 10개 (고정 순서). 공정/품목 키워드로 매칭 */
 const ORDER_CATEGORIES: { label: string; keywords: string[]; shopLines?: string[] }[] = [
   { label: "목재발주", keywords: ["목재"], shopLines: ["목재"] },
@@ -347,6 +359,20 @@ export function MaterialOrderPage() {
   const itemsByCategory = useMemo(
     () => visibleOrderLabels.map((label) => ({ label, items: [] as EstimateItem[] })),
     [visibleOrderLabels]
+  );
+
+  /** 발주 유형별·전체 자재 금액 합계 (입력 화면만, 미리보기 양식은 변경 없음) */
+  const orderAmountByLabel = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const { label, items: catItems } of itemsByCategory) {
+      map[label] = sumCategoryAmount(catItems, addedRowsByLabel[label] ?? []);
+    }
+    return map;
+  }, [itemsByCategory, addedRowsByLabel]);
+
+  const orderGrandTotal = useMemo(
+    () => Object.values(orderAmountByLabel).reduce((acc, n) => acc + n, 0),
+    [orderAmountByLabel]
   );
 
   const getShopCandidates = useCallback((orderLabel: string, itemName: string, spec: string) => {
@@ -1013,9 +1039,16 @@ export function MaterialOrderPage() {
                     </button>
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-2.5 text-sm">
+                  <span className="font-medium text-gray-700">발주 금액 합계 (모든 유형)</span>
+                  <span className="text-base font-semibold tabular-nums text-blue-900">
+                    {formatNum(orderGrandTotal)}원
+                  </span>
+                </div>
                 <div className="mt-4 space-y-6">
                   {itemsByCategory.map(({ label, items: catItems }) => {
                     const isCollapsed = collapsedByLabel[label] ?? false;
+                    const labelTotal = orderAmountByLabel[label] ?? 0;
                     return (
                       <div key={label} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
                         <div className="flex w-full items-center gap-2 border-b border-gray-200 bg-gray-100 px-4 py-2.5">
@@ -1027,13 +1060,18 @@ export function MaterialOrderPage() {
                             className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left font-medium text-gray-800 hover:bg-gray-200 rounded -m-2 p-2"
                           >
                             <span className="truncate">{label}</span>
-                            <span className="text-gray-500 shrink-0">
+                            <span className="shrink-0 text-gray-500">
                               {(() => {
                                 const added = addedRowsByLabel[label] ?? [];
                                 const total = catItems.length + added.length;
                                 return total > 0 ? `${total}개 항목` : "해당 항목 없음";
                               })()}
                             </span>
+                            {labelTotal > 0 && (
+                              <span className="shrink-0 font-semibold tabular-nums text-blue-800">
+                                {formatNum(labelTotal)}원
+                              </span>
+                            )}
                             <span className="text-gray-500 shrink-0" aria-hidden>
                               {isCollapsed ? "▶" : "▼"}
                             </span>
@@ -1332,6 +1370,26 @@ export function MaterialOrderPage() {
                                 );
                               })}
                             </tbody>
+                            {(catItems.length > 0 || (addedRowsByLabel[label] ?? []).length > 0) && (
+                              <tfoot>
+                                <tr className="bg-amber-50/90 font-semibold text-gray-900">
+                                  <td
+                                    colSpan={5}
+                                    className="border border-gray-300 px-2 py-2 text-right text-sm"
+                                    style={{ border: "1px solid #374151" }}
+                                  >
+                                    소계
+                                  </td>
+                                  <td
+                                    className="border border-gray-300 px-2 py-2 text-right tabular-nums"
+                                    style={{ border: "1px solid #374151" }}
+                                  >
+                                    {formatNum(labelTotal)}
+                                  </td>
+                                  <td colSpan={3} className="border border-gray-300" style={{ border: "1px solid #374151" }} />
+                                </tr>
+                              </tfoot>
+                            )}
                           </table>
                                 </div>
                                 )}

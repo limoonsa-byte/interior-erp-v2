@@ -2138,19 +2138,20 @@ body {
     font-size: 0.6875rem !important;
   }
 
-  /* 미리보기 모달: 가로 시트 비율에 가깝게 한 화면에 캘린더가 세로로 꽉 참 */
+  /* 미리보기 모달: 세로 스크롤로 여러 쪽을 겹치지 않고 나열 (aspect-ratio+고정 높이는 2쪽일 때 제목·격자 겹침 유발) */
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact {
     display: flex;
     flex-direction: column;
-    min-height: min(78vh, 680px);
-    max-height: 78vh;
-    aspect-ratio: 297 / 210;
+    min-height: 0;
+    max-height: min(78vh, 720px);
     width: 100%;
     max-width: 100%;
     margin: 0 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact > .schedule-print-sheet-first {
-    flex: 1;
+    flex: 0 0 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -2162,46 +2163,47 @@ body {
     #schedule-detail-print-content.schedule-print-compact
     .schedule-print-sheet-first
     > .schedule-print-page-block {
-    flex: 1;
+    flex: 0 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
     margin-bottom: 0 !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-calendar-frame {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
     display: flex !important;
     flex-direction: column !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-grid-body {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
     display: grid !important;
     grid-template-columns: repeat(7, 1fr) !important;
-    grid-auto-rows: 1fr !important;
-    align-content: stretch !important;
+    grid-auto-rows: minmax(4.25rem, auto) !important;
+    align-content: start !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
-    min-height: 0 !important;
-    height: 100% !important;
+    min-height: 4.25rem !important;
+    height: auto !important;
     box-sizing: border-box !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell-inner {
     display: flex !important;
     flex-direction: column !important;
     min-height: 0 !important;
-    height: 100% !important;
+    height: auto !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-phase-stack {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
-    overflow: auto !important;
+    overflow: visible !important;
   }
   .schedule-preview-viewport #schedule-detail-print-content.schedule-print-compact .schedule-print-page-follow {
     margin-top: 1.25rem;
-    min-height: min(72vh, 620px);
+    flex: 0 0 auto;
+    min-height: 0;
     display: flex !important;
     flex-direction: column !important;
     margin-bottom: 0 !important;
@@ -2210,7 +2212,7 @@ body {
     #schedule-detail-print-content.schedule-print-compact
     .schedule-print-page-follow
     > .schedule-print-calendar-frame {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
   }
 }
@@ -2221,20 +2223,22 @@ body {
     overflow: hidden;
   }
 
-  /* 가로 A4 한 장 높이를 헤더·캘린더가 나눠 쓰고, 요일 칸은 남는 높이를 균등 분할 */
+  /*
+   * 인쇄: 루트에 height:100vh + 자식에 flex:1 + grid-auto-rows:1fr 를 쓰면
+   * 첫 쪽 그리드 높이가 0으로 무너져 본문이 2쪽으로만 보이는 Chrome 계열 이슈가 난다.
+   * 높이는 내용에 맡기고, 행은 minmax 로 최소 높이만 보장한다.
+   */
   #schedule-detail-print-content.schedule-print-compact {
-    min-height: 100vh;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
+    height: auto !important;
+    min-height: 0 !important;
+    display: block !important;
     padding: 1.5mm 2.5mm !important;
     box-sizing: border-box;
   }
   #schedule-detail-print-content.schedule-print-compact > .schedule-print-sheet-first {
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-header-block {
     flex-shrink: 0;
@@ -2242,47 +2246,48 @@ body {
   #schedule-detail-print-content.schedule-print-compact
     .schedule-print-sheet-first
     > .schedule-print-page-block {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
     margin-bottom: 0 !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-calendar-frame {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
     display: flex !important;
     flex-direction: column !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-grid-body {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
     display: grid !important;
     grid-template-columns: repeat(7, 1fr) !important;
-    grid-auto-rows: 1fr !important;
-    align-content: stretch !important;
+    grid-auto-rows: minmax(18mm, auto) !important;
+    align-content: start !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell,
   #schedule-detail-print-content.schedule-print-compact .schedule-print-day-pad {
-    min-height: 0 !important;
-    height: 100% !important;
+    min-height: 18mm !important;
+    height: auto !important;
     box-sizing: border-box !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-day-cell-inner {
     display: flex !important;
     flex-direction: column !important;
     min-height: 0 !important;
-    height: 100% !important;
+    height: auto !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-phase-stack {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
-    overflow: hidden !important;
+    overflow: visible !important;
   }
   #schedule-detail-print-content.schedule-print-compact .schedule-print-page-block.schedule-print-page-follow {
     page-break-before: always !important;
     break-before: page !important;
-    min-height: 100vh !important;
+    min-height: 0 !important;
+    height: auto !important;
     display: flex !important;
     flex-direction: column !important;
     margin-bottom: 0 !important;
@@ -2291,7 +2296,7 @@ body {
   #schedule-detail-print-content.schedule-print-compact
     .schedule-print-page-follow
     > .schedule-print-calendar-frame {
-    flex: 1 !important;
+    flex: 0 1 auto !important;
     min-height: 0 !important;
   }
 }

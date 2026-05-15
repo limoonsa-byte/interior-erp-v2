@@ -14,8 +14,22 @@ async function getCompanyFromCookie() {
   }
 }
 
+function bodyHas(body: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(body, key);
+}
+
+/** 요청에 키가 있을 때만 문자열·null 반영 (없으면 UPDATE에서 해당 컬럼 유지) */
+function optionalTextField(body: Record<string, unknown>, key: string, raw: unknown): string | null {
+  if (!bodyHas(body, key)) return null;
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  return s.length > 0 ? s : null;
+}
+
 /**
  * 기존 상담 수정 (고객명 클릭 → 상세 모달 → 저장 시)
+ * 공사 일정·자재발주 등 일부 필드만 PATCH 할 때, 보내지 않은 진행날짜·완료 플래그가 지워지지 않도록
+ * body에 포함된 키만 갱신한다.
  */
 export async function PATCH(
   request: Request,
@@ -33,7 +47,7 @@ export async function PATCH(
       return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
     }
 
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
     const {
       customerName,
       contact,
@@ -64,22 +78,63 @@ export async function PATCH(
       designMeetingDone,
     } = body;
 
+    const hasCustomerName = bodyHas(body, "customerName");
+    const hasContact = bodyHas(body, "contact");
+    const hasEmail = bodyHas(body, "email");
+    const hasAddress = bodyHas(body, "address");
+    const hasPyung = bodyHas(body, "pyung");
+    const hasStatus = bodyHas(body, "status");
+    const hasPic = bodyHas(body, "pic");
+    const hasNote = bodyHas(body, "note");
+    const hasConsultedAt = bodyHas(body, "consultedAt");
+    const hasScope = bodyHas(body, "scope");
+    const hasBudget = bodyHas(body, "budget");
+    const hasCompletionYear = bodyHas(body, "completionYear");
+    const hasSiteMeasurementAt = bodyHas(body, "siteMeasurementAt");
+    const hasEstimateMeetingAt = bodyHas(body, "estimateMeetingAt");
+    const hasMaterialMeetingAt = bodyHas(body, "materialMeetingAt");
+    const hasMaterialOrderedAt = bodyHas(body, "materialOrderedAt");
+    const hasContractMeetingAt = bodyHas(body, "contractMeetingAt");
+    const hasDesignMeetingAt = bodyHas(body, "designMeetingAt");
+    const hasConstructionStartAt = bodyHas(body, "constructionStartAt");
+    const hasMoveInAt = bodyHas(body, "moveInAt");
+    const hasSchedulePhases = bodyHas(body, "schedulePhases");
+    const hasConsultedDone = bodyHas(body, "consultedDone");
+    const hasSiteMeasurementDone = bodyHas(body, "siteMeasurementDone");
+    const hasEstimateMeetingDone = bodyHas(body, "estimateMeetingDone");
+    const hasMaterialMeetingDone = bodyHas(body, "materialMeetingDone");
+    const hasContractMeetingDone = bodyHas(body, "contractMeetingDone");
+    const hasDesignMeetingDone = bodyHas(body, "designMeetingDone");
+    const scheduleMemoProvided = bodyHas(body, "scheduleMemo");
+
     const scopeJson = Array.isArray(scope) ? JSON.stringify(scope) : null;
     const budgetStr = budget != null ? String(budget) : null;
     const completionYearStr = completionYear != null ? String(completionYear) : null;
-    const siteMeasurementAtStr = siteMeasurementAt != null ? String(siteMeasurementAt) : null;
-    const estimateMeetingAtStr = estimateMeetingAt != null ? String(estimateMeetingAt) : null;
-    const materialMeetingAtStr = materialMeetingAt != null ? String(materialMeetingAt) : null;
-    const materialOrderedAtStr = materialOrderedAt != null ? String(materialOrderedAt).slice(0, 10) : null;
-    const contractMeetingAtStr = contractMeetingAt != null ? String(contractMeetingAt) : null;
-    const designMeetingAtStr = designMeetingAt != null ? String(designMeetingAt) : null;
-    const constructionStartAtStr = constructionStartAt != null ? String(constructionStartAt) : null;
-    const moveInAtStr = moveInAt != null ? String(moveInAt) : null;
-    const schedulePhasesJson = Array.isArray(schedulePhases)
-      ? JSON.stringify(schedulePhases.map((p: { name?: string; start?: string; end?: string; color?: string }) => ({ name: String(p?.name ?? "").trim() || "공정", start: String(p?.start ?? "").slice(0, 10) || null, end: String(p?.end ?? "").slice(0, 10) || null, color: typeof p?.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : null })))
+    const siteMeasurementAtStr = optionalTextField(body, "siteMeasurementAt", siteMeasurementAt);
+    const estimateMeetingAtStr = optionalTextField(body, "estimateMeetingAt", estimateMeetingAt);
+    const materialMeetingAtStr = optionalTextField(body, "materialMeetingAt", materialMeetingAt);
+    const materialOrderedAtStr = hasMaterialOrderedAt
+      ? materialOrderedAt != null
+        ? String(materialOrderedAt).slice(0, 10)
+        : null
       : null;
-    const scheduleMemoProvided = Object.prototype.hasOwnProperty.call(body, "scheduleMemo");
-    const scheduleMemoRaw = (body as { scheduleMemo?: unknown }).scheduleMemo;
+    const contractMeetingAtStr = optionalTextField(body, "contractMeetingAt", contractMeetingAt);
+    const designMeetingAtStr = optionalTextField(body, "designMeetingAt", designMeetingAt);
+    const constructionStartAtStr = optionalTextField(body, "constructionStartAt", constructionStartAt);
+    const moveInAtStr = optionalTextField(body, "moveInAt", moveInAt);
+    const consultedAtStr = optionalTextField(body, "consultedAt", consultedAt);
+    const schedulePhasesJson = Array.isArray(schedulePhases)
+      ? JSON.stringify(
+          schedulePhases.map((p: { name?: string; start?: string; end?: string; color?: string }) => ({
+            name: String(p?.name ?? "").trim() || "공정",
+            start: String(p?.start ?? "").slice(0, 10) || null,
+            end: String(p?.end ?? "").slice(0, 10) || null,
+            color:
+              typeof p?.color === "string" && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : null,
+          }))
+        )
+      : null;
+    const scheduleMemoRaw = body.scheduleMemo;
     const scheduleMemoVal = scheduleMemoProvided
       ? String(scheduleMemoRaw ?? "").trim().slice(0, 4000) || null
       : null;
@@ -91,33 +146,33 @@ export async function PATCH(
       result = await sql`
         UPDATE consultations
         SET
-          customer_name = COALESCE(${customerName ?? null}, customer_name),
-          contact = COALESCE(${contact ?? null}, contact),
-          email = ${email ?? null},
-          address = COALESCE(${address ?? null}, address),
-          pyung = COALESCE(${pyung ?? null}, pyung),
-          status = COALESCE(${status ?? null}, status),
-          pic = COALESCE(${pic ?? null}, pic),
-          note = COALESCE(${note ?? null}, note),
-          consulted_at = COALESCE(${consultedAt ?? null}, consulted_at),
-          scope = ${scopeJson},
-          budget = ${budgetStr},
-          completion_year = ${completionYearStr},
-          site_measurement_at = ${siteMeasurementAtStr},
-          estimate_meeting_at = ${estimateMeetingAtStr},
-          material_meeting_at = ${materialMeetingAtStr},
-          material_ordered_at = COALESCE(${materialOrderedAtStr}, material_ordered_at),
-          contract_meeting_at = ${contractMeetingAtStr},
-          design_meeting_at = ${designMeetingAtStr},
-          construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
-          move_in_at = COALESCE(${moveInAtStr}, move_in_at),
-          schedule_phases = COALESCE(${schedulePhasesJson}, schedule_phases),
-          consulted_done = ${consultedDone === true},
-          site_measurement_done = ${siteMeasurementDone === true},
-          estimate_meeting_done = ${estimateMeetingDone === true},
-          material_meeting_done = ${materialMeetingDone === true},
-          contract_meeting_done = ${contractMeetingDone === true},
-          design_meeting_done = ${designMeetingDone === true},
+          customer_name = CASE WHEN ${hasCustomerName} THEN COALESCE(${customerName != null ? String(customerName) : null}, customer_name) ELSE customer_name END,
+          contact = CASE WHEN ${hasContact} THEN COALESCE(${contact != null ? String(contact) : null}, contact) ELSE contact END,
+          email = CASE WHEN ${hasEmail} THEN ${email != null ? String(email) : null} ELSE email END,
+          address = CASE WHEN ${hasAddress} THEN COALESCE(${address != null ? String(address) : null}, address) ELSE address END,
+          pyung = CASE WHEN ${hasPyung} THEN COALESCE(${pyung != null ? Number(pyung) : null}, pyung) ELSE pyung END,
+          status = CASE WHEN ${hasStatus} THEN COALESCE(${status != null ? String(status) : null}, status) ELSE status END,
+          pic = CASE WHEN ${hasPic} THEN COALESCE(${pic != null ? String(pic) : null}, pic) ELSE pic END,
+          note = CASE WHEN ${hasNote} THEN COALESCE(${note != null ? String(note) : null}, note) ELSE note END,
+          consulted_at = CASE WHEN ${hasConsultedAt} THEN ${consultedAtStr} ELSE consulted_at END,
+          scope = CASE WHEN ${hasScope} THEN ${scopeJson} ELSE scope END,
+          budget = CASE WHEN ${hasBudget} THEN ${budgetStr} ELSE budget END,
+          completion_year = CASE WHEN ${hasCompletionYear} THEN ${completionYearStr} ELSE completion_year END,
+          site_measurement_at = CASE WHEN ${hasSiteMeasurementAt} THEN ${siteMeasurementAtStr} ELSE site_measurement_at END,
+          estimate_meeting_at = CASE WHEN ${hasEstimateMeetingAt} THEN ${estimateMeetingAtStr} ELSE estimate_meeting_at END,
+          material_meeting_at = CASE WHEN ${hasMaterialMeetingAt} THEN ${materialMeetingAtStr} ELSE material_meeting_at END,
+          material_ordered_at = CASE WHEN ${hasMaterialOrderedAt} THEN ${materialOrderedAtStr} ELSE material_ordered_at END,
+          contract_meeting_at = CASE WHEN ${hasContractMeetingAt} THEN ${contractMeetingAtStr} ELSE contract_meeting_at END,
+          design_meeting_at = CASE WHEN ${hasDesignMeetingAt} THEN ${designMeetingAtStr} ELSE design_meeting_at END,
+          construction_start_at = CASE WHEN ${hasConstructionStartAt} THEN ${constructionStartAtStr} ELSE construction_start_at END,
+          move_in_at = CASE WHEN ${hasMoveInAt} THEN ${moveInAtStr} ELSE move_in_at END,
+          schedule_phases = CASE WHEN ${hasSchedulePhases} THEN ${schedulePhasesJson} ELSE schedule_phases END,
+          consulted_done = CASE WHEN ${hasConsultedDone} THEN ${consultedDone === true} ELSE consulted_done END,
+          site_measurement_done = CASE WHEN ${hasSiteMeasurementDone} THEN ${siteMeasurementDone === true} ELSE site_measurement_done END,
+          estimate_meeting_done = CASE WHEN ${hasEstimateMeetingDone} THEN ${estimateMeetingDone === true} ELSE estimate_meeting_done END,
+          material_meeting_done = CASE WHEN ${hasMaterialMeetingDone} THEN ${materialMeetingDone === true} ELSE material_meeting_done END,
+          contract_meeting_done = CASE WHEN ${hasContractMeetingDone} THEN ${contractMeetingDone === true} ELSE contract_meeting_done END,
+          design_meeting_done = CASE WHEN ${hasDesignMeetingDone} THEN ${designMeetingDone === true} ELSE design_meeting_done END,
           schedule_memo = CASE WHEN ${scheduleMemoProvided} THEN ${scheduleMemoVal} ELSE schedule_memo END
         WHERE id = ${consultationId} AND company_id = ${company.id}
         RETURNING id
@@ -125,14 +180,15 @@ export async function PATCH(
     } catch (firstError) {
       const isColumnError =
         firstError instanceof Error && /consulted_at|scope|column|does not exist/i.test(firstError.message);
-      if (isColumnError) {
+      if (isColumnError && (hasConstructionStartAt || hasMoveInAt || hasSchedulePhases)) {
         try {
           result = await sql`
             UPDATE consultations
             SET
-              construction_start_at = COALESCE(${constructionStartAtStr}, construction_start_at),
-              move_in_at = COALESCE(${moveInAtStr}, move_in_at),
-              schedule_phases = COALESCE(${schedulePhasesJson}, schedule_phases)
+              construction_start_at = CASE WHEN ${hasConstructionStartAt} THEN ${constructionStartAtStr} ELSE construction_start_at END,
+              move_in_at = CASE WHEN ${hasMoveInAt} THEN ${moveInAtStr} ELSE move_in_at END,
+              schedule_phases = CASE WHEN ${hasSchedulePhases} THEN ${schedulePhasesJson} ELSE schedule_phases END,
+              schedule_memo = CASE WHEN ${scheduleMemoProvided} THEN ${scheduleMemoVal} ELSE schedule_memo END
             WHERE id = ${consultationId} AND company_id = ${company.id}
             RETURNING id
           `;
