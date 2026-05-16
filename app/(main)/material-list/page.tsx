@@ -575,13 +575,14 @@ export default function MaterialListPage() {
           </label>
         </div>
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[720px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
               <tr>
+                <th className="row-actions-sticky w-44 p-2 font-semibold sm:hidden">제목</th>
                 <th className="p-2 sm:p-3 font-semibold">견적일자</th>
                 <th className="p-2 sm:p-3 font-semibold">고객명</th>
                 <th className="p-2 sm:p-3 font-semibold">연락처</th>
-                <th className="p-2 sm:p-3 font-semibold">제목</th>
+                <th className="hidden p-2 font-semibold sm:table-cell sm:p-3">제목</th>
                 <th className="p-2 sm:p-3 text-right font-semibold">합계</th>
               </tr>
             </thead>
@@ -608,6 +609,11 @@ export default function MaterialListPage() {
                 estimatesForTable.map((est) => {
                   const total = estimateTotal(est);
                   const isSelected = selectedId === est.id;
+                  const titleSpan = (
+                    <span className="text-left text-blue-600 font-medium group-hover:underline">
+                      {est.title?.trim() ? est.title : "제목 없음"}
+                    </span>
+                  );
                   return (
                     <tr
                       key={est.id}
@@ -624,13 +630,14 @@ export default function MaterialListPage() {
                         isSelected ? "bg-blue-50/80 ring-1 ring-inset ring-blue-200" : "hover:bg-gray-50"
                       }`}
                     >
+                      <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                        <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleSpan}</div>
+                      </td>
                       <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
                       <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                       <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
-                      <td className="p-2 sm:p-3">
-                        <span className="text-left text-blue-600 font-medium group-hover:underline">
-                          {est.title?.trim() ? est.title : "제목 없음"}
-                        </span>
+                      <td className="hidden p-2 sm:table-cell sm:p-3">
+                        <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleSpan}</div>
                       </td>
                       <td className="p-2 sm:p-3 text-right tabular-nums">{formatNumber(total)}원</td>
                     </tr>

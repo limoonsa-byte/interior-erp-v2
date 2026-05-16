@@ -541,64 +541,69 @@ export default function WorkersPage() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="row-actions-sticky min-w-[160px] whitespace-nowrap px-3 py-3 font-medium text-gray-700 sm:hidden">관리</th>
                   <th className="px-4 py-3 font-medium text-gray-700">이름</th>
                   <th className="px-4 py-3 font-medium text-gray-700">별점</th>
                   <th className="px-4 py-3 font-medium text-gray-700">전화번호</th>
                   <th className="px-4 py-3 font-medium text-gray-700">직종/역할</th>
                   <th className="px-4 py-3 font-medium text-gray-700">비고</th>
-                  <th className="min-w-[180px] whitespace-nowrap px-4 py-3 font-medium text-gray-700">관리</th>
+                  <th className="hidden min-w-[180px] whitespace-nowrap px-4 py-3 font-medium text-gray-700 sm:table-cell">관리</th>
                 </tr>
               </thead>
               <tbody>
-                {list.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-100">
-                    <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
-                    <td className="px-4 py-3">
-                      {ratingUpdatingId === item.id ? (
-                        <span className="text-gray-400">저장 중…</span>
-                      ) : (
-                        <StarRating
-                          value={item.rating}
-                          onChange={(v) => handleRatingChange(item, v)}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{item.phone || "-"}</td>
-                    <td className="px-4 py-3 text-gray-600">{item.role || "-"}</td>
-                    <td className="max-w-[200px] truncate px-4 py-3 text-gray-600" title={item.memo}>
-                      {item.memo || "-"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <div className="flex shrink-0 flex-wrap gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => openShareSchedule(item)}
-                          className="whitespace-nowrap rounded px-2 py-1 text-green-600 hover:bg-green-50"
-                          title="일정 선택 후 카카오톡으로 공유"
-                        >
-                          일정 공유
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEdit(item)}
-                          className="whitespace-nowrap rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
-                        >
-                          수정
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item)}
-                          className="whitespace-nowrap rounded px-2 py-1 text-red-600 hover:bg-red-50"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {list.map((item) => {
+                  const actions = (
+                    <div className="flex shrink-0 flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openShareSchedule(item)}
+                        className="whitespace-nowrap rounded px-2 py-1 text-green-600 hover:bg-green-50"
+                        title="일정 선택 후 카카오톡으로 공유"
+                      >
+                        일정 공유
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openEdit(item)}
+                        className="whitespace-nowrap rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item)}
+                        className="whitespace-nowrap rounded px-2 py-1 text-red-600 hover:bg-red-50"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  );
+                  return (
+                    <tr key={item.id} className="border-b border-gray-100">
+                      <td className="row-actions-sticky whitespace-nowrap px-3 py-3 sm:hidden">{actions}</td>
+                      <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
+                      <td className="px-4 py-3">
+                        {ratingUpdatingId === item.id ? (
+                          <span className="text-gray-400">저장 중…</span>
+                        ) : (
+                          <StarRating
+                            value={item.rating}
+                            onChange={(v) => handleRatingChange(item, v)}
+                          />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{item.phone || "-"}</td>
+                      <td className="px-4 py-3 text-gray-600">{item.role || "-"}</td>
+                      <td className="max-w-[200px] truncate px-4 py-3 text-gray-600" title={item.memo}>
+                        {item.memo || "-"}
+                      </td>
+                      <td className="hidden whitespace-nowrap px-4 py-3 sm:table-cell">{actions}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

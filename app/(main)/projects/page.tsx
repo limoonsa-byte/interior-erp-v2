@@ -272,10 +272,10 @@ export default function ProjectsPage() {
               return (
                 <div
                   key={date}
-                  className="min-h-[88px] border-b border-r p-1.5 last:border-r-0"
+                  className="min-h-[56px] border-b border-r p-1 last:border-r-0 sm:min-h-[88px] sm:p-1.5"
                   style={{ borderColor: "#d1d5db", backgroundColor: cellBg }}
                 >
-                  <div className="text-right text-xs" style={{ color: isCurrentMonth ? "#374151" : "#9ca3af" }}>
+                  <div className="text-right text-[11px] sm:text-xs" style={{ color: isCurrentMonth ? "#374151" : "#9ca3af" }}>
                     {dayNum}
                   </div>
                   <div className="mt-0.5 space-y-0.5">
@@ -328,16 +328,17 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[760px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="p-3 text-left font-medium text-gray-700 w-8"></th>
+                  <th className="row-actions-sticky w-32 p-2 text-left font-medium text-gray-700 sm:hidden">일정</th>
+                  <th className="hidden p-3 text-left font-medium text-gray-700 sm:table-cell sm:w-8" />
                   <th className="p-3 text-left font-medium text-gray-700">프로젝트(견적 제목)</th>
                   <th className="p-3 text-left font-medium text-gray-700">공정</th>
                   <th className="p-3 text-left font-medium text-gray-700">고객명</th>
                   <th className="p-3 text-left font-medium text-gray-700 w-32">공사 시작일</th>
                   <th className="p-3 text-left font-medium text-gray-700 w-32">입주일</th>
-                  <th className="p-3 text-left font-medium text-gray-700 w-24"></th>
+                  <th className="hidden p-3 text-left font-medium text-gray-700 sm:table-cell sm:w-24" />
                 </tr>
               </thead>
               <tbody>
@@ -347,31 +348,44 @@ export default function ProjectsPage() {
                     Array.isArray(consultation.schedulePhases) && consultation.schedulePhases.length > 0
                       ? consultation.schedulePhases.map((p) => p.name).filter(Boolean).join(" · ")
                       : "—";
+                  const scheduleLink = (
+                    <Link
+                      href={`/schedule/${consultation.id}`}
+                      className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
+                    >
+                      <Calendar className="h-3.5 w-3.5" />
+                      일정 보기
+                    </Link>
+                  );
                   return (
                     <tr key={consultation.id} className="border-b border-gray-100 hover:bg-gray-50/50">
-                      <td className="p-2">
+                      <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="inline-block h-4 w-4 shrink-0 rounded border border-gray-300"
+                            style={{ backgroundColor: bg }}
+                            title={phaseLine}
+                          />
+                          {scheduleLink}
+                        </div>
+                      </td>
+                      <td className="hidden p-2 sm:table-cell">
                         <span
                           className="inline-block h-5 w-5 rounded border border-gray-300"
                           style={{ backgroundColor: bg }}
                           title={phaseLine}
                         />
                       </td>
-                      <td className="p-3 font-medium text-gray-900">{title}</td>
-                      <td className="p-3 text-gray-600 max-w-[200px] truncate" title={phaseLine}>
-                        {phaseLine}
+                      <td className="p-3 font-medium text-gray-900">
+                        <div className="max-w-[16rem] truncate" title={title}>{title}</div>
+                      </td>
+                      <td className="p-3 text-gray-600">
+                        <div className="max-w-[14rem] truncate" title={phaseLine}>{phaseLine}</div>
                       </td>
                       <td className="p-3 text-gray-700">{consultation.customerName || "—"}</td>
                       <td className="p-3 text-gray-600">{formatDate(consultation.constructionStartAt)}</td>
                       <td className="p-3 text-gray-600">{formatDate(consultation.moveInAt)}</td>
-                      <td className="p-3">
-                        <Link
-                          href={`/schedule/${consultation.id}`}
-                          className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs text-white hover:bg-blue-700"
-                        >
-                          <Calendar className="h-3.5 w-3.5" />
-                          일정 보기
-                        </Link>
-                      </td>
+                      <td className="hidden p-3 sm:table-cell">{scheduleLink}</td>
                     </tr>
                   );
                 })}

@@ -508,7 +508,7 @@ export default function PaymentDetailPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm [&_th]:whitespace-nowrap">
                 <thead className="border-b border-gray-200 bg-gray-100 text-gray-700">
                   <tr>
                     <th className="p-2 sm:p-3 font-semibold">항목</th>

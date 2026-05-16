@@ -558,13 +558,14 @@ export default function SettlementPage() {
             </label>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-[760px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
+                  <th className="row-actions-sticky w-44 p-2 sm:hidden">제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
-                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="hidden p-2 sm:table-cell sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">고객결제상환</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                 </tr>
@@ -594,17 +595,23 @@ export default function SettlementPage() {
                     const ohRate = (est.overheadPercent != null ? Number(est.overheadPercent) : 5) / 100;
                     const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
                     const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
+                    const titleSpan = (
+                      <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                    );
                     return (
                       <tr
                         key={est.id}
                         onClick={() => setSelectedId(est.id)}
                         className="text-gray-700 hover:bg-gray-50 cursor-pointer"
                       >
+                        <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                          <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleSpan}</div>
+                        </td>
                         <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
                         <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="p-2 sm:p-3">
-                          <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                        <td className="hidden p-2 sm:table-cell sm:p-3">
+                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleSpan}</div>
                         </td>
                         <td className="p-2 sm:p-3 text-right tabular-nums text-gray-700">
                           {Object.prototype.hasOwnProperty.call(customerPaymentTotalsByEstimate, String(est.id))

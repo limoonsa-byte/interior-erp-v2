@@ -685,10 +685,13 @@ export default function WorkLogPage() {
           </div>
 
           <div className="overflow-x-auto">
-            <div className="min-w-[600px] rounded-xl border border-gray-200 bg-white shadow-sm">
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm sm:min-w-[600px]">
               <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
                 {WEEKDAYS.map((wd) => (
-                  <div key={wd} className="p-2 text-center text-xs font-medium text-gray-600">
+                  <div
+                    key={wd}
+                    className="p-1.5 text-center text-[11px] font-medium text-gray-600 sm:p-2 sm:text-xs"
+                  >
                     {wd}
                   </div>
                 ))}
@@ -699,26 +702,26 @@ export default function WorkLogPage() {
                   return (
                     <div
                       key={date}
-                      className={`min-h-[120px] flex flex-col border-b border-r border-gray-100 p-1 last:border-r-0 ${!isCurrentMonth ? "bg-gray-50" : ""}`}
+                      className={`flex min-h-[64px] flex-col border-b border-r border-gray-100 p-1 last:border-r-0 sm:min-h-[120px] ${!isCurrentMonth ? "bg-gray-50" : ""}`}
                     >
                       <div
-                        className={`shrink-0 text-right text-sm ${isCurrentMonth ? "text-gray-900" : "text-gray-400"}`}
+                        className={`shrink-0 text-right text-[11px] sm:text-sm ${isCurrentMonth ? "text-gray-900" : "text-gray-400"}`}
                       >
                         {dayNum}
                       </div>
-                      <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-y-auto max-h-[200px]">
+                      <div className="mt-1 min-h-0 flex-1 space-y-1 overflow-y-auto sm:max-h-[200px]">
                         {dayLogs.map((log) => (
                           <button
                             key={log.id}
                             type="button"
                             onClick={() => handleEdit(log)}
-                            className="block w-full rounded border border-blue-200 bg-blue-50 px-1.5 py-1 text-left text-xs hover:bg-blue-100"
+                            className="block w-full rounded border border-blue-200 bg-blue-50 px-1 py-0.5 text-left text-[10px] hover:bg-blue-100 sm:px-1.5 sm:py-1 sm:text-xs"
                           >
                             <div className="truncate font-medium text-blue-900">
                               {log.estimateTitle || "—"}
                             </div>
-                            <div className="truncate text-gray-600">{log.picName || "—"}</div>
-                            <div className="truncate text-gray-500">{log.content || "—"}</div>
+                            <div className="hidden truncate text-gray-600 sm:block">{log.picName || "—"}</div>
+                            <div className="hidden truncate text-gray-500 sm:block">{log.content || "—"}</div>
                           </button>
                         ))}
                       </div>

@@ -2319,3 +2319,59 @@ body {
     overflow-wrap: anywhere;
   }
 }
+
+/* ─────────────────────────────────────────────
+   모바일 화면(/mobile) 공통 사용성 보강
+   - iOS Safari 자동 확대(폰트 < 16px) 방지
+   - 가로 스크롤 영역 모멘텀 스크롤
+   - 폼 컨트롤 터치 타겟 확보
+   ───────────────────────────────────────────── */
+@media (max-width: 768px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .overflow-x-auto,
+  .overflow-y-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+  button,
+  [role="button"],
+  a.btn,
+  .btn {
+    touch-action: manipulation;
+  }
+}
+
+/* 모바일에서만 가로 오버플로 가드 (PC 인쇄/스크롤 영향 회피) */
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/*
+ * 목록 표의 액션(수정/삭제 등) 컬럼을 모바일에서 화면 좌측에 고정.
+ * - 부모 wrapper가 overflow-x: auto 일 때 동작
+ * - thead/td 모두 같은 클래스를 부여
+ * - 보통 PC에서는 액션을 마지막 컬럼에 두고, 모바일에서는 첫 컬럼으로 옮긴 셀에만 이 클래스를 적용
+ */
+@media (max-width: 768px) {
+  th.row-actions-sticky,
+  td.row-actions-sticky {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background-color: #ffffff;
+    box-shadow: 8px 0 8px -6px rgba(0, 0, 0, 0.08);
+  }
+  thead th.row-actions-sticky {
+    background-color: #f9fafb;
+  }
+  tr:hover > td.row-actions-sticky {
+    background-color: #f9fafb;
+  }
+}

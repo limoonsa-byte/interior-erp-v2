@@ -2367,21 +2367,22 @@ export default function EstimatePage() {
             </label>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
+                  <th className="row-actions-sticky w-24 p-2 text-center sm:hidden" aria-label="작업" />
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
-                  <th className="w-28 sm:w-24 p-2 sm:p-3" />
+                  <th className="hidden w-28 p-2 sm:table-cell sm:w-24 sm:p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredEstimates.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                    <td colSpan={7} className="p-8 text-center text-gray-500">
                       {estimates.length === 0
                         ? "저장된 견적이 없습니다. \"신규 견적\"으로 작성해 보세요."
                         : "표시할 견적이 없습니다. '완료 건 보기'를 켜 보세요."}
@@ -2399,37 +2400,41 @@ export default function EstimatePage() {
                     const ohRate = (Number(est.overheadPercent) ?? 5) / 100;
                     const prRate = (Number(est.profitPercent) ?? 10) / 100;
                     const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
+                    const actions = (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setFormOpen(est.id)}
+                          className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
+                        >
+                          수정
+                        </button>
+                        <span className="text-gray-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!confirm("이 견적을 삭제할까요?")) return;
+                            fetch(`/api/estimates/${est.id}`, { method: "DELETE" })
+                              .then((res) => res.ok && load())
+                              .catch(() => alert("삭제 실패"));
+                          }}
+                          className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    );
                     return (
                       <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
+                        <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
                         <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
                         <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="p-2 sm:p-3">{est.title || "-"}</td>
-                        <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
-                        <td className="whitespace-nowrap p-2 sm:p-3 align-middle">
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setFormOpen(est.id)}
-                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
-                            >
-                              수정
-                            </button>
-                            <span className="text-gray-300">|</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!confirm("이 견적을 삭제할까요?")) return;
-                                fetch(`/api/estimates/${est.id}`, { method: "DELETE" })
-                                  .then((res) => res.ok && load())
-                                  .catch(() => alert("삭제 실패"));
-                              }}
-                              className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
-                            >
-                              삭제
-                            </button>
-                          </div>
+                        <td className="p-2 sm:p-3">
+                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{est.title || "-"}</div>
                         </td>
+                        <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
+                        <td className="hidden whitespace-nowrap p-2 align-middle sm:table-cell sm:p-3">{actions}</td>
                       </tr>
                     );
                   })

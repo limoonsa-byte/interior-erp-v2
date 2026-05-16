@@ -1129,23 +1129,23 @@ export default function ConsultingPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto">
               <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
                 접수기간
               </label>
-              <div className="flex items-center gap-1">
+              <div className="flex min-w-0 flex-1 items-center gap-1 sm:flex-initial">
                 <input
                   type="date"
                   value={filterDateFrom}
                   onChange={(e) => setFilterDateFrom(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm sm:flex-initial"
                 />
                 <span className="text-gray-400">~</span>
                 <input
                   type="date"
                   value={filterDateTo}
                   onChange={(e) => setFilterDateTo(e.target.value)}
-                  className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm sm:flex-initial"
                 />
               </div>
             </div>
@@ -1246,54 +1246,85 @@ export default function ConsultingPage() {
         <table className="w-full min-w-[640px] text-center text-sm">
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
             <tr>
-              <th className="w-10 shrink-0 p-2 sm:p-3 whitespace-nowrap">
+              <th className="row-actions-sticky w-40 whitespace-nowrap p-2 text-left sm:hidden">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="cursor-pointer"
+                    aria-label="전체 선택"
+                  />
+                  <span>고객명</span>
+                </div>
+              </th>
+              <th className="hidden w-10 shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">
                 <input
                   type="checkbox"
                   checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
                   onChange={(e) => handleSelectAll(e.target.checked)}
                   className="cursor-pointer"
+                  aria-label="전체 선택"
                 />
               </th>
               <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">No.</th>
               <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행상태</th>
               <th className="min-w-[100px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행날짜</th>
-              <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">고객명</th>
+              <th className="hidden min-w-[72px] shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">고객명</th>
               <th className="min-w-[90px] shrink-0 p-2 sm:p-3 whitespace-nowrap">연락처</th>
               <th className="min-w-[120px] p-2 sm:p-3 text-left">주소</th>
               <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">평수</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredConsultations.map((item, idx) => (
-              <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
-                <td className="p-2 sm:p-3 whitespace-nowrap">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(item.id)}
-                    onChange={() => handleToggleSelect(item.id)}
-                    className="cursor-pointer"
-                  />
-                </td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
-                <td className="min-w-[72px] p-2 sm:p-3 font-medium whitespace-nowrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActive(item);
-                      setEditId(item.id);
-                    }}
-                    className="text-blue-600 underline-offset-2 hover:underline"
-                  >
-                    {item.customerName}
-                  </button>
-                </td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{item.contact}</td>
-                <td className="min-w-[120px] max-w-[200px] sm:max-w-none p-2 sm:p-3 truncate text-left">{item.address}</td>
-                <td className="p-2 sm:p-3 whitespace-nowrap">{item.pyung}</td>
-              </tr>
-            ))}
+            {filteredConsultations.map((item, idx) => {
+              const customerNameButton = (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActive(item);
+                    setEditId(item.id);
+                  }}
+                  className="text-blue-600 underline-offset-2 hover:underline"
+                >
+                  {item.customerName}
+                </button>
+              );
+              return (
+                <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
+                  <td className="row-actions-sticky whitespace-nowrap p-2 align-middle font-medium sm:hidden">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => handleToggleSelect(item.id)}
+                        className="cursor-pointer"
+                        aria-label={`${item.customerName} 선택`}
+                      />
+                      {customerNameButton}
+                    </div>
+                  </td>
+                  <td className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(item.id)}
+                      onChange={() => handleToggleSelect(item.id)}
+                      className="cursor-pointer"
+                      aria-label={`${item.customerName} 선택`}
+                    />
+                  </td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
+                  <td className="hidden min-w-[72px] p-2 sm:table-cell sm:p-3 font-medium whitespace-nowrap">
+                    {customerNameButton}
+                  </td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{item.contact}</td>
+                  <td className="min-w-[120px] max-w-[200px] sm:max-w-none p-2 sm:p-3 truncate text-left">{item.address}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{item.pyung}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

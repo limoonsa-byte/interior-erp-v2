@@ -809,13 +809,14 @@ export function MaterialOrderPage() {
             </label>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full min-w-[480px] text-left text-sm">
+            <table className="w-full min-w-[680px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
+                  <th className="row-actions-sticky w-44 p-2 sm:hidden">제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
-                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="hidden p-2 sm:table-cell sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                 </tr>
               </thead>
@@ -833,17 +834,23 @@ export function MaterialOrderPage() {
                     const subtotal = (est.items || []).reduce(
                       (s, itm) => s + materialAmount(itm), 0
                     );
+                    const titleSpan = (
+                      <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                    );
                     return (
                       <tr
                         key={est.id}
                         onClick={() => setSelectedEstimateId(est.id)}
                         className="text-gray-700 hover:bg-gray-50 cursor-pointer"
                       >
+                        <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                          <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleSpan}</div>
+                        </td>
                         <td className="p-2 sm:p-3">{est.estimateDate ? est.estimateDate.slice(0, 10) : "-"}</td>
                         <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="p-2 sm:p-3">
-                          <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                        <td className="hidden p-2 sm:table-cell sm:p-3">
+                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleSpan}</div>
                         </td>
                         <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(subtotal)}원</td>
                       </tr>

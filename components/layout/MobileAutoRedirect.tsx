@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
+/** proxy.ts mobileTargets 와 동일하게 유지. 추가 라우트는 양쪽 모두에 넣어야 한다. */
 const mobileTargets = new Set([
   "/consulting",
   "/estimate",
@@ -17,6 +18,9 @@ const mobileTargets = new Set([
   "/statistics",
   "/chat",
   "/admin",
+  "/dashboard",
+  "/projects",
+  "/reception",
 ]);
 
 function toMobilePath(pathname: string): string | null {

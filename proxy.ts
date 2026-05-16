@@ -4,6 +4,10 @@ import type { NextRequest } from "next/server";
 /** 로그인 없이 접근 가능한 경로 (서명 링크는 외부에 전달되므로 공개) */
 const publicPaths = ["/login", "/sign"];
 const mobilePrefix = "/mobile";
+/**
+ * 모바일에서 PC 경로로 직접 접근해도 모바일 화면으로 자동 전환되는 라우트.
+ * 새 라우트를 추가하면 components/layout/MobileAutoRedirect.tsx 의 동일 목록에도 추가해야 한다.
+ */
 const mobileTargets = new Set([
   "/consulting",
   "/estimate",
@@ -18,6 +22,9 @@ const mobileTargets = new Set([
   "/statistics",
   "/chat",
   "/admin",
+  "/dashboard",
+  "/projects",
+  "/reception",
 ]);
 
 function isMobileUserAgent(userAgent: string): boolean {

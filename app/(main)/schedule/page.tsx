@@ -441,21 +441,22 @@ export default function SchedulePage() {
         <span className="text-sm text-gray-700">완료 건 보기</span>
       </label>
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white mb-8">
-        <table className="w-full min-w-[520px] text-left text-sm">
+        <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
             <tr>
+              <th className="row-actions-sticky w-16 p-2 text-center sm:hidden no-print" aria-label="작업" />
               <th className="p-2 sm:p-3">제목</th>
               <th className="p-2 sm:p-3">공사시작일</th>
               <th className="p-2 sm:p-3">입주일</th>
               <th className="p-2 sm:p-3">고객명</th>
               <th className="p-2 sm:p-3">연락처</th>
-              <th className="w-20 sm:w-24 p-2 sm:p-3 no-print" />
+              <th className="hidden w-20 p-2 sm:table-cell sm:w-24 sm:p-3 no-print" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {scheduleList.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-gray-500">
+                <td colSpan={7} className="p-8 text-center text-gray-500">
                   견적서가 연결된 상담이 없습니다.{" "}
                   <Link href="/consulting" className="text-blue-600 hover:underline">
                     상담 및 미팅관리
@@ -470,9 +471,18 @@ export default function SchedulePage() {
             ) : (
               paginatedList.map((item) => {
                 const accent = resolveScheduleAccent(item.consultation);
+                const actions = (
+                  <Link
+                    href={`/schedule/${item.consultation.id}`}
+                    className="rounded px-2 py-1 text-blue-600 hover:underline"
+                  >
+                    일정
+                  </Link>
+                );
                 return (
                 <tr key={item.consultation.id} className="text-gray-700 hover:bg-gray-50">
-                  <td className="p-2 sm:p-3 font-medium">
+                  <td className="row-actions-sticky whitespace-nowrap p-2 align-middle no-print sm:hidden">{actions}</td>
+                  <td className="p-2 sm:p-3 font-medium max-w-[18rem]">
                     <div className="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
@@ -508,14 +518,7 @@ export default function SchedulePage() {
                   <td className="p-2 sm:p-3">{formatDateDisplay(item.consultation.moveInAt)}</td>
                   <td className="p-2 sm:p-3">{item.consultation.customerName || "-"}</td>
                   <td className="p-2 sm:p-3">{item.consultation.contact || "-"}</td>
-                  <td className="whitespace-nowrap p-2 sm:p-3 align-middle no-print">
-                    <Link
-                      href={`/schedule/${item.consultation.id}`}
-                      className="rounded px-2 py-1 text-blue-600 hover:underline"
-                    >
-                      일정
-                    </Link>
-                  </td>
+                  <td className="hidden whitespace-nowrap p-2 align-middle no-print sm:table-cell sm:p-3">{actions}</td>
                 </tr>
               );
               })
@@ -575,12 +578,12 @@ export default function SchedulePage() {
       </div>
 
       <div className="overflow-x-auto">
-        <div className="min-w-[600px] rounded-lg border border-gray-200 bg-white">
+        <div className="rounded-lg border border-gray-200 bg-white sm:min-w-[600px]">
           <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
             {WEEKDAYS.map((wd, i) => (
               <div
                 key={wd}
-                className={`p-2 text-center text-xs font-medium ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}
+                className={`p-1.5 text-center text-[11px] font-medium sm:p-2 sm:text-xs ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}
               >
                 {wd}
               </div>
@@ -610,12 +613,12 @@ export default function SchedulePage() {
               return (
                 <div
                   key={date}
-                  className={`min-h-[100px] border-b border-r border-gray-100 p-1 last:border-r-0 ${cellBg}`}
+                  className={`min-h-[60px] border-b border-r border-gray-100 p-1 last:border-r-0 sm:min-h-[100px] ${cellBg}`}
                 >
-                  <div className={`text-right text-sm ${dayColor}`}>
+                  <div className={`text-right text-[11px] sm:text-sm ${dayColor}`}>
                     {dayNum}
                     {holiday && isCurrentMonth && (
-                      <span className="ml-1 text-[10px] text-red-400">{holiday}</span>
+                      <span className="ml-1 hidden text-[10px] text-red-400 sm:inline">{holiday}</span>
                     )}
                   </div>
                   <div className="mt-1 space-y-0.5">

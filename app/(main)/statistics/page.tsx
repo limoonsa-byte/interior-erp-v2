@@ -319,7 +319,7 @@ export default function StatisticsPage() {
             <h2 className="text-sm font-semibold text-gray-800">현장별 고객 입금상황</h2>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-sm">
+            <table className="w-full min-w-[860px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
                   <th className="px-3 py-2 text-left">현장명</th>

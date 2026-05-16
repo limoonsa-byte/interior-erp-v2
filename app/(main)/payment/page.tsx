@@ -151,13 +151,14 @@ export default function PaymentListPage() {
           </label>
         </div>
         <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
               <tr>
+                <th className="row-actions-sticky w-44 p-2 font-semibold sm:hidden">제목</th>
                 <th className="p-2 sm:p-3 font-semibold">견적일자</th>
                 <th className="p-2 sm:p-3 font-semibold">고객명</th>
                 <th className="p-2 sm:p-3 font-semibold">연락처</th>
-                <th className="p-2 sm:p-3 font-semibold">제목</th>
+                <th className="hidden p-2 font-semibold sm:table-cell sm:p-3">제목</th>
                 <th className="p-2 sm:p-3 text-right font-semibold">견적 합계</th>
                 <th className="p-2 sm:p-3 text-right font-semibold">승인 요청 합계</th>
               </tr>
@@ -185,15 +186,21 @@ export default function PaymentListPage() {
                 filteredEstimates.map((est) => {
                   const total = estimateTotal(est);
                   const paid = Number(paymentTotalsByEstimate[String(est.id)] ?? 0);
+                  const titleLink = (
+                    <Link href={`/payment/${est.id}`} className="font-medium text-blue-600 hover:underline">
+                      {est.title?.trim() ? est.title : "제목 없음"}
+                    </Link>
+                  );
                   return (
                     <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
+                      <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                        <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleLink}</div>
+                      </td>
                       <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
                       <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                       <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
-                      <td className="p-2 sm:p-3">
-                        <Link href={`/payment/${est.id}`} className="font-medium text-blue-600 hover:underline">
-                          {est.title?.trim() ? est.title : "제목 없음"}
-                        </Link>
+                      <td className="hidden p-2 sm:table-cell sm:p-3">
+                        <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleLink}</div>
                       </td>
                       <td className="p-2 sm:p-3 text-right tabular-nums">{formatNumber(total)}원</td>
                       <td className="p-2 sm:p-3 text-right tabular-nums font-medium">{formatNumber(paid)}원</td>

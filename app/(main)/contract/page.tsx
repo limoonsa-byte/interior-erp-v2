@@ -1338,91 +1338,98 @@ export default function ContractPage() {
         <>
           <p className="text-sm text-gray-500">저장된 계약 목록입니다. 서명 요청 링크를 발송하거나 완료 건을 확인할 수 있습니다.</p>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-            <table className="w-full min-w-[520px] text-left text-sm">
+            <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
+                  <th className="row-actions-sticky w-32 p-2 text-center sm:hidden" aria-label="작업" />
                   <th className="p-2 sm:p-3">제목</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3">상태</th>
                   <th className="p-2 sm:p-3">생성일</th>
-                  <th className="w-32 p-2 sm:p-3" />
+                  <th className="hidden w-32 p-2 sm:table-cell sm:p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredContracts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-500">
+                    <td colSpan={7} className="p-8 text-center text-gray-500">
                       저장된 계약이 없습니다. &quot;신규 계약&quot;으로 작성해 보세요.
                     </td>
                   </tr>
                 ) : (
-                  filteredContracts.map((c) => (
-                    <tr key={c.id} className="text-gray-700 hover:bg-gray-50">
-                      <td className="p-2 font-medium sm:p-3">{c.title || "-"}</td>
-                      <td className="p-2 sm:p-3">{c.customerName || "-"}</td>
-                      <td className="p-2 sm:p-3">{c.contact || "-"}</td>
-                      <td className="p-2 sm:p-3">{statusLabel(c.status)}</td>
-                      <td className="p-2 sm:p-3">{formatDateYMD(c.createdAt)}</td>
-                      <td className="whitespace-nowrap p-2 sm:p-3 align-middle">
-                        <div className="flex items-center gap-2">
-                          {(c.status === "draft" || c.status === "sent") && (
-                            <button
-                              type="button"
-                              onClick={() => setFormOpen(c.id)}
-                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
-                            >
-                              수정
-                            </button>
-                          )}
-                          {c.status === "signed" && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => setSignViewContract(c)}
-                                className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
-                              >
-                                계약서 보기
-                              </button>
-                              <span className="text-gray-300">|</span>
-                              <button
-                                type="button"
-                                onClick={() => { setEmailModal(c); setEmailTo(c.signerEmail || ""); }}
-                                className="rounded px-2 py-1 text-green-600 hover:underline active:bg-green-50"
-                              >
-                                이메일 보내기
-                              </button>
-                            </>
-                          )}
-                          {(c.status === "draft" || c.status === "sent") && (
-                            <>
-                              {c.status === "draft" && <span className="text-gray-300">|</span>}
-                              <button
-                                type="button"
-                                onClick={() => handleSendClick(c)}
-                                className="rounded px-2 py-1 text-green-600 hover:underline active:bg-green-50"
-                              >
-                                {c.status === "sent" ? "링크 복사" : "서명 요청"}
-                              </button>
-                            </>
-                          )}
-                          <span className="text-gray-300">|</span>
+                  filteredContracts.map((c) => {
+                    const actions = (
+                      <div className="flex items-center gap-2">
+                        {(c.status === "draft" || c.status === "sent") && (
                           <button
                             type="button"
-                            onClick={() => {
-                              if (!confirm("이 계약을 삭제할까요?")) return;
-                              fetch(`/api/contracts/${c.id}`, { method: "DELETE" })
-                                .then((res) => (res.ok ? load() : res.json().then((d) => Promise.reject(d))))
-                                .catch(() => alert("삭제 실패"));
-                            }}
-                            className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
+                            onClick={() => setFormOpen(c.id)}
+                            className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
                           >
-                            삭제
+                            수정
                           </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        )}
+                        {c.status === "signed" && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setSignViewContract(c)}
+                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
+                            >
+                              계약서 보기
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              type="button"
+                              onClick={() => { setEmailModal(c); setEmailTo(c.signerEmail || ""); }}
+                              className="rounded px-2 py-1 text-green-600 hover:underline active:bg-green-50"
+                            >
+                              이메일 보내기
+                            </button>
+                          </>
+                        )}
+                        {(c.status === "draft" || c.status === "sent") && (
+                          <>
+                            {c.status === "draft" && <span className="text-gray-300">|</span>}
+                            <button
+                              type="button"
+                              onClick={() => handleSendClick(c)}
+                              className="rounded px-2 py-1 text-green-600 hover:underline active:bg-green-50"
+                            >
+                              {c.status === "sent" ? "링크 복사" : "서명 요청"}
+                            </button>
+                          </>
+                        )}
+                        <span className="text-gray-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!confirm("이 계약을 삭제할까요?")) return;
+                            fetch(`/api/contracts/${c.id}`, { method: "DELETE" })
+                              .then((res) => (res.ok ? load() : res.json().then((d) => Promise.reject(d))))
+                              .catch(() => alert("삭제 실패"));
+                          }}
+                          className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
+                        >
+                          삭제
+                        </button>
+                      </div>
+                    );
+                    return (
+                      <tr key={c.id} className="text-gray-700 hover:bg-gray-50">
+                        <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
+                        <td className="p-2 font-medium sm:p-3">
+                          <div className="max-w-[16rem] truncate" title={c.title || ""}>{c.title || "-"}</div>
+                        </td>
+                        <td className="p-2 sm:p-3">{c.customerName || "-"}</td>
+                        <td className="p-2 sm:p-3">{c.contact || "-"}</td>
+                        <td className="p-2 sm:p-3">{statusLabel(c.status)}</td>
+                        <td className="p-2 sm:p-3">{formatDateYMD(c.createdAt)}</td>
+                        <td className="hidden whitespace-nowrap p-2 align-middle sm:table-cell sm:p-3">{actions}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
