@@ -655,6 +655,7 @@ export default function PaymentDetailPage() {
                           <th className="border border-gray-300 p-2 text-left font-semibold">항목</th>
                           <th className="border border-gray-300 p-2 text-left font-semibold">비고</th>
                           <th className="border border-gray-300 p-2 text-right font-semibold">금액</th>
+                          <th className="payment-approval-sign-col border border-gray-300 p-2 text-center font-semibold">확인 (서명)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -663,6 +664,7 @@ export default function PaymentDetailPage() {
                             <td className="border border-gray-300 p-2">{entry.item}</td>
                             <td className="border border-gray-300 p-2 whitespace-pre-wrap">{entry.memo}</td>
                             <td className="border border-gray-300 p-2 text-right tabular-nums">{formatNumber(entry.amount)}원</td>
+                            <td className="payment-approval-sign-cell border border-gray-300 p-2" aria-label="서명/도장 란" />
                           </tr>
                         ))}
                         <tr className="bg-gray-50">
@@ -672,6 +674,7 @@ export default function PaymentDetailPage() {
                           <td className="border border-gray-300 p-2 text-right font-semibold tabular-nums">
                             {formatNumber(section.entries.reduce((sum, entry) => sum + entry.amount, 0))}원
                           </td>
+                          <td className="payment-approval-sign-cell border border-gray-300 p-2" aria-label="서명/도장 란" />
                         </tr>
                       </tbody>
                     </table>

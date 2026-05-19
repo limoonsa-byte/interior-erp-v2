@@ -1931,6 +1931,21 @@ body {
   body.payment-approval-print-open #payment-approval-print-area tr {
     page-break-inside: avoid;
   }
+  body.payment-approval-print-open #payment-approval-print-area .payment-approval-sign-col {
+    width: 28mm !important;
+  }
+  body.payment-approval-print-open #payment-approval-print-area .payment-approval-sign-cell {
+    height: 14mm !important;
+  }
+}
+
+/* 화면(미리보기)에서도 서명란이 손쉽게 보이도록 폭과 높이를 확보 */
+.payment-approval-print-content .payment-approval-sign-col {
+  width: 110px;
+}
+.payment-approval-print-content .payment-approval-sign-cell {
+  height: 44px;
+  background-color: #ffffff;
 }
 
 /* -------------------------------------------------------------------------- */

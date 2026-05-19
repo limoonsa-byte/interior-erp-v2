@@ -20,6 +20,7 @@ type ConsultationSchedule = {
   constructionStartAt?: string;
   moveInAt?: string;
   schedulePhases?: { name: string; start: string; end: string }[];
+  scheduleMemo?: string;
 };
 
 type EstimateItem = { id: number; consultationId?: number; title: string };
@@ -857,6 +858,37 @@ export default function WorkersPage() {
                           );
                         })}
                       </div>
+                      {selectedShareItem.consultation.scheduleMemo?.trim() && (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            borderTop: "1px solid #e5e7eb",
+                            paddingTop: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              fontWeight: 600,
+                              color: "#374151",
+                              marginBottom: "2px",
+                            }}
+                          >
+                            메모
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              lineHeight: 1.4,
+                              color: "#1f2937",
+                              whiteSpace: "pre-wrap",
+                              wordBreak: "break-word",
+                            }}
+                          >
+                            {selectedShareItem.consultation.scheduleMemo.trim()}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
