@@ -408,6 +408,14 @@ async function migrate() {
     `;
     console.log("[migrate] company_order_template OK");
     await sql`
+      CREATE TABLE IF NOT EXISTS company_schedule_phase_buttons (
+        company_id INT PRIMARY KEY REFERENCES companies(id) ON DELETE CASCADE,
+        labels_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    console.log("[migrate] company_schedule_phase_buttons OK");
+    await sql`
       CREATE TABLE IF NOT EXISTS master_smtp_config (
         id INT PRIMARY KEY DEFAULT 1,
         smtp_oauth_provider TEXT,

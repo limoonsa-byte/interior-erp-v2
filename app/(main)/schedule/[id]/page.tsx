@@ -11,23 +11,9 @@ import {
   SCHEDULE_PRINT_WEEK_COLS,
   SCHEDULE_PRINT_WEEKS_PER_PAGE,
 } from "@/lib/schedule-print-chunk";
+import { DEFAULT_SCHEDULE_PHASE_BUTTONS } from "@/lib/defaultSchedulePhaseButtons";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
-
-/** 공사 기간 위에 나열할 공정 버튼 기본 목록 (드래그하여 캘린더에 놓기) */
-const DEFAULT_PHASE_BUTTONS = [
-  "기본",
-  "철거",
-  "설비",
-  "전기",
-  "목공",
-  "금속",
-  "도장",
-  "타일",
-  "간판",
-  "마감",
-  "오픈",
-];
 
 /** 공정 이름 추천 목록 */
 const PHASE_SUGGESTIONS = [
@@ -250,8 +236,9 @@ export default function ScheduleDetailPage() {
     const t = new Date();
     return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}`;
   });
-  /** 드래그용 공정 버튼 목록 (추가/삭제 가능) */
-  const [phaseButtonLabels, setPhaseButtonLabels] = useState<string[]>(() => [...DEFAULT_PHASE_BUTTONS]);
+  /** 드래그용 공정 버튼 목록 (회사 기본 목록 + 현장에서 추가/삭제) */
+  const [phaseButtonLabels, setPhaseButtonLabels] = useState<string[]>(() => [...DEFAULT_SCHEDULE_PHASE_BUTTONS]);
+  const [phaseButtonsSaving, setPhaseButtonsSaving] = useState(false);
   /** 리사이즈 핸들 드래그 시: 어떤 phase의 어느 쪽 끝인지 */
   const resizeDragRef = useRef<{ phaseIndex: number; edge: "left" | "right" } | null>(null);
   /** 리사이즈 중 마우스가 지나간 마지막 날짜 칸 (드래그 끝날 때 이 날짜로 기간 확장) */
@@ -265,8 +252,13 @@ export default function ScheduleDetailPage() {
     Promise.all([
       fetch("/api/consultations").then((r) => r.json()),
       fetch("/api/estimates").then((r) => r.json()),
+      fetch("/api/company/schedule-phase-buttons").then((r) => r.json()),
     ])
-      .then(([cons, est]) => {
+      .then(([cons, est, phaseBtnData]) => {
+        const labels = Array.isArray((phaseBtnData as { labels?: string[] }).labels)
+          ? (phaseBtnData as { labels: string[] }).labels.filter((s) => typeof s === "string" && s.trim())
+          : [];
+        if (labels.length > 0) setPhaseButtonLabels(labels);
         const list = Array.isArray(cons) ? cons : [];
         const c = list.find((x: Consultation) => x.id === id);
         if (c) {
@@ -289,6 +281,49 @@ export default function ScheduleDetailPage() {
       .catch(() => setConsultation(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const saveCompanyPhaseButtons = async () => {
+    const labels = phaseButtonLabels.map((s) => s.trim()).filter(Boolean);
+    if (labels.length === 0) {
+      alert("공정 버튼을 하나 이상 남겨 주세요.");
+      return;
+    }
+    setPhaseButtonsSaving(true);
+    try {
+      const res = await fetch("/api/company/schedule-phase-buttons", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ labels }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((data as { error?: string }).error || "기본 목록 저장에 실패했습니다.");
+        return;
+      }
+      if (Array.isArray((data as { labels?: string[] }).labels)) {
+        setPhaseButtonLabels((data as { labels: string[] }).labels);
+      }
+      alert("회사 기본 공정 목록으로 저장되었습니다. 다음 일정 작성부터 이 목록이 적용됩니다.");
+    } catch {
+      alert("저장 중 오류가 발생했습니다.");
+    } finally {
+      setPhaseButtonsSaving(false);
+    }
+  };
+
+  const reloadCompanyPhaseButtons = async () => {
+    try {
+      const res = await fetch("/api/company/schedule-phase-buttons");
+      const data = await res.json();
+      const labels = Array.isArray(data.labels)
+        ? data.labels.filter((s: unknown) => typeof s === "string" && String(s).trim())
+        : [];
+      if (labels.length > 0) setPhaseButtonLabels(labels);
+      else setPhaseButtonLabels([...DEFAULT_SCHEDULE_PHASE_BUTTONS]);
+    } catch {
+      alert("기본 목록을 불러오지 못했습니다.");
+    }
+  };
 
   const save = async () => {
     if (!consultation) return;
@@ -920,7 +955,31 @@ export default function ScheduleDetailPage() {
 
       {/* 공정 버튼: 끌어다가 캘린더 날짜 칸에 놓으면 일정 추가 */}
       <section className="mb-4 no-print">
-        <p className="text-xs text-gray-500 mb-2">버튼을 날짜 칸에 놓으면 한 칸 일정이 추가됩니다. 같은 공정을 바로 다음·이전 날 칸에 놓으면 기간이 늘어납니다.</p>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-gray-500">
+            버튼을 날짜 칸에 놓으면 한 칸 일정이 추가됩니다. 같은 공정을 바로 다음·이전 날 칸에 놓으면 기간이 늘어납니다.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={reloadCompanyPhaseButtons}
+              className="rounded-lg border border-gray-300 bg-white px-2.5 py-1 text-xs text-gray-700 hover:bg-gray-50"
+            >
+              기본 목록 불러오기
+            </button>
+            <button
+              type="button"
+              onClick={saveCompanyPhaseButtons}
+              disabled={phaseButtonsSaving}
+              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {phaseButtonsSaving ? "저장 중…" : "기본 목록으로 저장"}
+            </button>
+          </div>
+        </div>
+        <p className="mb-2 text-[11px] text-gray-400">
+          관리 → 일정 공정 기본 버튼에서 회사 전체 기본 목록을 편집할 수 있습니다.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           {phaseButtonLabels.map((label, idx) => (
             <div key={idx} className="flex items-center gap-0.5 rounded-lg border border-gray-300 bg-white shadow-sm">

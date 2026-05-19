@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { parseEstimateExcelRows } from "@/lib/parseEstimateExcel";
+import { DEFAULT_SCHEDULE_PHASE_BUTTONS } from "@/lib/defaultSchedulePhaseButtons";
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
 
@@ -26,7 +27,8 @@ type ModalKind =
   | "estimate-templates"
   | "logo-stamp"
   | "company-contract"
-  | "company-info";
+  | "company-info"
+  | "schedule-phase-buttons";
 
 export default function AdminPage() {
   const searchParams = useSearchParams();
@@ -101,6 +103,10 @@ export default function AdminPage() {
   const [showNaverAppPasswordModal, setShowNaverAppPasswordModal] = useState(false);
   const [naverAppPasswordInput, setNaverAppPasswordInput] = useState("");
   const [naverAppPasswordSaving, setNaverAppPasswordSaving] = useState(false);
+
+  const [schedulePhaseLabels, setSchedulePhaseLabels] = useState<string[]>([]);
+  const [schedulePhaseSaving, setSchedulePhaseSaving] = useState(false);
+  const [schedulePhaseMessage, setSchedulePhaseMessage] = useState("");
 
   const loadPinStatus = useCallback(() => {
     fetch("/api/company/admin-pin")
@@ -257,6 +263,27 @@ export default function AdminPage() {
         .then((res) => res.ok ? res.json() : { configured: false })
         .then((data) => setSmtpConfigured(data.configured === true))
         .catch(() => setSmtpConfigured(false));
+    }
+    if (modal === "schedule-phase-buttons") {
+      queueMicrotask(() => {
+        setSchedulePhaseMessage("");
+        setSchedulePhaseSaving(false);
+      });
+      fetch("/api/company/schedule-phase-buttons")
+        .then((res) => res.json())
+        .then((data) => {
+          const labels = Array.isArray(data.labels)
+            ? data.labels.filter((s: unknown) => typeof s === "string" && String(s).trim())
+            : [];
+          setSchedulePhaseLabels(
+            labels.length > 0 ? labels : [...DEFAULT_SCHEDULE_PHASE_BUTTONS]
+          );
+          if (data.warning) setSchedulePhaseMessage(String(data.warning));
+        })
+        .catch(() => {
+          setSchedulePhaseLabels([...DEFAULT_SCHEDULE_PHASE_BUTTONS]);
+          setSchedulePhaseMessage("목록을 불러오지 못했습니다.");
+        });
     }
   }, [modal, loadPics]);
 
@@ -748,6 +775,38 @@ export default function AdminPage() {
     }
   };
 
+  const handleSaveSchedulePhaseButtons = () => {
+    const labels = schedulePhaseLabels.map((s) => s.trim()).filter(Boolean);
+    if (labels.length === 0) {
+      setSchedulePhaseMessage("공정 이름을 하나 이상 입력해 주세요.");
+      return;
+    }
+    setSchedulePhaseMessage("");
+    setSchedulePhaseSaving(true);
+    fetch("/api/company/schedule-phase-buttons", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ labels }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          if (Array.isArray((data as { labels?: string[] }).labels)) {
+            setSchedulePhaseLabels((data as { labels: string[] }).labels);
+          }
+          setSchedulePhaseMessage("저장되었습니다.");
+          setTimeout(() => {
+            setModal(null);
+            setSchedulePhaseMessage("");
+          }, 1500);
+        } else {
+          setSchedulePhaseMessage((data as { error?: string }).error || "저장 실패");
+        }
+      })
+      .catch(() => setSchedulePhaseMessage("오류가 발생했습니다."))
+      .finally(() => setSchedulePhaseSaving(false));
+  };
+
   const handleSaveDrawingApi = () => {
     setDrawingApiMessage("");
     setDrawingApiLoading(true);
@@ -931,6 +990,15 @@ export default function AdminPage() {
             className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             계약서 양식
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => setModal("schedule-phase-buttons")}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            일정 공정 기본 버튼
           </button>
         </li>
         <li>
@@ -1142,6 +1210,102 @@ export default function AdminPage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 일정 공정 기본 버튼 모달 */}
+      {modal === "schedule-phase-buttons" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">일정 공정 기본 버튼</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-gray-600">
+              일정 작성 화면에서 캘린더로 끌어다 놓는 공정 버튼의 회사 기본 목록입니다. 새 일정을 열 때 이 목록이 적용됩니다.
+            </p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {schedulePhaseLabels.map((label, idx) => (
+                <div
+                  key={`${label}-${idx}`}
+                  className="flex items-center gap-0.5 rounded-lg border border-gray-300 bg-white"
+                >
+                  <span className="px-3 py-1.5 text-sm font-medium text-gray-700">{label}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSchedulePhaseLabels((prev) => prev.filter((_, i) => i !== idx))
+                    }
+                    className="rounded-r-md px-1.5 py-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50"
+                    title="삭제"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const name = window.prompt("추가할 공정 이름");
+                  if (!name?.trim()) return;
+                  const t = name.trim();
+                  if (schedulePhaseLabels.includes(t)) {
+                    alert("이미 있는 공정입니다.");
+                    return;
+                  }
+                  setSchedulePhaseLabels((prev) => [...prev, t]);
+                }}
+                className="rounded-lg border border-dashed border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                + 추가
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSchedulePhaseLabels([...DEFAULT_SCHEDULE_PHASE_BUTTONS])}
+              className="mb-3 text-xs text-blue-600 hover:underline"
+            >
+              시스템 기본값으로 되돌리기
+            </button>
+            {schedulePhaseMessage && (
+              <p
+                className={`mb-3 text-sm ${
+                  schedulePhaseMessage.includes("저장되었습니다")
+                    ? "text-green-600"
+                    : schedulePhaseMessage.includes("테이블") || schedulePhaseMessage.includes("migrate")
+                      ? "text-amber-600"
+                      : "text-red-600"
+                }`}
+              >
+                {schedulePhaseMessage}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={schedulePhaseSaving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSchedulePhaseButtons}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                disabled={schedulePhaseSaving}
+              >
+                {schedulePhaseSaving ? "저장 중..." : "저장"}
+              </button>
+            </div>
           </div>
         </div>
       )}

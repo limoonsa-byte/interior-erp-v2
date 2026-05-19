@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image } from "lucide-react";
+import { sortByKoreanDisplayName } from "@/lib/sortKoreanDisplayName";
 
 type WorkerItem = {
   id: number;
@@ -193,6 +194,11 @@ export default function WorkersPage() {
   useEffect(() => {
     loadList();
   }, [loadList]);
+
+  const sortedList = useMemo(
+    () => sortByKoreanDisplayName(list, (item) => item.name),
+    [list]
+  );
 
   const handleAdd = () => {
     const trimmedName = name.trim();
@@ -535,7 +541,7 @@ export default function WorkersPage() {
 
       {loading ? (
         <p className="text-sm text-gray-500">불러오는 중…</p>
-      ) : list.length === 0 ? (
+      ) : sortedList.length === 0 ? (
         <p className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
           등록된 인부가 없습니다. 위에서 추가해 주세요.
         </p>
@@ -555,7 +561,7 @@ export default function WorkersPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((item) => {
+                {sortedList.map((item) => {
                   const actions = (
                     <div className="flex shrink-0 flex-wrap gap-1.5">
                       <button

@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { sortByKoreanDisplayName } from "@/lib/sortKoreanDisplayName";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -25,10 +26,11 @@ export async function GET() {
       SELECT id, name, phone, role, memo, rating, created_at
       FROM company_workers
       WHERE company_id = ${company.id}
-      ORDER BY id ASC
+      ORDER BY name ASC
     `;
 
-    const list = result.rows.map((row) => {
+    const list = sortByKoreanDisplayName(
+      result.rows.map((row) => {
       const r = row as { id: number; name: string; phone?: string | null; role?: string | null; memo?: string | null; rating?: number | null; created_at?: string | null };
       const rating = r.rating != null ? Math.min(5, Math.max(1, Math.round(Number(r.rating)))) : null;
       return {
@@ -40,7 +42,9 @@ export async function GET() {
         rating: rating as number | null,
         createdAt: r.created_at ?? null,
       };
-    });
+      }),
+      (row) => row.name
+    );
 
     return NextResponse.json(list);
   } catch (error) {
