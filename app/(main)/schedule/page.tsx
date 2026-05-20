@@ -215,6 +215,69 @@ function trimPreviewCalendarWeeks(
   return out.length >= cols ? out : days;
 }
 
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** 전체 일정 인쇄 기본 기간: 모든 공정의 첫날~마지막날, 없으면 이번 달 */
+function getDefaultPrintRange(scheduleList: ScheduleItem[]): { from: string; to: string } {
+  let minS = "";
+  let maxE = "";
+  scheduleList.forEach(({ consultation }) => {
+    const phases = consultation.schedulePhases;
+    if (!Array.isArray(phases)) return;
+    phases.forEach((p) => {
+      const start = toDateValue(p.start);
+      if (!start) return;
+      const end = toDateValue(p.end) || start;
+      if (!minS || start < minS) minS = start;
+      if (!maxE || end > maxE) maxE = end;
+    });
+  });
+  if (minS && maxE) return { from: minS, to: maxE };
+  const t = new Date();
+  const y = t.getFullYear();
+  const m = t.getMonth() + 1;
+  const last = new Date(y, m, 0).getDate();
+  return {
+    from: `${y}-${String(m).padStart(2, "0")}-01`,
+    to: `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(2, "0")}`,
+  };
+}
+
+function formatPrintRangeTitle(from: string, to: string): string {
+  if (!from || !to) return "";
+  const [fy, fm, fd] = from.split("-").map(Number);
+  const [ty, tm, td] = to.split("-").map(Number);
+  if (from === to) return `${fy}년 ${fm}월 ${fd}일`;
+  if (fy === ty && fm === tm) return `${fy}년 ${fm}월 ${fd}일 ~ ${td}일`;
+  if (fy === ty) return `${fy}년 ${fm}월 ${fd}일 ~ ${tm}월 ${td}일`;
+  return `${fy}년 ${fm}월 ${fd}일 ~ ${ty}년 ${tm}월 ${td}일`;
+}
+
+/** 선택 기간을 주 단위 그리드로 (일~토) */
+function buildCalendarDaysInDateRange(from: string, to: string) {
+  const fd = new Date(from + "T12:00:00");
+  const gridStart = addDays(from, -fd.getDay());
+  const ld = new Date(to + "T12:00:00");
+  const gridEnd = addDays(to, 6 - ld.getDay());
+  const days: { date: string; isCurrentMonth: boolean; dayNum: number }[] = [];
+  for (let cur = gridStart; cur <= gridEnd; cur = addDays(cur, 1)) {
+    const dd = new Date(cur + "T12:00:00");
+    days.push({
+      date: cur,
+      isCurrentMonth: cur >= from && cur <= to,
+      dayNum: dd.getDate(),
+    });
+  }
+  return days;
+}
+
 export default function SchedulePage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
@@ -364,34 +427,36 @@ export default function SchedulePage() {
   );
 
   const [showPreview, setShowPreview] = useState(false);
+  const [printRangeFrom, setPrintRangeFrom] = useState("");
+  const [printRangeTo, setPrintRangeTo] = useState("");
 
-  const previewMonths = useMemo(() => {
-    const monthSet = new Set<string>();
-    scheduleList.forEach(({ consultation }) => {
-      const sp = consultation.schedulePhases;
-      if (!Array.isArray(sp)) return;
-      sp.forEach((p) => {
-        const start = toDateValue(p.start);
-        const end = toDateValue(p.end) || start;
-        if (!start) return;
-        let [sy, sm] = start.slice(0, 7).split("-").map(Number);
-        const [ey, em] = end.slice(0, 7).split("-").map(Number);
-        while (sy < ey || (sy === ey && sm <= em)) {
-          monthSet.add(`${sy}-${String(sm).padStart(2, "0")}`);
-          sm++;
-          if (sm > 12) { sm = 1; sy++; }
-        }
-      });
+  const openPrintPreview = useCallback(() => {
+    const { from, to } = getDefaultPrintRange(scheduleList);
+    setPrintRangeFrom(from);
+    setPrintRangeTo(to);
+    setShowPreview(true);
+  }, [scheduleList]);
+
+  const previewRangeFrom = toDateValue(printRangeFrom);
+  const previewRangeTo = toDateValue(printRangeTo);
+  const previewRangeInvalid =
+    !!previewRangeFrom && !!previewRangeTo && previewRangeFrom > previewRangeTo;
+
+  const previewPrintDays = useMemo(() => {
+    if (!previewRangeFrom || !previewRangeTo || previewRangeInvalid) return [];
+    const days = buildCalendarDaysInDateRange(previewRangeFrom, previewRangeTo);
+    return trimPreviewCalendarWeeks(days, (d) => {
+      if (d < previewRangeFrom || d > previewRangeTo) return false;
+      return getSiteBarsOnDay(d, scheduleList).length > 0;
     });
-    const candidates = [...monthSet].sort();
-    const withSchedule = candidates.filter((month) => {
-      const days = getCalendarDaysForMonth(month);
-      return days.some((d) => getSiteBarsOnDay(d.date, scheduleList).length > 0);
-    });
-    if (withSchedule.length > 0) return withSchedule;
-    if (candidates.length > 0) return candidates;
-    return [currentMonth];
-  }, [scheduleList, currentMonth]);
+  }, [previewRangeFrom, previewRangeTo, previewRangeInvalid, scheduleList]);
+
+  const previewTitle = useMemo(
+    () => formatPrintRangeTitle(previewRangeFrom, previewRangeTo),
+    [previewRangeFrom, previewRangeTo]
+  );
+
+  const previewPages = useMemo(() => chunkDaysForPrint(previewPrintDays), [previewPrintDays]);
 
   const handlePrint = () => {
     printScheduleCalendarContent(document.getElementById("schedule-print-content"));
@@ -422,7 +487,7 @@ export default function SchedulePage() {
     <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg sm:text-xl font-bold text-gray-900">일정</h1>
-        <button type="button" onClick={() => setShowPreview(true)} className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
+        <button type="button" onClick={openPrintPreview} className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50">
           인쇄 / 미리보기
         </button>
       </div>
@@ -686,38 +751,78 @@ export default function SchedulePage() {
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:p-8" onClick={() => setShowPreview(false)}>
           <div className="w-full max-w-5xl my-4 rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 z-10 flex items-center justify-between rounded-t-lg border-b border-gray-200 bg-white px-6 py-4 no-print">
-              <h2 className="text-lg font-semibold text-gray-900">전체 일정 미리보기</h2>
-              <div className="flex gap-2">
-                <button type="button" onClick={handlePrint} className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">인쇄 / PDF 저장</button>
-                <button type="button" onClick={() => setShowPreview(false)} className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">닫기</button>
+            <div className="sticky top-0 z-10 rounded-t-lg border-b border-gray-200 bg-white px-4 py-4 sm:px-6 no-print">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-semibold text-gray-900">전체 일정 미리보기</h2>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePrint}
+                    disabled={previewPrintDays.length === 0}
+                    className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    인쇄 / PDF 저장
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    닫기
+                  </button>
+                </div>
               </div>
+              <p className="mb-2 text-xs text-gray-500">
+                인쇄할 기간을 선택하세요. 선택 구간에 공정이 있는 날만 캘린더에 표시됩니다.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="text-sm text-gray-700">
+                  <span className="mb-1 block text-xs font-medium text-gray-600">시작일</span>
+                  <input
+                    type="date"
+                    value={printRangeFrom}
+                    onChange={(e) => setPrintRangeFrom(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </label>
+                <span className="pb-2 text-gray-500">~</span>
+                <label className="text-sm text-gray-700">
+                  <span className="mb-1 block text-xs font-medium text-gray-600">종료일</span>
+                  <input
+                    type="date"
+                    value={printRangeTo}
+                    onChange={(e) => setPrintRangeTo(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </label>
+              </div>
+              {previewRangeInvalid && (
+                <p className="mt-2 text-sm text-red-600">시작일이 종료일보다 늦을 수 없습니다.</p>
+              )}
             </div>
             <div id="schedule-print-content" className="p-6">
-              {previewMonths.map((month, mIdx) => {
-                const mDays = trimPreviewCalendarWeeks(
-                  getCalendarDaysForMonth(month),
-                  (d) => siteBarsByDay(d).length > 0
-                );
-                const pages = chunkDaysForPrint(mDays);
-                return (
-                  <React.Fragment key={month}>
-                    {pages.map((chunk, pageIdx) => {
-                      const padded = padChunkToWeekRows(chunk);
-                      const totalP = pages.length;
-                      const isFirstOverall = mIdx === 0 && pageIdx === 0;
-                      return (
-                        <div
-                          key={`${month}-${pageIdx}`}
-                          className="mb-6"
-                          style={
-                            isFirstOverall
-                              ? undefined
-                              : { pageBreakBefore: "always", breakBefore: "page" }
-                          }
-                        >
-                          <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
-                            전체 일정 &mdash; {month.slice(0, 4)}년 {Number(month.slice(5, 7))}월
+              {previewPrintDays.length === 0 ? (
+                <p className="py-12 text-center text-sm text-gray-500">
+                  {previewRangeInvalid
+                    ? "기간을 다시 선택해 주세요."
+                    : "선택한 기간에 표시할 공사 일정이 없습니다."}
+                </p>
+              ) : (
+                previewPages.map((chunk, pageIdx) => {
+                  const padded = padChunkToWeekRows(chunk);
+                  const totalP = previewPages.length;
+                  return (
+                    <div
+                      key={`preview-${pageIdx}`}
+                      className="mb-6"
+                      style={
+                        pageIdx === 0
+                          ? undefined
+                          : { pageBreakBefore: "always", breakBefore: "page" }
+                      }
+                    >
+                      <h2 className="text-base font-bold text-gray-900 mb-1 text-center">
+                        전체 일정 &mdash; {previewTitle}
                             {totalP > 1 && (
                               <span className="mt-0.5 block text-sm font-normal text-gray-600">
                                 {pageIdx + 1} / {totalP}쪽
@@ -735,14 +840,16 @@ export default function SchedulePage() {
                                 if (cell == null) {
                                   return (
                                     <div
-                                      key={`pad-${month}-${pageIdx}-${ci}`}
+                                      key={`pad-${pageIdx}-${ci}`}
                                       className="min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
                                       aria-hidden
                                     />
                                   );
                                 }
                                 const { date, isCurrentMonth, dayNum } = cell;
-                                const siteBars = siteBarsByDay(date);
+                                const inRange =
+                                  date >= previewRangeFrom && date <= previewRangeTo;
+                                const siteBars = inRange ? siteBarsByDay(date) : [];
                                 const dow = new Date(date + "T12:00:00").getDay();
                                 const holiday = getHolidayName(date);
                                 const isOff = dow === 0 || dow === 6 || !!holiday;
@@ -770,12 +877,10 @@ export default function SchedulePage() {
                               })}
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </React.Fragment>
-                );
-              })}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>

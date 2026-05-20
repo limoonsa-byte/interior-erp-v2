@@ -17,12 +17,19 @@ type WorkerItem = {
 type ConsultationSchedule = {
   id: number;
   customerName: string;
+  status?: string;
   address?: string;
   constructionStartAt?: string;
   moveInAt?: string;
   schedulePhases?: { name: string; start: string; end: string }[];
   scheduleMemo?: string;
 };
+
+/** 일정 공유 선택 목록에서 제외할 종료 상태 */
+function isCompletedForScheduleShare(status?: string): boolean {
+  const s = (status ?? "").trim();
+  return s === "완료" || s === "완료및정산" || s === "취소" || s === "취소/보류";
+}
 
 type EstimateItem = { id: number; consultationId?: number; title: string };
 
@@ -322,9 +329,13 @@ export default function WorkersPage() {
         const consultations = Array.isArray(cons) ? cons as ConsultationSchedule[] : [];
         const estimates = Array.isArray(est) ? est as EstimateItem[] : [];
         const withSchedule = consultations.filter(
-          (c: ConsultationSchedule) =>
-            (c.constructionStartAt && String(c.constructionStartAt).trim()) ||
-            (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
+          (c: ConsultationSchedule) => {
+            if (isCompletedForScheduleShare(c.status)) return false;
+            return (
+              (c.constructionStartAt && String(c.constructionStartAt).trim()) ||
+              (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
+            );
+          }
         );
         const list = withSchedule.map((c: ConsultationSchedule) => {
           const e = estimates.find((x: EstimateItem) => x.consultationId === c.id);
