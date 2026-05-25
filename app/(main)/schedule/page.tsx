@@ -2,7 +2,12 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { getHolidayName } from "@/lib/koreanHolidays";
+import { ScheduleCalendarDayLabel } from "@/components/schedule/ScheduleCalendarDayLabel";
+import {
+  getScheduleCalendarDayDisplay,
+  resolveScheduleCalendarCellBg,
+  scheduleCalendarWeekHeaderClass,
+} from "@/lib/scheduleCalendarDayDisplay";
 import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
 import { chunkDaysForPrint, padChunkToWeekRows } from "@/lib/schedule-print-chunk";
 
@@ -648,44 +653,27 @@ export default function SchedulePage() {
             {WEEKDAYS.map((wd, i) => (
               <div
                 key={wd}
-                className={`p-1.5 text-center text-[11px] font-medium sm:p-2 sm:text-xs ${i === 0 ? "text-red-500" : i === 6 ? "text-blue-500" : "text-gray-600"}`}
+                className={`p-1.5 text-center text-[11px] font-medium sm:p-2 sm:text-xs ${scheduleCalendarWeekHeaderClass(i)}`}
               >
                 {wd}
               </div>
             ))}
           </div>
           <div className="grid grid-cols-7">
-            {calendarDays.map(({ date, isCurrentMonth, dayNum }, idx) => {
+            {calendarDays.map(({ date, isCurrentMonth, dayNum }) => {
               const siteBars = siteBarsByDay(date);
-              const dow = idx % 7;
-              const isSunday = dow === 0;
-              const isSaturday = dow === 6;
-              const holiday = getHolidayName(date);
-              const isHoliday = !!holiday;
-              const isOff = isSunday || isSaturday || isHoliday;
-              const cellBg = !isCurrentMonth
-                ? "bg-gray-50"
-                : isOff
-                  ? "bg-red-50/50"
-                  : "";
-              const dayColor = !isCurrentMonth
-                ? "text-gray-400"
-                : (isSunday || isHoliday)
-                  ? "text-red-500"
-                  : isSaturday
-                    ? "text-blue-500"
-                    : "text-gray-900";
+              const { cellBgClass } = getScheduleCalendarDayDisplay(date, isCurrentMonth);
               return (
                 <div
                   key={date}
-                  className={`min-h-[60px] border-b border-r border-gray-100 p-1 last:border-r-0 sm:min-h-[100px] ${cellBg}`}
+                  className={`min-h-[60px] border-b border-r border-gray-100 p-1 last:border-r-0 sm:min-h-[100px] ${cellBgClass}`}
                 >
-                  <div className={`text-right text-[11px] sm:text-sm ${dayColor}`}>
-                    {dayNum}
-                    {holiday && isCurrentMonth && (
-                      <span className="ml-1 hidden text-[10px] text-red-400 sm:inline">{holiday}</span>
-                    )}
-                  </div>
+                  <ScheduleCalendarDayLabel
+                    date={date}
+                    dayNum={dayNum}
+                    isCurrentMonth={isCurrentMonth}
+                    size="sm"
+                  />
                   <div className="mt-1 space-y-0.5">
                     {siteBars.map((bar) => {
                       const isLight = (hex: string) => {
@@ -832,7 +820,7 @@ export default function SchedulePage() {
                           <div className="rounded border border-gray-300 overflow-hidden">
                             <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-semibold">
                               {WEEKDAYS.map((wd, i) => (
-                                <div key={wd} className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}>{wd}</div>
+                                <div key={wd} className={`py-2 text-center text-xs font-semibold ${scheduleCalendarWeekHeaderClass(i)}`}>{wd}</div>
                               ))}
                             </div>
                             <div className="grid grid-cols-7">
@@ -841,7 +829,7 @@ export default function SchedulePage() {
                                   return (
                                     <div
                                       key={`pad-${pageIdx}-${ci}`}
-                                      className="min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
+                                      className="schedule-cal-cell-muted min-h-[90px] border-b border-r border-gray-100 last:border-r-0"
                                       aria-hidden
                                     />
                                   );
@@ -850,16 +838,16 @@ export default function SchedulePage() {
                                 const inRange =
                                   date >= previewRangeFrom && date <= previewRangeTo;
                                 const siteBars = inRange ? siteBarsByDay(date) : [];
-                                const dow = new Date(date + "T12:00:00").getDay();
-                                const holiday = getHolidayName(date);
-                                const isOff = dow === 0 || dow === 6 || !!holiday;
-                                const cellBg = !isCurrentMonth ? "bg-gray-50" : isOff ? "bg-red-50/40" : "";
-                                const dayClr = !isCurrentMonth ? "text-gray-300" : (dow === 0 || !!holiday) ? "text-red-500 font-semibold" : dow === 6 ? "text-blue-500 font-semibold" : "text-gray-800";
+                                const { dayColorClass, holiday, showHolidayLabel } =
+                                  getScheduleCalendarDayDisplay(date, isCurrentMonth);
+                                const cellBg = resolveScheduleCalendarCellBg(date, isCurrentMonth);
                                 return (
-                                  <div key={date} className={`min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}>
-                                    <div className={`text-right text-xs ${dayClr}`}>
+                                  <div key={date} className={`schedule-print-day-cell min-h-[90px] border-b border-r border-gray-200 p-1.5 last:border-r-0 ${cellBg}`}>
+                                    <div className={`text-right text-xs ${dayColorClass}`}>
                                       {dayNum}
-                                      {holiday && isCurrentMonth && <span className="ml-1 text-[9px] text-red-400 font-normal">{holiday}</span>}
+                                      {showHolidayLabel && holiday ? (
+                                        <span className="ml-1 text-[9px] font-normal text-red-400">{holiday}</span>
+                                      ) : null}
                                     </div>
                                     <div className="mt-1 space-y-0.5">
                                       {siteBars.map((bar) => {

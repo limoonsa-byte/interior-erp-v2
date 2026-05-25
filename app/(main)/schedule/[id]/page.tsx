@@ -3,7 +3,12 @@
 import React, { useMemo, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { isKoreanHoliday, getHolidayName } from "@/lib/koreanHolidays";
+import { ScheduleCalendarDayLabel } from "@/components/schedule/ScheduleCalendarDayLabel";
+import { getHolidayName } from "@/lib/koreanHolidays";
+import {
+  resolveScheduleCalendarCellBg,
+  scheduleCalendarWeekHeaderClass,
+} from "@/lib/scheduleCalendarDayDisplay";
 import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
 import {
   chunkDaysForPrint,
@@ -648,7 +653,7 @@ export default function ScheduleDetailPage() {
             {WEEKDAYS.map((wd, i) => (
               <div
                 key={wd}
-                className={`py-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-red-50 text-red-500" : i === 6 ? "bg-blue-50 text-blue-500" : "bg-gray-100 text-gray-700"}`}
+                className={`py-2 text-center text-xs font-semibold ${scheduleCalendarWeekHeaderClass(i)}`}
               >
                 {wd}
               </div>
@@ -660,7 +665,7 @@ export default function ScheduleDetailPage() {
                 return (
                   <div
                     key={`p-${pageIdx}-${ci}`}
-                    className="schedule-print-day-pad min-h-[90px] border-b border-r border-gray-100 bg-gray-50/50 last:border-r-0"
+                    className="schedule-print-day-pad schedule-cal-cell-muted min-h-[90px] border-b border-r border-gray-100 last:border-r-0"
                     aria-hidden
                   />
                 );
@@ -668,11 +673,9 @@ export default function ScheduleDetailPage() {
               if (schedulePrintChunks.kind === "span") {
                 const { date, dayNum, muted } = cell as SpanDay;
                 const onDay = phasesOnDay(date);
-                const inRange = isInConstructionRange(date);
                 const dow = new Date(date + "T12:00:00").getDay();
                 const hol = getHolidayName(date);
-                const isOff = dow === 0 || dow === 6 || !!hol;
-                const cellBg = muted ? "bg-gray-50/80" : isOff ? "bg-red-50/40" : inRange ? "bg-blue-50/40" : "";
+                const cellBg = resolveScheduleCalendarCellBg(date, true, { muted });
                 const dayClr = muted
                   ? "text-gray-400"
                   : dow === 0 || !!hol
@@ -719,17 +722,9 @@ export default function ScheduleDetailPage() {
               {
                 const { date, isCurrentMonth, dayNum } = cell as MonthDay;
                 const onDay = phasesOnDay(date);
-                const inRange = isInConstructionRange(date);
                 const dow = new Date(date + "T12:00:00").getDay();
                 const hol = getHolidayName(date);
-                const isOff = dow === 0 || dow === 6 || !!hol;
-                const cellBg = isOff
-                  ? "bg-red-50/40"
-                  : !isCurrentMonth
-                    ? "bg-gray-50"
-                    : inRange
-                      ? "bg-blue-50/40"
-                      : "";
+                const cellBg = resolveScheduleCalendarCellBg(date, isCurrentMonth);
                 const dayClr = !isCurrentMonth
                   ? "text-gray-300"
                   : dow === 0 || !!hol
@@ -848,28 +843,13 @@ export default function ScheduleDetailPage() {
         <div className="rounded-lg border-2 border-gray-300 bg-white overflow-hidden">
           <div className="grid grid-cols-7 border-b-2 border-gray-300 text-center text-xs font-medium">
             {WEEKDAYS.map((wd, i) => (
-              <div key={wd} className={`p-2 border-r border-gray-300 last:border-r-0 ${i === 0 ? "bg-pink-50 text-red-500" : i === 6 ? "bg-pink-50 text-blue-500" : "bg-gray-50 text-gray-600"}`}>{wd}</div>
+              <div key={wd} className={`p-2 text-center text-xs font-medium ${scheduleCalendarWeekHeaderClass(i)}`}>{wd}</div>
             ))}
           </div>
           <div className="grid grid-cols-7 border-t border-gray-300">
             {calendarDays.map(({ date, isCurrentMonth, dayNum }) => {
               const onDay = phasesOnDay(date);
-              const inRange = isInConstructionRange(date);
-              const dayOfWeek = new Date(date + "T12:00:00").getDay();
-              const isSunday = dayOfWeek === 0;
-              const isSaturday = dayOfWeek === 6;
-              const isWeekend = isSunday || isSaturday;
-              const isHoliday = isKoreanHoliday(date);
-              const holidayName = getHolidayName(date);
-              const isOff = isWeekend || isHoliday;
-              const cellBg = isOff ? "bg-red-50/50" : !isCurrentMonth ? "bg-gray-50" : inRange ? "bg-blue-50/50" : "";
-              const dayColor = !isCurrentMonth
-                ? "text-gray-400"
-                : (isSunday || isHoliday)
-                  ? "text-red-500"
-                  : isSaturday
-                    ? "text-blue-500"
-                    : "text-gray-700";
+              const cellBg = resolveScheduleCalendarCellBg(date, isCurrentMonth);
               return (
                 <div
                   key={date}
@@ -882,12 +862,7 @@ export default function ScheduleDetailPage() {
                     onDragOver={(e) => handleDragOver(e, date)}
                     onDrop={(e) => handleDropOnDay(date, e)}
                   >
-                    <div className={`text-right text-xs ${dayColor}`}>
-                      {dayNum}
-                      {holidayName && isCurrentMonth && (
-                        <span className="ml-1 text-[9px] text-red-400">{holidayName}</span>
-                      )}
-                    </div>
+                    <ScheduleCalendarDayLabel date={date} dayNum={dayNum} isCurrentMonth={isCurrentMonth} />
                     <div className="mt-0.5 space-y-0.5">
                     {onDay.map((p, i) => {
                       const bg = p.color && /^#[0-9A-Fa-f]{6}$/.test(p.color) ? p.color : "#93C5FD";

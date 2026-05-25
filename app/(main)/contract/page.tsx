@@ -4,7 +4,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PdfToA4Images } from "@/components/contract/PdfToA4Images";
 import { SignBodyA4Viewer } from "@/components/contract/SignBodyA4Viewer";
 import { SignedContractSummary } from "@/components/contract/SignedContractSummary";
+import {
+  buildContractViewPrintPayload,
+  formatContractDocImagesPrintHtml,
+  mountContractPrintRoot,
+  runContractPrintDialog,
+} from "@/lib/contractViewPrint";
 import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
+import { resolveContractBodyPdfUrl } from "@/lib/renderPdfUrlToPageImages";
 
 type Contract = {
   id: number;
@@ -1043,6 +1050,19 @@ export default function ContractPage() {
   const [signViewContract, setSignViewContract] = useState<Contract | null>(null);
   /** 계약서 보기: PDF 로드 실패 시 DB에 있는 HTML 본문(body)으로 표시 */
   const [viewBodyPdfFallback, setViewBodyPdfFallback] = useState(false);
+  /** 계약서 보기: 본문 PDF 페이지 이미지 (보기·미리보기·인쇄 공통) */
+  const [viewDocPageImages, setViewDocPageImages] = useState<string[]>([]);
+  const [contractPrintPreview, setContractPrintPreview] = useState<{
+    page1Image: string;
+    docImages: string[];
+  } | null>(null);
+  const [contractPrintPreviewLoading, setContractPrintPreviewLoading] = useState(false);
+  /** 계약 건에 본문 없을 때 관리(회사 양식) HTML */
+  const [viewCompanyTemplateFallback, setViewCompanyTemplateFallback] = useState<{
+    body?: string;
+    bodyMargins?: { top: number; right: number; bottom: number; left: number };
+  } | null>(null);
+  const [viewDocPdfFailed, setViewDocPdfFailed] = useState(false);
   const [emailModal, setEmailModal] = useState<Contract | null>(null);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
@@ -1052,8 +1072,71 @@ export default function ContractPage() {
   const emailDocPagesRef = useRef<string[]>([]);
 
   useEffect(() => {
-    if (signViewContract) setViewBodyPdfFallback(false);
+    if (signViewContract) {
+      setViewBodyPdfFallback(false);
+      setViewDocPageImages([]);
+      setContractPrintPreview(null);
+      setViewCompanyTemplateFallback(null);
+      setViewDocPdfFailed(false);
+    }
   }, [signViewContract?.id]);
+
+  useEffect(() => {
+    if (!signViewContract?.id) return;
+    if (signViewContract.body?.trim()) {
+      setViewCompanyTemplateFallback(null);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/company/company-contract-template")
+      .then((r) => r.json())
+      .then((data: { body?: string; bodyMargins?: { top: number; right: number; bottom: number; left: number } }) => {
+        if (cancelled || !data.body?.trim()) return;
+        setViewCompanyTemplateFallback({
+          body: data.body,
+          bodyMargins: data.bodyMargins,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [signViewContract?.id, signViewContract?.body]);
+
+  const runContractViewPrint = async (contract: Contract) => {
+    const payload = await buildContractViewPrintPayload(contract, {
+      summaryEl: contractViewSummaryRef.current,
+      capturePage1: captureContractViewPage1AsImage,
+      cachedDocImages: viewDocPageImages,
+    });
+    mountContractPrintRoot(payload, contractViewSummaryRef.current);
+    runContractPrintDialog(contract.title || "계약서");
+  };
+
+  const openContractPrintPreview = async () => {
+    if (!signViewContract) return;
+    setContractPrintPreviewLoading(true);
+    setContractPrintPreview(null);
+    try {
+      const payload = await buildContractViewPrintPayload(signViewContract, {
+        summaryEl: contractViewSummaryRef.current,
+        capturePage1: captureContractViewPage1AsImage,
+        cachedDocImages: viewDocPageImages,
+      });
+      if (payload.docImages.length > 0 && viewDocPageImages.length === 0) {
+        setViewDocPageImages(payload.docImages);
+      }
+      setContractPrintPreview({
+        page1Image: payload.page1Image,
+        docImages: payload.docImages,
+      });
+    } catch (e) {
+      console.warn("인쇄 미리보기 준비 실패:", e);
+      alert("인쇄 미리보기를 만들지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    } finally {
+      setContractPrintPreviewLoading(false);
+    }
+  };
 
   /** 인쇄/PDF와 동일하게 1페이지(캡처) + 추가 문서 페이지로 PDF 생성 → base64 */
   const buildContractPdfForEmail = async (summaryImage: string, docPageDataUrls: string[]): Promise<string> => {
@@ -1438,41 +1521,28 @@ export default function ContractPage() {
       )}
 
       {signViewContract && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+        <div
+          className="contract-view-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="contract-print-same-as-view relative w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl">
-            <div className="sticky top-0 z-20 flex items-center justify-between bg-white px-5 pt-5 pb-3 border-b border-gray-100">
+            <div className="contract-view-print-hide sticky top-0 z-20 flex items-center justify-between bg-white px-5 pt-5 pb-3 border-b border-gray-100">
               <h2 className="text-base font-semibold text-gray-900">계약서 보기</h2>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => void openContractPrintPreview()}
+                  disabled={contractPrintPreviewLoading}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {contractPrintPreviewLoading ? "미리보기 준비…" : "인쇄 미리보기"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     if (!signViewContract) return;
-                    const wrap = document.querySelector(".contract-print-same-as-view .p-5");
-                    const existing = document.getElementById("contract-print-pages");
-                    if (existing) existing.remove();
-                    if (wrap) {
-                      const clone = wrap.cloneNode(true) as HTMLElement;
-                      const first = clone.querySelector(":scope > div:first-of-type");
-                      if (first && first.classList.contains("grid") && first.classList.contains("grid-cols-2")) first.remove();
-                      const root = document.createElement("div");
-                      root.id = "contract-print-pages";
-                      root.className = "contract-print-pages-root";
-                      root.appendChild(clone);
-                      document.body.appendChild(root);
-                    }
-                    document.body.classList.add("contract-print-pages-mode");
-                    const prevTitle = document.title;
-                    document.title = `${(signViewContract.title || "계약서").replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서"}`;
-                    window.print();
-                    const cleanup = () => {
-                      document.title = prevTitle;
-                      document.body.classList.remove("contract-print-pages-mode");
-                      const el = document.getElementById("contract-print-pages");
-                      if (el) el.remove();
-                      window.removeEventListener("afterprint", cleanup);
-                    };
-                    window.addEventListener("afterprint", cleanup);
-                    setTimeout(cleanup, 2000);
+                    void runContractViewPrint(signViewContract);
                   }}
                   className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
                 >
@@ -1516,8 +1586,8 @@ export default function ContractPage() {
                 </button>
               </div>
             </div>
-            <div className="p-5 relative z-0">
-              <div className="mb-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
+            <div className="contract-view-print-content p-5 relative z-0">
+              <div className="contract-view-print-hide mb-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm">
                 <div><span className="font-medium text-gray-500">제목: </span>{signViewContract.title || "-"}</div>
                 <div><span className="font-medium text-gray-500">고객명: </span>{signViewContract.customerName || "-"}</div>
                 <div><span className="font-medium text-gray-500">연락처: </span>{signViewContract.contact || "-"}</div>
@@ -1534,33 +1604,136 @@ export default function ContractPage() {
 
               {(() => {
                 const c = signViewContract;
-                const hasBody = Boolean(c.body?.trim());
-                const docPath = c.documentPath;
-                /** 계약서 보기 일관성: 저장된 본문(HTML)이 있으면 항상 본문 우선 표시 */
-                const showBodyHtml = hasBody;
-                const showPdf = Boolean(docPath && !hasBody);
-                const margins = c.bodyMargins ?? { top: 15, right: 15, bottom: 15, left: 15 };
+                const ownBody = c.body?.trim() || "";
+                const templateBody = viewCompanyTemplateFallback?.body?.trim() || "";
+                const bodyHtml = ownBody || templateBody;
+                const hasBody = Boolean(bodyHtml);
+                const pdfUrl = resolveContractBodyPdfUrl(c);
+                const showBodyHtml = hasBody && !viewBodyPdfFallback;
+                const showPdf = Boolean(pdfUrl);
+                const usingCompanyTemplatePdf = !c.documentPath && showPdf;
+                const usingCompanyTemplateHtml = !ownBody && Boolean(templateBody);
+                const margins =
+                  c.bodyMargins ??
+                  viewCompanyTemplateFallback?.bodyMargins ??
+                  { top: 15, right: 15, bottom: 15, left: 15 };
                 return (
                   <>
+                    {showBodyHtml && (
+                      <div className="contract-print-doc-pages-wrapper contract-print-body-html-wrap mb-4">
+                        <p className="mb-2 text-xs font-medium text-gray-600">
+                          계약 본문 (편집 HTML)
+                          {usingCompanyTemplateHtml ? " — 관리에 저장한 회사 양식" : ""}
+                        </p>
+                        <SignBodyA4Viewer bodyHtml={bodyHtml} margins={margins} />
+                      </div>
+                    )}
                     {showPdf && (
                       <div className="contract-print-doc-pages-wrapper mb-4">
+                        <p className="mb-2 text-xs font-medium text-gray-600">
+                          계약 본문 (PDF)
+                          {usingCompanyTemplatePdf ? " — 관리에 저장한 회사 양식" : ""}
+                          {showBodyHtml ? " · 인쇄·미리보기에 함께 포함" : ""}
+                        </p>
                         <PdfToA4Images
-                          documentUrl={`/api/company/contract-document?path=${encodeURIComponent(docPath!)}`}
+                          documentUrl={pdfUrl!}
                           className="space-y-4"
                           fullWidth
-                          onError={hasBody ? () => setViewBodyPdfFallback(true) : undefined}
+                          onPagesLoaded={(urls) => {
+                            setViewDocPageImages(urls);
+                            setViewDocPdfFailed(false);
+                          }}
+                          onError={() => {
+                            if (ownBody) setViewBodyPdfFallback(true);
+                            else setViewDocPdfFailed(true);
+                          }}
                         />
                       </div>
                     )}
-                    {showBodyHtml && c.body?.trim() && (
-                      <div className="contract-print-doc-pages-wrapper mb-4">
-                        <SignBodyA4Viewer bodyHtml={c.body} margins={margins} />
-                        {docPath ? <p className="mt-2 text-xs text-gray-500">계약서 보기는 저장된 본문(HTML) 기준으로 표시됩니다.</p> : null}
-                      </div>
+                    {viewDocPdfFailed && !showBodyHtml && (
+                      <p className="text-sm text-amber-700">
+                        관리 화면의 「우리 회사 계약서 양식」에 PDF가 저장돼 있는지 확인해 주세요. 이 계약 건에는 본문 PDF가
+                        따로 붙어 있지 않아 회사 양식을 불러옵니다.
+                      </p>
+                    )}
+                    {!showBodyHtml && !showPdf && (
+                      <p className="text-sm text-gray-500">
+                        이 계약 건과 관리(회사 양식) 모두에 본문이 없습니다. 관리에서 PDF를 저장한 뒤 다시 열어 주세요.
+                      </p>
                     )}
                   </>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {contractPrintPreview && signViewContract && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="flex max-h-[95vh] w-full max-w-4xl flex-col rounded-xl bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h2 className="text-base font-semibold text-gray-900">인쇄 미리보기</h2>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const payload = {
+                      page1Image: contractPrintPreview.page1Image,
+                      docImages: contractPrintPreview.docImages,
+                      bodyHtmlSection: formatContractDocImagesPrintHtml(contractPrintPreview.docImages),
+                    };
+                    mountContractPrintRoot(payload, contractViewSummaryRef.current);
+                    runContractPrintDialog(signViewContract.title || "계약서");
+                  }}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  인쇄 / PDF 저장
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContractPrintPreview(null)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <p className="mb-3 text-xs text-gray-500">
+                아래 내용이 인쇄·PDF 저장 결과와 같습니다. 1페이지 요약 + 본문 PDF
+                {contractPrintPreview.docImages.length > 0
+                  ? ` (${contractPrintPreview.docImages.length}쪽)`
+                  : " (본문 없음)"}
+                .
+              </p>
+              {contractPrintPreview.page1Image ? (
+                <img
+                  src={contractPrintPreview.page1Image}
+                  alt="계약서 1페이지"
+                  className="mb-4 w-full max-w-[210mm] border border-gray-200 bg-white"
+                />
+              ) : null}
+              {contractPrintPreview.docImages.length > 0 ? (
+                <div className="space-y-4">
+                  {contractPrintPreview.docImages.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt={`계약 본문 ${i + 1}페이지`}
+                      className="contract-print-doc-img w-full border border-gray-200 bg-white"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-amber-700">
+                  본문 PDF를 불러오지 못했습니다. 계약서 보기에서 PDF가 보이는지 확인한 뒤 다시 시도해 주세요.
+                </p>
+              )}
             </div>
           </div>
         </div>

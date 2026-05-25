@@ -27,6 +27,11 @@ const FIXED_HOLIDAY_NAMES: Record<string, string> = {
   "10-09": "한글날", "12-25": "성탄절",
 };
 
+/** 연도별 임시 공휴일 (선거일 등) — 캘린더에 날짜 옆 빨간 라벨로 표시 */
+export const SPECIAL_HOLIDAY_NAMES: Record<string, string> = {
+  "2026-06-03": "지방선거",
+};
+
 /** 음력 공휴일 이름 매핑 (YYYY-MM-DD → 이름) — 대체공휴일, 부처님오신날 포함 */
 const LUNAR_HOLIDAY_NAMES: Record<string, string> = {
   "2025-01-28": "설날", "2025-01-29": "설날", "2025-01-30": "설날",
@@ -49,6 +54,7 @@ export function isKoreanHoliday(date: string): boolean {
   const [, m, d] = parts;
   const mmdd = `${m}-${d}`;
   if (FIXED_HOLIDAYS_MMDD.includes(mmdd)) return true;
+  if (SPECIAL_HOLIDAY_NAMES[date]) return true;
   if (LUNAR_HOLIDAY_NAMES[date]) return true;
   const y = date.slice(0, 4);
   const list = LUNAR_HOLIDAY_DATES[y];
@@ -64,6 +70,7 @@ export function getHolidayName(date: string): string | null {
   const [, m, d] = parts;
   const mmdd = `${m}-${d}`;
   if (FIXED_HOLIDAY_NAMES[mmdd]) return FIXED_HOLIDAY_NAMES[mmdd];
+  if (SPECIAL_HOLIDAY_NAMES[date]) return SPECIAL_HOLIDAY_NAMES[date];
   if (LUNAR_HOLIDAY_NAMES[date]) return LUNAR_HOLIDAY_NAMES[date];
   const y = date.slice(0, 4);
   const list = LUNAR_HOLIDAY_DATES[y];

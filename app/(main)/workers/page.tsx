@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Image } from "lucide-react";
+import { getHolidayName, isKoreanHoliday } from "@/lib/koreanHolidays";
 import { sortByKoreanDisplayName } from "@/lib/sortKoreanDisplayName";
 
 type WorkerItem = {
@@ -816,8 +817,26 @@ export default function WorkersPage() {
                       >
                         {shareCalendarDays.map(({ date, isInRange, dayNum }, cellIndex) => {
                           const dayOfWeek = new Date(date + "T12:00:00").getDay();
-                          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                          const cellBg = !isInRange ? "#f3f4f6" : isWeekend ? "#fdf2f8" : "#ffffff";
+                          const holidayName = getHolidayName(date);
+                          const isHoliday = isKoreanHoliday(date);
+                          const isSunday = dayOfWeek === 0;
+                          const isSaturday = dayOfWeek === 6;
+                          const cellBg = !isInRange
+                            ? "#f3f4f6"
+                            : isSunday || (isHoliday && !isSaturday)
+                              ? "#fef2f2"
+                              : isSaturday
+                                ? "#eff6ff"
+                                : isHoliday
+                                  ? "#fef2f2"
+                                  : "#ffffff";
+                          const dayColor = !isInRange
+                            ? "#9ca3af"
+                            : dayOfWeek === 0 || isHoliday
+                              ? "#ef4444"
+                              : dayOfWeek === 6
+                                ? "#3b82f6"
+                                : "#374151";
                           const phasesOnDay = Array.isArray(selectedShareItem.consultation.schedulePhases)
                             ? selectedShareItem.consultation.schedulePhases.filter((p) => {
                                 const s = (p.start ?? "").trim().slice(0, 10);
@@ -841,11 +860,14 @@ export default function WorkersPage() {
                                 style={{
                                   textAlign: "right",
                                   fontSize: "10px",
-                                  color: isInRange ? "#374151" : "#9ca3af",
+                                  color: dayColor,
                                   lineHeight: 1.2,
                                 }}
                               >
                                 {dayNum}
+                                {holidayName && isInRange && (
+                                  <span style={{ marginLeft: 4, fontSize: 9, color: "#f87171" }}>{holidayName}</span>
+                                )}
                               </div>
                               <div style={{ marginTop: "4px", display: "flex", flexDirection: "column", gap: "2px" }}>
                                 {phasesOnDay.slice(0, 3).map((p) => (

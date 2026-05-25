@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Calendar, Image } from "lucide-react";
-import { isKoreanHoliday } from "@/lib/koreanHolidays";
+import { getHolidayName, isKoreanHoliday } from "@/lib/koreanHolidays";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -266,8 +266,26 @@ export default function ProjectsPage() {
             {calendarDays.map(({ date, isCurrentMonth, dayNum }) => {
               const dayOfWeek = new Date(date + "T12:00:00").getDay();
               const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+              const holidayName = getHolidayName(date);
               const isHoliday = isKoreanHoliday(date);
-              const cellBg = !isCurrentMonth ? "#f9fafb" : isWeekend || isHoliday ? "#fdf2f8" : "#ffffff";
+              const isSunday = dayOfWeek === 0;
+              const isSaturday = dayOfWeek === 6;
+              const cellBg = !isCurrentMonth
+                ? "#f9fafb"
+                : isSunday || (isHoliday && !isSaturday)
+                  ? "#fef2f2"
+                  : isSaturday
+                    ? "#eff6ff"
+                    : isHoliday
+                      ? "#fef2f2"
+                      : "#ffffff";
+              const dayColor = !isCurrentMonth
+                ? "#9ca3af"
+                : dayOfWeek === 0 || isHoliday
+                  ? "#ef4444"
+                  : dayOfWeek === 6
+                    ? "#3b82f6"
+                    : "#374151";
               const items = itemsByDay(date);
               return (
                 <div
@@ -275,8 +293,13 @@ export default function ProjectsPage() {
                   className="min-h-[56px] border-b border-r p-1 last:border-r-0 sm:min-h-[88px] sm:p-1.5"
                   style={{ borderColor: "#d1d5db", backgroundColor: cellBg }}
                 >
-                  <div className="text-right text-[11px] sm:text-xs" style={{ color: isCurrentMonth ? "#374151" : "#9ca3af" }}>
+                  <div className="text-right text-[11px] sm:text-xs" style={{ color: dayColor }}>
                     {dayNum}
+                    {holidayName && isCurrentMonth && (
+                      <span className="ml-1 text-[10px] font-normal" style={{ color: "#f87171" }}>
+                        {holidayName}
+                      </span>
+                    )}
                   </div>
                   <div className="mt-0.5 space-y-0.5">
                     {items.map((item) => {

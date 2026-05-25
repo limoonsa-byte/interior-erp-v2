@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { renderPdfUrlToPageImages } from "@/lib/renderPdfUrlToPageImages";
 import { sameOriginApiUrl } from "@/lib/sameOriginUrl";
 
 const A4_WIDTH_PX = 595;
@@ -41,31 +42,8 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
     setError(null);
     (async () => {
       try {
-        const pdfjsLib = await import("pdfjs-dist");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const lib = pdfjsLib as any;
-        if (typeof window !== "undefined" && lib.GlobalWorkerOptions) {
-          lib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${lib.version || "5.4.296"}/build/pdf.worker.min.mjs`;
-        }
-        const loadingTask = lib.getDocument({ url: effectiveUrl });
-        const pdf = await loadingTask.promise;
+        const images = await renderPdfUrlToPageImages(effectiveUrl);
         if (cancelled) return;
-        const numPages = pdf.numPages;
-        const scale = 2;
-        const images: string[] = [];
-        for (let i = 1; i <= numPages; i++) {
-          if (cancelled) break;
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale });
-          const canvas = document.createElement("canvas");
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) continue;
-          const renderTask = page.render({ canvasContext: ctx, viewport });
-          await (renderTask.promise || Promise.resolve());
-          images.push(canvas.toDataURL("image/png"));
-        }
         if (!cancelled) setPageImages(images);
         if (!cancelled && onPagesLoaded && images.length > 0) onPagesLoaded(images);
       } catch (e) {
@@ -119,7 +97,7 @@ export function PdfToA4Images({ documentPath = "", documentUrl, className = "", 
         key={i}
         src={dataUrl}
         alt={`계약 문서 ${i + 1}페이지`}
-        className="w-full border border-gray-200 bg-white shadow-sm"
+        className="contract-print-doc-img w-full border border-gray-200 bg-white shadow-sm"
         style={fullWidth ? undefined : { maxWidth: A4_WIDTH_PX }}
       />
     );

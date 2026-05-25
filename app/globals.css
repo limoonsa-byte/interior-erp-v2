@@ -1023,18 +1023,47 @@ body {
     padding: 0 !important;
     margin-top: 0 !important;
   }
+  #contract-print-pages .contract-print-view-page1-capture + .contract-print-doc-pages-wrapper,
   #contract-print-pages .contract-sign-summary + .contract-print-doc-pages-wrapper {
     page-break-before: always;
     break-before: page;
   }
-  #contract-print-pages .contract-print-doc-pages-wrapper img {
+  #contract-print-pages .contract-print-view-page1-capture {
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+  #contract-print-pages .contract-print-view-page1-capture img {
+    width: 100% !important;
+    height: auto !important;
     display: block !important;
+    page-break-after: always;
+    break-after: page;
+  }
+  #contract-print-pages .contract-print-body-html-wrap {
+    width: 100% !important;
+    max-width: 210mm !important;
+    margin: 0 auto !important;
+    overflow: visible !important;
+  }
+  #contract-print-pages .contract-print-doc-pages-wrapper img,
+  #contract-print-pages img.contract-print-doc-img {
+    display: block !important;
+    visibility: visible !important;
     width: 100% !important;
     max-width: 100% !important;
     max-height: none !important;
     page-break-after: always;
     border: none !important;
     box-shadow: none !important;
+  }
+  #contract-print-pages .contract-print-doc-pages-wrapper,
+  #contract-print-pages .contract-a4-paper-sheet {
+    display: block !important;
+    visibility: visible !important;
+    overflow: visible !important;
   }
   #contract-print-pages .contract-a4-paper-sheet {
     width: 100% !important;
@@ -2055,6 +2084,38 @@ body {
   }
 }
 
+/* 일정 캘린더: 일요일(빨강)·토요일(파랑)·공휴일 칸색 — 화면·인쇄·미리보기 공통 */
+.schedule-cal-cell-sun,
+.schedule-cal-header-sun {
+  background-color: #fef2f2 !important;
+}
+.schedule-cal-cell-sat,
+.schedule-cal-header-sat {
+  background-color: #eff6ff !important;
+}
+.schedule-cal-cell-muted {
+  background-color: #f9fafb !important;
+}
+.schedule-cal-header-weekday {
+  background-color: #f3f4f6 !important;
+}
+
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-sun,
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-sat,
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-muted,
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-header-sun,
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-header-sat,
+#schedule-detail-print-content.schedule-print-compact .schedule-cal-header-weekday,
+#schedule-print-content .schedule-cal-cell-sun,
+#schedule-print-content .schedule-cal-cell-sat,
+#schedule-print-content .schedule-cal-cell-muted,
+#schedule-print-content .schedule-cal-header-sun,
+#schedule-print-content .schedule-cal-header-sat,
+#schedule-print-content .schedule-cal-header-weekday {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
 /* 공사 일정 인쇄·미리보기: 한 장에 맞추되 글자·칩은 읽을 수 있게 */
 #schedule-detail-print-content.schedule-print-compact {
   padding: 3mm 4mm;
@@ -2233,6 +2294,22 @@ body {
 }
 
 @media print {
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-sun,
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-sat,
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-cell-muted,
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-header-sun,
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-header-sat,
+  #schedule-detail-print-content.schedule-print-compact .schedule-cal-header-weekday,
+  #schedule-print-content .schedule-cal-cell-sun,
+  #schedule-print-content .schedule-cal-cell-sat,
+  #schedule-print-content .schedule-cal-cell-muted,
+  #schedule-print-content .schedule-cal-header-sun,
+  #schedule-print-content .schedule-cal-header-sat,
+  #schedule-print-content .schedule-cal-header-weekday {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   #schedule-detail-print-content.schedule-print-compact .schedule-print-memo {
     max-height: 42mm;
     overflow: hidden;
