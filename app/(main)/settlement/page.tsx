@@ -464,6 +464,7 @@ export default function SettlementPage() {
   const overhead = Math.floor(totalEstimate * (overheadPercent / 100));
   const profit = Math.floor(totalEstimate * (profitPercent / 100));
   const settlementTotalAmount = Math.floor((totalEstimate + overhead + profit) / 10000) * 10000;
+  const totalReceived = customerPaymentRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const totalUsed = phaseRows.reduce((s, r) => {
     const subSum = (r.subItems || []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
     return s + (r.subItems?.length ? subSum : r.usedAmount);
@@ -941,6 +942,7 @@ export default function SettlementPage() {
             {phaseRows.length > 0 && (
               <div className="flex items-center gap-4 py-2 px-3 rounded-lg bg-gray-100 border border-gray-200 text-sm">
                 <span><strong>합계금액</strong> {formatNum(settlementTotalAmount)}원</span>
+                <span><strong>받은금액</strong> {formatNum(totalReceived)}원</span>
                 <span><strong>쓴금액</strong> {formatNum(totalUsed)}원</span>
                 <span><strong>공사 남은금액</strong> <span className="text-gray-900 font-semibold">{formatNum(Math.max(0, settlementTotalAmount - totalUsed))}원</span></span>
               </div>
