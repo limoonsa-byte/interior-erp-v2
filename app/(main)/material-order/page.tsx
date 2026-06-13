@@ -1131,22 +1131,22 @@ export function MaterialOrderPage() {
                                 {(catItems.length === 0 && (addedRowsByLabel[label] ?? []).length === 0) ? (
                                   <p className="py-4 text-center text-sm text-gray-500">해당 항목 없음</p>
                                 ) : (
-                                <div className="overflow-x-auto">
+                                <div className="material-order-edit-table-wrap overflow-x-auto">
                           <table
-                            className="w-full min-w-[780px] border-collapse text-left text-sm"
+                            className="material-order-edit-table w-full min-w-[980px] border-collapse text-left text-sm"
                             style={{ border: "1px solid #374151" }}
                           >
                             <thead>
                               <tr className="bg-gray-200 text-gray-800">
-                                <th className="w-56 border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
-                                <th className="w-48 border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium w-12" style={{ border: "1px solid #374151" }}>단위</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-16" style={{ border: "1px solid #374151" }}>수량</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={{ border: "1px solid #374151" }}>단가</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium text-right w-24" style={{ border: "1px solid #374151" }}>자재 금액</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[140px]" style={{ border: "1px solid #374151" }}>비고</th>
-                                <th className="border border-gray-500 px-2 py-1.5 font-medium min-w-[220px]" style={{ border: "1px solid #374151" }}>비밀몰 링크</th>
-                                <th className="w-14 border border-gray-500 px-1 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>삭제</th>
+                                <th className="w-56 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
+                                <th className="w-48 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
+                                <th className="w-12 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>단위</th>
+                                <th className="w-16 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>수량</th>
+                                <th className="w-24 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>단가</th>
+                                <th className="w-24 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>자재 금액</th>
+                                <th className="min-w-[140px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비고</th>
+                                <th className="material-order-link-col hidden md:table-cell min-w-[220px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비밀몰 링크</th>
+                                <th className="w-14 whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium" style={{ border: "1px solid #374151" }}>삭제</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1181,7 +1181,7 @@ export function MaterialOrderPage() {
                                         className="h-full min-h-[28px] w-full min-w-[120px] border-0 bg-transparent px-2 py-1 text-sm text-gray-700 focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 px-2 py-1">
+                                    <td className="material-order-link-col hidden md:table-cell border border-gray-300 px-2 py-1">
                                       <div className="flex items-center gap-1">
                                         <select
                                           value={selectedSku}
@@ -1335,7 +1335,7 @@ export function MaterialOrderPage() {
                                         className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 px-2 py-1">
+                                    <td className="material-order-link-col hidden md:table-cell border border-gray-300 px-2 py-1">
                                       <div className="flex items-center gap-1">
                                         <select
                                           value={selectedSku}

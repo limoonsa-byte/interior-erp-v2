@@ -1380,22 +1380,22 @@ function EstimateForm({
           </div>
         </div>
       )}
-      <div className="overflow-x-auto -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+      <div className="estimate-edit-table-wrap overflow-x-auto -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0">
+        <table className="estimate-edit-table w-full min-w-[860px] md:min-w-[980px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-700">
-              <th className="p-2 w-14">No</th>
-              <th className="p-2">품목</th>
-              <th className="p-2">규격</th>
-              <th className="p-2 w-16">단위</th>
-              <th className="p-2 w-20">수량</th>
-              <th className="p-2 w-24">재료비단가</th>
-              <th className="p-2 w-24">재료비금액</th>
-              <th className="p-2 w-24">노무비단가</th>
-              <th className="p-2 w-24">노무비금액</th>
-              <th className="p-2 w-24">금액</th>
-              <th className="p-2 w-24">합산금액</th>
-              <th className="p-2">비고</th>
+              <th className="p-2 w-14 whitespace-nowrap">No</th>
+              <th className="p-2 whitespace-nowrap">품목</th>
+              <th className="p-2 whitespace-nowrap">규격</th>
+              <th className="p-2 w-24 whitespace-nowrap text-center">단위</th>
+              <th className="p-2 w-20 whitespace-nowrap text-center">수량</th>
+              <th className="p-2 w-28 whitespace-nowrap">재료비단가</th>
+              <th className="p-2 w-28 whitespace-nowrap">재료비금액</th>
+              <th className="p-2 w-28 whitespace-nowrap">노무비단가</th>
+              <th className="p-2 w-28 whitespace-nowrap">노무비금액</th>
+              <th className="p-2 w-28 whitespace-nowrap">금액</th>
+              <th className="p-2 w-28 whitespace-nowrap">합산금액</th>
+              <th className="p-2 whitespace-nowrap">비고</th>
               <th className="w-10 p-2" />
             </tr>
           </thead>
@@ -1561,7 +1561,7 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={2}
-                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          className="w-full min-w-[56px] rounded border border-gray-300 px-2 py-1 text-center text-sm"
                           value={composition?.key === `item-${origIdx}-unit` ? composition.value : (item.unit ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-unit`, value: item.unit ?? "" })}
                           onCompositionEnd={(e) => {
@@ -1672,7 +1672,12 @@ function EstimateForm({
                         />
                       </td>
                       <td className="p-2">
-                        <button type="button" onClick={() => removeRow(origIdx)} className="text-red-500 hover:underline" disabled={items.length <= 1}>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(origIdx)}
+                          className="text-red-500 hover:underline disabled:opacity-40"
+                          disabled={items.length <= 1}
+                        >
                           삭제
                         </button>
                       </td>

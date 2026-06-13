@@ -2467,3 +2467,33 @@ body {
     background-color: #f9fafb;
   }
 }
+
+/* 견적서 작성(모바일): 삭제칸 항상 보이게 오른쪽 고정 + 칸 너비 확보 */
+@media (max-width: 768px) {
+  .estimate-edit-table-wrap {
+    position: relative;
+  }
+  .estimate-edit-table {
+    min-width: 860px !important;
+  }
+  .estimate-edit-table th,
+  .estimate-edit-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+}
+
+/* 자재발주 작성(모바일): 수량/단가/삭제 칸 가림 방지 */
+@media (max-width: 768px) {
+  .material-order-edit-table-wrap {
+    position: relative;
+  }
+  .material-order-edit-table {
+    min-width: 860px !important;
+  }
+  .material-order-edit-table th,
+  .material-order-edit-table td {
+    white-space: nowrap;
+    vertical-align: middle;
+  }
+}
