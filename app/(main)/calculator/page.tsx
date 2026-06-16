@@ -79,19 +79,19 @@ export default function CalculatorPage() {
 
   const floorTileBoxQty = useMemo(() => {
     if (floorArea <= 0 || boxArea <= 0) return 0;
-    return Math.ceil((floorArea * (1 + lossRate / 100)) / boxArea);
+    return Math.ceil((floorArea * (1 + lossRate / 100)) / boxArea) + 1;
   }, [floorArea, boxArea, lossRate]);
   const wallTileBoxQty = useMemo(() => {
     if (floorWidth <= 0 || floorLength <= 0 || wallHeight <= 0 || boxArea <= 0) return 0;
     // 요청 공식: (바닥가로 + 세로) * 2 * 높이 / 박스면적
     const wallM2 = (floorWidth + floorLength) * 2 * wallHeight;
     const wallTileM2 = Math.max(0, wallM2 - brickArea); // 조적벽 면적 제외
-    return Math.ceil((wallTileM2 * (1 + lossRate / 100)) / boxArea);
+    return wallTileM2 > 0 ? Math.ceil((wallTileM2 * (1 + lossRate / 100)) / boxArea) + 1 : 0;
   }, [floorWidth, floorLength, wallHeight, boxArea, lossRate, brickArea]);
   const brickTileBoxQty = useMemo(() => {
     if (brickArea <= 0 || boxArea <= 0) return 0;
     // 요청 공식: (나오는 길이×높이×2) / 박스면적 + 여유율
-    return Math.ceil((brickArea * (1 + lossRate / 100)) / boxArea);
+    return Math.ceil((brickArea * (1 + lossRate / 100)) / boxArea) + 1;
   }, [brickArea, boxArea, lossRate]);
   // 부자재 공통 간편 기준(필요시 현장 여건에 맞춰 보정)
   const floorAdhesiveQty = useMemo(
