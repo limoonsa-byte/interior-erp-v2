@@ -2041,14 +2041,14 @@ body {
     width: 100% !important;
     max-width: 100% !important;
     border-collapse: collapse !important;
-    font-size: 7.5pt !important;
-    line-height: 1.25 !important;
+    font-size: 8pt !important;
+    line-height: 1.35 !important;
     color: #000 !important;
   }
   body.material-list-print-open #material-list-print-area .material-list-print-table th,
   body.material-list-print-open #material-list-print-area .material-list-print-table td {
     min-width: 0 !important;
-    padding: 2px 3px !important;
+    padding: 4px 5px !important;
     word-break: break-word !important;
     overflow-wrap: anywhere !important;
     vertical-align: top !important;
@@ -2063,11 +2063,14 @@ body {
     max-width: 100% !important;
     width: auto !important;
     height: auto !important;
-    max-height: 22mm !important;
+    max-height: 42mm !important;
     margin: 0 auto !important;
     object-fit: contain !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+  body.material-list-print-open #material-list-print-area .material-list-print-table td:nth-child(2) {
+    min-height: 44mm !important;
   }
   body.material-list-print-open #material-list-print-area thead {
     display: table-header-group !important;

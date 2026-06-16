@@ -1026,12 +1026,12 @@ export default function MaterialListPage() {
                   </h2>
                   <table className="material-list-print-table w-full text-sm border-collapse border border-gray-300">
                     <colgroup>
-                      <col style={{ width: "17%" }} />
-                      <col style={{ width: "11%" }} />
-                      <col style={{ width: "19%" }} />
-                      <col style={{ width: "15%" }} />
-                      <col style={{ width: "21%" }} />
-                      <col style={{ width: "17%" }} />
+                      <col style={{ width: "14%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "16%" }} />
+                      <col style={{ width: "14%" }} />
+                      <col style={{ width: "20%" }} />
+                      <col style={{ width: "14%" }} />
                     </colgroup>
                     <thead>
                       <tr className="bg-gray-100">
@@ -1052,7 +1052,7 @@ export default function MaterialListPage() {
                               <img
                                 src={row.imageUrl}
                                 alt=""
-                                className="material-list-print-img max-h-16 max-w-20 object-contain"
+                                className="material-list-print-img max-h-28 max-w-36 object-contain"
                                 decoding="async"
                               />
                             ) : (

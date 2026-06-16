@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, CreditCard, BarChart3, Settings, Shield, Link2, MessageCircle, ExternalLink, Signature } from "lucide-react";
+import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, CreditCard, BarChart3, Settings, Shield, Link2, MessageCircle, ExternalLink, Signature, Calculator } from "lucide-react";
 import { clsx } from "clsx";
 
 /** 기본 메뉴 - 대시보드 제거, 왼쪽 사이드바가 항시 메뉴 역할 */
@@ -19,6 +19,7 @@ const defaultMenuItems = [
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/chat", label: "채팅", icon: MessageCircle },
+  { href: "/calculator", label: "편의 계산기", icon: Calculator },
   { href: "/admin", label: "관리", icon: Settings },
 ];
 

@@ -18,6 +18,7 @@ import {
   ExternalLink,
   ListChecks,
   Signature,
+  Calculator,
   Briefcase,
   ChevronRight,
 } from "lucide-react";
@@ -43,6 +44,7 @@ const baseMenuItems: MenuItem[] = [
   { href: "/mobile/settlement", label: "정산", icon: Wallet },
   { href: "/mobile/statistics", label: "통계", icon: BarChart3 },
   { href: "/mobile/chat", label: "채팅", icon: MessageCircle },
+  { href: "/mobile/calculator", label: "편의 계산기", icon: Calculator },
   { href: "/mobile/admin", label: "관리", icon: Settings },
 ];
 

@@ -19,6 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MessageCircle,
+  Calculator,
   ExternalLink,
   ListChecks,
   Signature,
@@ -38,6 +39,7 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/chat", label: "채팅", icon: MessageCircle },
+  { href: "/calculator", label: "편의 계산기", icon: Calculator },
   { href: "/admin", label: "관리", icon: Settings },
 ];
 

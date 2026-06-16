@@ -18,6 +18,7 @@ const PAGE_TITLES: { match: RegExp; label: string }[] = [
   { match: /^\/mobile\/settlement/, label: "정산" },
   { match: /^\/mobile\/statistics/, label: "통계" },
   { match: /^\/mobile\/chat/, label: "채팅" },
+  { match: /^\/mobile\/calculator/, label: "편의 계산기" },
   { match: /^\/mobile\/admin/, label: "관리" },
   { match: /^\/mobile\/projects/, label: "프로젝트" },
   { match: /^\/mobile\/reception/, label: "접수" },
