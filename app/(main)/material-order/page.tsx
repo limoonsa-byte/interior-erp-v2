@@ -164,6 +164,8 @@ export function MaterialOrderPage() {
   const [companyName, setCompanyName] = useState("");
   /** 발주서 미리보기 모달에 표시할 발주 유형 (null이면 모달 숨김) */
   const [previewLabel, setPreviewLabel] = useState<string | null>(null);
+  /** 발주 유형별 화면/출력 제목 커스텀(키는 내부 label, 값은 표시용 제목) */
+  const [displayTitleByLabel, setDisplayTitleByLabel] = useState<Record<string, string>>({});
   /** 화면에 표시할 발주 유형 목록 (추가/삭제 가능) */
   const [visibleOrderLabels, setVisibleOrderLabels] = useState<string[]>(() => [
     ...ORDER_CATEGORIES.map((c) => c.label),
@@ -327,6 +329,9 @@ export function MaterialOrderPage() {
         if (Array.isArray(draft.visibleOrderLabels) && draft.visibleOrderLabels.length > 0) {
           setVisibleOrderLabels(draft.visibleOrderLabels as string[]);
         }
+        if (draft.displayTitleByLabel && typeof draft.displayTitleByLabel === "object") {
+          setDisplayTitleByLabel(draft.displayTitleByLabel as Record<string, string>);
+        }
         if (draft.addedRowsByLabel && typeof draft.addedRowsByLabel === "object") {
           const raw = draft.addedRowsByLabel as Record<string, unknown[]>;
           setAddedRowsByLabel((prev) => {
@@ -373,6 +378,22 @@ export function MaterialOrderPage() {
   const orderGrandTotal = useMemo(
     () => Object.values(orderAmountByLabel).reduce((acc, n) => acc + n, 0),
     [orderAmountByLabel]
+  );
+
+  const getOrderDisplayTitle = useCallback(
+    (label: string) => {
+      const custom = (displayTitleByLabel[label] ?? "").trim();
+      return custom || label;
+    },
+    [displayTitleByLabel]
+  );
+
+  const getOrderSheetTitle = useCallback(
+    (label: string) => {
+      const title = getOrderDisplayTitle(label);
+      return title.endsWith("발주") ? title.replace(/발주$/, " 발주서") : `${title} 발주서`;
+    },
+    [getOrderDisplayTitle]
   );
 
   const getShopCandidates = useCallback((orderLabel: string, itemName: string, spec: string) => {
@@ -458,7 +479,25 @@ export function MaterialOrderPage() {
       delete next[label];
       return next;
     });
+    setDisplayTitleByLabel((prev) => {
+      const next = { ...prev };
+      delete next[label];
+      return next;
+    });
     if (previewLabel === label) setPreviewLabel(null);
+  };
+
+  /** 발주 유형 제목 수정(내부 키는 유지, 화면/출력 제목만 변경) */
+  const handleRenameOrderType = (label: string) => {
+    const current = getOrderDisplayTitle(label);
+    const next = window.prompt("수정할 발주 제목을 입력하세요.", current);
+    if (next == null) return;
+    const trimmed = next.trim();
+    if (!trimmed) {
+      alert("제목은 비워둘 수 없습니다.");
+      return;
+    }
+    setDisplayTitleByLabel((prev) => ({ ...prev, [label]: trimmed }));
   };
 
   /** 템플릿 불러오기: 기본서식(마스터) */
@@ -469,6 +508,7 @@ export function MaterialOrderPage() {
       .then((data) => {
         const defaultData = data as { itemsByLabel?: Record<string, AddedOrderRow[]> };
         setVisibleOrderLabels([...ORDER_CATEGORIES.map((c) => c.label), "기타"]);
+        setDisplayTitleByLabel({});
         if (defaultData?.itemsByLabel && typeof defaultData.itemsByLabel === "object" && Object.keys(defaultData.itemsByLabel).length > 0) {
           const byLabel = defaultData.itemsByLabel as Record<string, AddedOrderRow[]>;
           setAddedRowsByLabel((prev) => {
@@ -502,13 +542,18 @@ export function MaterialOrderPage() {
     fetch("/api/company/order-template", { credentials: "include" })
       .then((r) => r.json())
       .then((data) => {
-        const t = (data as { template?: { visibleOrderLabels?: string[]; addedRowsByLabel?: Record<string, unknown[]> } }).template;
+        const t = (data as { template?: { visibleOrderLabels?: string[]; displayTitleByLabel?: Record<string, string>; addedRowsByLabel?: Record<string, unknown[]> } }).template;
         if (!t) {
           alert("저장된 우리회사 템플릿이 없습니다. 관리 → 자재발주 서식관리에서 먼저 저장해 주세요.");
           return;
         }
         if (Array.isArray(t.visibleOrderLabels) && t.visibleOrderLabels.length > 0) {
           setVisibleOrderLabels(t.visibleOrderLabels);
+        }
+        if (t.displayTitleByLabel && typeof t.displayTitleByLabel === "object") {
+          setDisplayTitleByLabel(t.displayTitleByLabel);
+        } else {
+          setDisplayTitleByLabel({});
         }
         if (t.addedRowsByLabel && typeof t.addedRowsByLabel === "object") {
           const raw = t.addedRowsByLabel as Record<string, unknown[]>;
@@ -548,6 +593,7 @@ export function MaterialOrderPage() {
     setAddedRowsByLabel(rows);
     setDeliveryDateByLabel(Object.fromEntries(labels.map((l) => [l, ""])));
     setCollapsedByLabel({});
+    setDisplayTitleByLabel({});
     setPreviewLabel(null);
     setMemoByKey((prev) => {
       const next = { ...prev };
@@ -726,6 +772,7 @@ export function MaterialOrderPage() {
           addedRowsByLabel,
           memoByKey,
           visibleOrderLabels,
+          displayTitleByLabel,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -746,6 +793,7 @@ export function MaterialOrderPage() {
     addedRowsByLabel,
     memoByKey,
     visibleOrderLabels,
+    displayTitleByLabel,
   ]);
 
   /** 해당 발주 섹션을 이미지(PNG)로 저장 — 사용자가 준 표 양식 그대로(삭제 열 없음) */
@@ -768,7 +816,7 @@ export function MaterialOrderPage() {
         });
         const link = document.createElement("a");
         link.href = dataUrl;
-        const safeLabel = label.replace(/[/\\?%*:|"]/g, "_");
+        const safeLabel = getOrderDisplayTitle(label).replace(/[/\\?%*:|"]/g, "_");
         link.download = `${safeLabel}_${selectedEstimate?.title ?? "발주"}_${new Date().toISOString().slice(0, 10)}.png`;
         link.click();
       } catch (e) {
@@ -778,7 +826,7 @@ export function MaterialOrderPage() {
         setSavingImageLabel(null);
       }
     },
-    [selectedEstimate?.title]
+    [selectedEstimate?.title, getOrderDisplayTitle]
   );
 
   if (loading) {
@@ -1066,7 +1114,7 @@ export function MaterialOrderPage() {
                             }
                             className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left font-medium text-gray-800 hover:bg-gray-200 rounded -m-2 p-2"
                           >
-                            <span className="truncate">{label}</span>
+                            <span className="truncate">{getOrderDisplayTitle(label)}</span>
                             <span className="shrink-0 text-gray-500">
                               {(() => {
                                 const added = addedRowsByLabel[label] ?? [];
@@ -1082,6 +1130,14 @@ export function MaterialOrderPage() {
                             <span className="text-gray-500 shrink-0" aria-hidden>
                               {isCollapsed ? "▶" : "▼"}
                             </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleRenameOrderType(label); }}
+                            className="shrink-0 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            title="이 발주 제목 수정"
+                          >
+                            제목 수정
                           </button>
                           <button
                             type="button"
@@ -1453,7 +1509,7 @@ export function MaterialOrderPage() {
                         </div>
                         <div className="border border-gray-300 bg-white px-4 py-4" style={{ minWidth: 560 }}>
                           <div className="mb-4 text-center text-xl font-semibold text-gray-900">
-                            {previewLabel.endsWith("발주") ? previewLabel.replace(/발주$/, " 발주서") : `${previewLabel} 발주서`}
+                            {getOrderSheetTitle(previewLabel)}
                           </div>
                           <table className="mb-4 w-full border-collapse text-sm" style={borderStyle}>
                             <tbody>
@@ -1542,7 +1598,7 @@ export function MaterialOrderPage() {
                         style={{ minWidth: 560 }}
                       >
                         <div className="mb-4 text-center text-xl font-semibold text-gray-900">
-                          {label.endsWith("발주") ? label.replace(/발주$/, " 발주서") : `${label} 발주서`}
+                          {getOrderSheetTitle(label)}
                         </div>
                         <table className="mb-4 w-full border-collapse text-sm" style={borderStyle}>
                           <tbody>
