@@ -100,6 +100,15 @@ type Estimate = {
   createdAt?: string;
 };
 
+type ConsultationPreFill = {
+  customerName: string;
+  contact: string;
+  address: string;
+  consultationId?: number;
+  pic?: string;
+  titleSuggestion?: string;
+};
+
 const emptyItem: EstimateItem = {
   processGroup: "",
   category: "",
@@ -208,11 +217,13 @@ function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateI
 function EstimateForm({
   estimate,
   consultationPreFill,
+  onCreateAdditional,
   onSave,
   onCancel,
 }: {
   estimate: Estimate | null;
-  consultationPreFill: { customerName: string; contact: string; address: string; consultationId: number; pic?: string } | null;
+  consultationPreFill: ConsultationPreFill | null;
+  onCreateAdditional?: (prefill: ConsultationPreFill) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -220,7 +231,7 @@ function EstimateForm({
   const [customerName, setCustomerName] = useState(estimate?.customerName ?? consultationPreFill?.customerName ?? "");
   const [contact, setContact] = useState(estimate?.contact ?? consultationPreFill?.contact ?? "");
   const [address, setAddress] = useState(estimate?.address ?? consultationPreFill?.address ?? "");
-  const [title, setTitle] = useState(estimate?.title ?? "");
+  const [title, setTitle] = useState(estimate?.title ?? consultationPreFill?.titleSuggestion ?? "");
   const [estimateDate, setEstimateDate] = useState(() => {
     const from = estimate?.estimateDate;
     return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
@@ -248,6 +259,7 @@ function EstimateForm({
       setContact(consultationPreFill.contact);
       setAddress(consultationPreFill.address);
       setConsultationPic(consultationPreFill.pic ?? "");
+      setTitle(consultationPreFill.titleSuggestion ?? "");
     } else if (!isEdit) {
       setConsultationPic("");
     }
@@ -1083,7 +1095,27 @@ function EstimateForm({
           />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">견적 제목</label>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-gray-700">견적 제목</label>
+            {isEdit && onCreateAdditional ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onCreateAdditional({
+                    customerName: customerName.trim(),
+                    contact: contact.trim(),
+                    address: address.trim(),
+                    consultationId: estimate?.consultationId,
+                    pic: consultationPic || undefined,
+                    titleSuggestion: `${(title || "추가").trim()} 추가견적`,
+                  })
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+              >
+                + 추가 견적서 작성
+              </button>
+            ) : null}
+          </div>
           <input
             type="text"
             className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
@@ -2143,7 +2175,8 @@ type Consultation = {
 export default function EstimatePage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [formOpen, setFormOpen] = useState<"new" | number | null>(null);
-  const [consultationPreFill, setConsultationPreFill] = useState<{ customerName: string; contact: string; address: string; consultationId: number; pic?: string } | null>(null);
+  const [formResetToken, setFormResetToken] = useState(0);
+  const [consultationPreFill, setConsultationPreFill] = useState<ConsultationPreFill | null>(null);
   const [consultationModalOpen, setConsultationModalOpen] = useState(false);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [loadingConsultations, setLoadingConsultations] = useState(false);
@@ -2185,6 +2218,55 @@ export default function EstimatePage() {
     });
   }, [estimates, consultationsForList, showCompletedInList]);
 
+  const isAdditionalEstimateTitle = React.useCallback((title?: string) => {
+    const t = String(title ?? "").trim();
+    if (!t) return false;
+    return t.includes("추가견적") || t.includes("추가 견적");
+  }, []);
+
+  /** 같은 현장(상담ID 우선, 없으면 고객+주소)끼리 묶고, 그룹 순서는 메인 견적 날짜 기준 */
+  const groupedEstimates = React.useMemo(() => {
+    const groups: { key: string; items: Estimate[]; mainDate: string; mainId: number }[] = [];
+    const indexByKey = new Map<string, number>();
+    filteredEstimates.forEach((est) => {
+      const key =
+        est.consultationId != null
+          ? `consult-${est.consultationId}`
+          : `site-${(est.customerName || "").trim()}|${(est.address || "").trim()}`;
+      const idx = indexByKey.get(key);
+      if (idx == null) {
+        indexByKey.set(key, groups.length);
+        groups.push({ key, items: [est], mainDate: String(est.estimateDate ?? ""), mainId: est.id });
+      } else {
+        groups[idx].items.push(est);
+      }
+    });
+
+    const sorted = groups.map((group) => {
+      const ordered = [...group.items].sort((a, b) => {
+        const aAdditional = isAdditionalEstimateTitle(a.title);
+        const bAdditional = isAdditionalEstimateTitle(b.title);
+        if (aAdditional !== bAdditional) return aAdditional ? 1 : -1; // 추가견적은 항상 하위로
+        const aDate = String(a.estimateDate ?? "");
+        const bDate = String(b.estimateDate ?? "");
+        if (aDate !== bDate) return bDate.localeCompare(aDate);
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
+      const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      return {
+        key: group.key,
+        items: ordered,
+        mainDate: String(main?.estimateDate ?? ""),
+        mainId: main?.id ?? 0,
+      };
+    });
+
+    return sorted.sort((a, b) => {
+      if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
+      return b.mainId - a.mainId;
+    });
+  }, [filteredEstimates, isAdditionalEstimateTitle]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const q = new URLSearchParams(window.location.search);
@@ -2202,6 +2284,7 @@ export default function EstimatePage() {
               consultationId: c.id,
               pic: (c as { pic?: string }).pic ?? "",
             });
+            setFormResetToken((v) => v + 1);
             setFormOpen("new");
           }
         })
@@ -2234,6 +2317,7 @@ export default function EstimatePage() {
       pic: c.pic ?? "",
     });
     setConsultationModalOpen(false);
+    setFormResetToken((v) => v + 1);
     setFormOpen("new");
   };
 
@@ -2349,8 +2433,14 @@ export default function EstimatePage() {
 
       {showForm ? (
         <EstimateForm
+          key={`estimate-form-${String(formOpen)}-${formResetToken}`}
           estimate={editingEstimate ?? null}
           consultationPreFill={formOpen === "new" ? consultationPreFill : null}
+          onCreateAdditional={(prefill) => {
+            setConsultationPreFill(prefill);
+            setFormResetToken((v) => v + 1);
+            setFormOpen("new");
+          }}
           onSave={() => {
             setFormOpen(null);
             load();
@@ -2394,55 +2484,62 @@ export default function EstimatePage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredEstimates.map((est) => {
-                    const subtotal = (est.items || []).reduce(
-                      (s, i) =>
-                        s +
-                        (Number(i.qty) || 0) * (Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0) +
-                        (Number(i.qty) || 0) * (Number(i.laborUnitPrice ?? 0) || 0),
-                      0
-                    );
-                    const ohRate = (Number(est.overheadPercent) ?? 5) / 100;
-                    const prRate = (Number(est.profitPercent) ?? 10) / 100;
-                    const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
-                    const actions = (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setFormOpen(est.id)}
-                          className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
-                        >
-                          수정
-                        </button>
-                        <span className="text-gray-300">|</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (!confirm("이 견적을 삭제할까요?")) return;
-                            fetch(`/api/estimates/${est.id}`, { method: "DELETE" })
-                              .then((res) => res.ok && load())
-                              .catch(() => alert("삭제 실패"));
-                          }}
-                          className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
-                        >
-                          삭제
-                        </button>
-                      </div>
-                    );
-                    return (
-                      <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
-                        <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
-                        <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
-                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
-                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="p-2 sm:p-3">
-                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{est.title || "-"}</div>
-                        </td>
-                        <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
-                        <td className="hidden whitespace-nowrap p-2 align-middle sm:table-cell sm:p-3">{actions}</td>
-                      </tr>
-                    );
-                  })
+                  groupedEstimates.map((group) => (
+                    <React.Fragment key={group.key}>
+                      {group.items.map((est, idxInGroup) => {
+                        const subtotal = (est.items || []).reduce(
+                          (s, i) =>
+                            s +
+                            (Number(i.qty) || 0) * (Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0) +
+                            (Number(i.qty) || 0) * (Number(i.laborUnitPrice ?? 0) || 0),
+                          0
+                        );
+                        const ohRate = (Number(est.overheadPercent) ?? 5) / 100;
+                        const prRate = (Number(est.profitPercent) ?? 10) / 100;
+                        const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
+                        const actions = (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setFormOpen(est.id)}
+                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
+                            >
+                              수정
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!confirm("이 견적을 삭제할까요?")) return;
+                                fetch(`/api/estimates/${est.id}`, { method: "DELETE" })
+                                  .then((res) => res.ok && load())
+                                  .catch(() => alert("삭제 실패"));
+                              }}
+                              className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        );
+                        const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
+                        return (
+                          <tr key={est.id} className={`text-gray-700 hover:bg-gray-50 ${isChild ? "bg-sky-50" : ""}`}>
+                            <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
+                            <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
+                            <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                            <td className="p-2 sm:p-3">{est.contact || "-"}</td>
+                            <td className="p-2 sm:p-3">
+                              <div className="max-w-[18rem] truncate" title={est.title || ""}>
+                                {isChild ? `ㄴ ${est.title || "추가 견적서"}` : est.title || "-"}
+                              </div>
+                            </td>
+                            <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
+                            <td className="hidden whitespace-nowrap p-2 align-middle sm:table-cell sm:p-3">{actions}</td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))
                 )}
               </tbody>
             </table>
