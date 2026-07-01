@@ -186,6 +186,55 @@ export default function SettlementPage() {
     });
   }, [estimates, consultations, showCompleted]);
 
+  const isAdditionalEstimateTitle = useCallback((title?: string) => {
+    const t = String(title ?? "").trim();
+    if (!t) return false;
+    return t.includes("추가견적") || t.includes("추가 견적");
+  }, []);
+
+  /** 같은 현장끼리 묶고, 그룹 순서는 메인 견적 날짜 기준으로 정렬 */
+  const groupedEstimates = useMemo(() => {
+    const groups: { key: string; items: Estimate[]; mainDate: string; mainId: number }[] = [];
+    const indexByKey = new Map<string, number>();
+    filteredEstimates.forEach((est) => {
+      const key =
+        est.consultationId != null
+          ? `consult-${est.consultationId}`
+          : `site-${(est.customerName || "").trim()}|${(est.address || "").trim()}`;
+      const idx = indexByKey.get(key);
+      if (idx == null) {
+        indexByKey.set(key, groups.length);
+        groups.push({ key, items: [est], mainDate: String(est.estimateDate ?? ""), mainId: est.id });
+      } else {
+        groups[idx].items.push(est);
+      }
+    });
+
+    const sorted = groups.map((group) => {
+      const ordered = [...group.items].sort((a, b) => {
+        const aAdditional = isAdditionalEstimateTitle(a.title);
+        const bAdditional = isAdditionalEstimateTitle(b.title);
+        if (aAdditional !== bAdditional) return aAdditional ? 1 : -1; // 추가견적은 하위
+        const aDate = String(a.estimateDate ?? "");
+        const bDate = String(b.estimateDate ?? "");
+        if (aDate !== bDate) return bDate.localeCompare(aDate);
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
+      const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      return {
+        key: group.key,
+        items: ordered,
+        mainDate: String(main?.estimateDate ?? ""),
+        mainId: main?.id ?? 0,
+      };
+    });
+
+    return sorted.sort((a, b) => {
+      if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
+      return b.mainId - a.mainId;
+    });
+  }, [filteredEstimates, isAdditionalEstimateTitle]);
+
   /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */
   const estimatesForSelect = useMemo(() => {
     if (selectedId == null) return filteredEstimates;
@@ -585,44 +634,48 @@ export default function SettlementPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredEstimates.map((est) => {
-                    const subtotal = (est.items || []).reduce(
-                      (s, itm) =>
-                        s +
-                        (Number(itm.qty) || 0) * (Number(itm.materialUnitPrice ?? itm.unitPrice ?? 0) || 0) +
-                        (Number(itm.qty) || 0) * (Number(itm.laborUnitPrice ?? 0) || 0),
-                      0
-                    );
-                    const ohRate = (est.overheadPercent != null ? Number(est.overheadPercent) : 5) / 100;
-                    const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
-                    const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
-                    const titleSpan = (
-                      <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
-                    );
-                    return (
-                      <tr
-                        key={est.id}
-                        onClick={() => setSelectedId(est.id)}
-                        className="text-gray-700 hover:bg-gray-50 cursor-pointer"
-                      >
-                        <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                          <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleSpan}</div>
-                        </td>
-                        <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
-                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
-                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="hidden p-2 sm:table-cell sm:p-3">
-                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleSpan}</div>
-                        </td>
-                        <td className="p-2 sm:p-3 text-right tabular-nums text-gray-700">
-                          {Object.prototype.hasOwnProperty.call(customerPaymentTotalsByEstimate, String(est.id))
-                            ? `${formatNum(customerPaymentTotalsByEstimate[String(est.id)] ?? 0)}원`
-                            : "-"}
-                        </td>
-                        <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(total)}원</td>
-                      </tr>
-                    );
-                  })
+                  groupedEstimates.map((group) => (
+                    <React.Fragment key={group.key}>
+                      {group.items.map((est, idxInGroup) => {
+                        const subtotal = (est.items || []).reduce(
+                          (s, itm) =>
+                            s +
+                            (Number(itm.qty) || 0) * (Number(itm.materialUnitPrice ?? itm.unitPrice ?? 0) || 0) +
+                            (Number(itm.qty) || 0) * (Number(itm.laborUnitPrice ?? 0) || 0),
+                          0
+                        );
+                        const ohRate = (est.overheadPercent != null ? Number(est.overheadPercent) : 5) / 100;
+                        const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
+                        const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
+                        const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
+                        const displayTitle = isChild ? `ㄴ ${est.title || "추가 견적서"}` : est.title || "-";
+                        const titleSpan = <span className="text-blue-600 hover:underline">{displayTitle}</span>;
+                        return (
+                          <tr
+                            key={est.id}
+                            onClick={() => setSelectedId(est.id)}
+                            className={`text-gray-700 hover:bg-gray-50 cursor-pointer ${isChild ? "bg-sky-50" : ""}`}
+                          >
+                            <td className="row-actions-sticky p-2 align-middle sm:hidden">
+                              <div className="max-w-[12rem] truncate" title={displayTitle}>{titleSpan}</div>
+                            </td>
+                            <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
+                            <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                            <td className="p-2 sm:p-3">{est.contact || "-"}</td>
+                            <td className="hidden p-2 sm:table-cell sm:p-3">
+                              <div className="max-w-[18rem] truncate" title={displayTitle}>{titleSpan}</div>
+                            </td>
+                            <td className="p-2 sm:p-3 text-right tabular-nums text-gray-700">
+                              {Object.prototype.hasOwnProperty.call(customerPaymentTotalsByEstimate, String(est.id))
+                                ? `${formatNum(customerPaymentTotalsByEstimate[String(est.id)] ?? 0)}원`
+                                : "-"}
+                            </td>
+                            <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(total)}원</td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  ))
                 )}
               </tbody>
             </table>
