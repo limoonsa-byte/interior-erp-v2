@@ -113,12 +113,14 @@ export default function PaymentListPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  /** 상담이 남아 있는 견적만. 완료 건 보기 꺼짐이면 완료 상담 제외 */
   const filteredEstimates = useMemo(() => {
-    if (showCompleted) return estimates;
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
-      const status = c?.status ?? "";
+      if (!c) return false;
+      if (showCompleted) return true;
+      const status = c.status ?? "";
       return status !== "완료및정산" && status !== "완료";
     });
   }, [estimates, consultations, showCompleted]);

@@ -122,13 +122,14 @@ export default function WorkLogPage() {
 
   const expenseLabelOptions = useMemo(() => [...selectedEstimatePhases], [selectedEstimatePhases]);
 
-  /** 프로젝트(견적) 선택 목록: 완료된 목록 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  /** 프로젝트(견적) 선택 목록: 상담이 남아 있는 견적만. 완료된 목록 보기 꺼짐이면 완료 상담 제외 */
   const filteredEstimatesForProject = useMemo(() => {
-    if (showCompletedForProject) return estimates;
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
-      const status = c?.status ?? "";
+      if (!c) return false;
+      if (showCompletedForProject) return true;
+      const status = c.status ?? "";
       return status !== "완료및정산" && status !== "완료";
     });
   }, [estimates, consultations, showCompletedForProject]);

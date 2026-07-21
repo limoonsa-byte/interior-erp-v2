@@ -32,6 +32,44 @@ function isCompletedForScheduleShare(status?: string): boolean {
   return s === "완료" || s === "완료및정산" || s === "취소" || s === "취소/보류";
 }
 
+/** 전화번호 → 숫자만 (문자앱 수신자용) */
+function normalizePhoneDigits(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
+}
+
+/** 일정 → 문자/카카오 붙여넣기용 텍스트 (무료: 기기 문자·카톡 수동 발송) */
+function buildScheduleShareText(
+  consultation: ConsultationSchedule,
+  title: string
+): string {
+  const site = (consultation.customerName || "").trim() || "현장";
+  const address = (consultation.address || "").trim();
+  const start = (consultation.constructionStartAt || "").trim().slice(0, 10);
+  const end = (consultation.moveInAt || "").trim().slice(0, 10);
+  const phases = Array.isArray(consultation.schedulePhases) ? consultation.schedulePhases : [];
+  const lines: string[] = [
+    `[공사 일정] ${title}`,
+    `현장: ${site}`,
+  ];
+  if (address) lines.push(`주소: ${address}`);
+  if (start || end) lines.push(`기간: ${start || "?"} ~ ${end || "?"}`);
+  if (phases.length > 0) {
+    lines.push("공정:");
+    phases.forEach((p) => {
+      const name = (p.name || "공정").trim();
+      const ps = (p.start || "").trim().slice(0, 10);
+      const pe = (p.end || p.start || "").trim().slice(0, 10);
+      lines.push(`· ${name}: ${ps || "?"}${pe && pe !== ps ? ` ~ ${pe}` : ""}`);
+    });
+  }
+  const memo = (consultation.scheduleMemo || "").trim();
+  if (memo) {
+    lines.push("메모:");
+    lines.push(memo);
+  }
+  return lines.join("\n");
+}
+
 type EstimateItem = { id: number; consultationId?: number; title: string };
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -162,10 +200,10 @@ export default function WorkersPage() {
   const [editError, setEditError] = useState<string | null>(null);
   const [ratingUpdatingId, setRatingUpdatingId] = useState<number | null>(null);
 
-  const [shareTarget, setShareTarget] = useState<WorkerItem | null>(null);
+  const [selectedWorkerIds, setSelectedWorkerIds] = useState<Set<number>>(new Set());
+  const [shareTargets, setShareTargets] = useState<WorkerItem[]>([]);
   const [shareSchedules, setShareSchedules] = useState<{ consultation: ConsultationSchedule; title: string }[]>([]);
   const [shareSelectedId, setShareSelectedId] = useState<number | null>(null);
-  const [shareCopied, setShareCopied] = useState(false);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareSavingJpg, setShareSavingJpg] = useState(false);
   const shareCalendarRef = useRef<HTMLDivElement>(null);
@@ -207,6 +245,132 @@ export default function WorkersPage() {
     () => sortByKoreanDisplayName(list, (item) => item.name),
     [list]
   );
+
+  const allSelected =
+    sortedList.length > 0 && sortedList.every((w) => selectedWorkerIds.has(w.id));
+  const selectedWorkers = useMemo(
+    () => sortedList.filter((w) => selectedWorkerIds.has(w.id)),
+    [sortedList, selectedWorkerIds]
+  );
+
+  const toggleWorkerSelect = (id: number) => {
+    setSelectedWorkerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) setSelectedWorkerIds(new Set());
+    else setSelectedWorkerIds(new Set(sortedList.map((w) => w.id)));
+  };
+
+  const loadShareSchedules = useCallback(() => {
+    setShareLoading(true);
+    setShareSelectedId(null);
+    Promise.all([
+      fetch("/api/consultations").then((r) => r.json()),
+      fetch("/api/estimates").then((r) => r.json()),
+    ])
+      .then(([cons, est]) => {
+        const consultations = Array.isArray(cons) ? (cons as ConsultationSchedule[]) : [];
+        const estimates = Array.isArray(est) ? (est as EstimateItem[]) : [];
+        const withSchedule = consultations.filter((c: ConsultationSchedule) => {
+          if (isCompletedForScheduleShare(c.status)) return false;
+          return (
+            (c.constructionStartAt && String(c.constructionStartAt).trim()) ||
+            (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
+          );
+        });
+        const scheduleList = withSchedule.map((c: ConsultationSchedule) => {
+          const e = estimates.find((x: EstimateItem) => x.consultationId === c.id);
+          return { consultation: c, title: e?.title?.trim() || "제목 없음" };
+        });
+        setShareSchedules(scheduleList);
+        if (scheduleList.length > 0) setShareSelectedId(scheduleList[0].consultation.id);
+      })
+      .catch(() => setShareSchedules([]))
+      .finally(() => setShareLoading(false));
+  }, []);
+
+  const openShareSchedule = (workers: WorkerItem | WorkerItem[]) => {
+    const targets = Array.isArray(workers) ? workers : [workers];
+    if (targets.length === 0) return;
+    setShareTargets(targets);
+    loadShareSchedules();
+  };
+
+  const closeShareModal = () => {
+    setShareTargets([]);
+  };
+
+  const selectedShareItem = useMemo(
+    () => shareSchedules.find((s) => s.consultation.id === shareSelectedId),
+    [shareSchedules, shareSelectedId]
+  );
+
+  const shareMessageText = useMemo(() => {
+    if (!selectedShareItem) return "";
+    return buildScheduleShareText(selectedShareItem.consultation, selectedShareItem.title);
+  }, [selectedShareItem]);
+
+  const sharePhones = useMemo(() => {
+    return shareTargets
+      .map((w) => normalizePhoneDigits(w.phone))
+      .filter((p) => p.length >= 10);
+  }, [shareTargets]);
+
+  /** 휴대폰 문자 앱으로 바로 열기(수신자·본문 미리 채움). 보내기만 누르면 발송. 붙여넣기 없음. */
+  const handleOpenSms = useCallback(() => {
+    if (!shareMessageText) return;
+    if (sharePhones.length === 0) {
+      alert("선택한 인부 중 전화번호가 있는 사람이 없습니다. 전화번호를 등록해 주세요.");
+      return;
+    }
+    const body = encodeURIComponent(shareMessageText);
+    const phonesJoined = sharePhones.join(",");
+    const isIOS =
+      typeof navigator !== "undefined" &&
+      /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const href = isIOS
+      ? `sms:/open?addresses=${phonesJoined}&body=${body}`
+      : `sms:${phonesJoined}?body=${body}`;
+    window.location.href = href;
+  }, [shareMessageText, sharePhones]);
+
+  /** 카카오톡 공유(친구 선택 후 바로 전송). 붙여넣기 없음. JS 키가 필요. */
+  const handleKakaoShareSend = useCallback(async () => {
+    if (!shareMessageText || !selectedShareItem) return;
+    const jsKey = process.env.NEXT_PUBLIC_KAKAO_JS_KEY?.trim();
+    if (!jsKey) {
+      alert(
+        "카카오톡으로 바로 보내려면 카카오 개발자 앱의 JavaScript 키가 필요합니다.\n\n" +
+          "1) developers.kakao.com 에서 앱 생성\n" +
+          "2) JavaScript 키 발급 + 사이트 도메인 등록\n" +
+          "3) .env 에 NEXT_PUBLIC_KAKAO_JS_KEY=키값 추가\n\n" +
+          "당장은 「문자로 보내기」를 쓰면 휴대폰 문자앱에서 보내기만 누르면 됩니다."
+      );
+      return;
+    }
+    try {
+      const { ensureKakaoReady, shareScheduleViaKakao } = await import("@/lib/kakaoShare");
+      await ensureKakaoReady(jsKey);
+      await shareScheduleViaKakao({
+        title: selectedShareItem.title || "공사 일정",
+        description: shareMessageText.slice(0, 200),
+        fullText: shareMessageText,
+      });
+    } catch (err) {
+      console.error("카카오 공유 실패:", err);
+      alert(
+        err instanceof Error
+          ? err.message
+          : "카카오톡 공유를 열 수 없습니다. 문자로 보내기를 이용해 주세요."
+      );
+    }
+  }, [shareMessageText, selectedShareItem]);
 
   const handleAdd = () => {
     const trimmedName = name.trim();
@@ -317,77 +481,6 @@ export default function WorkersPage() {
       .catch(() => alert("삭제 중 오류가 발생했습니다."));
   };
 
-  const openShareSchedule = (worker: WorkerItem) => {
-    setShareTarget(worker);
-    setShareSelectedId(null);
-    setShareCopied(false);
-    setShareLoading(true);
-    Promise.all([
-      fetch("/api/consultations").then((r) => r.json()),
-      fetch("/api/estimates").then((r) => r.json()),
-    ])
-      .then(([cons, est]) => {
-        const consultations = Array.isArray(cons) ? cons as ConsultationSchedule[] : [];
-        const estimates = Array.isArray(est) ? est as EstimateItem[] : [];
-        const withSchedule = consultations.filter(
-          (c: ConsultationSchedule) => {
-            if (isCompletedForScheduleShare(c.status)) return false;
-            return (
-              (c.constructionStartAt && String(c.constructionStartAt).trim()) ||
-              (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
-            );
-          }
-        );
-        const list = withSchedule.map((c: ConsultationSchedule) => {
-          const e = estimates.find((x: EstimateItem) => x.consultationId === c.id);
-          return { consultation: c, title: e?.title?.trim() || "제목 없음" };
-        });
-        setShareSchedules(list);
-        if (list.length > 0) setShareSelectedId(list[0].consultation.id);
-      })
-      .catch(() => setShareSchedules([]))
-      .finally(() => setShareLoading(false));
-  };
-
-  const handleCopyAndOpenKakao = useCallback(async () => {
-    const el = shareCalendarRef.current;
-    if (!el) return;
-    setShareCopied(true);
-    try {
-      el.scrollIntoView({ block: "center", behavior: "instant" });
-      await new Promise((r) => requestAnimationFrame(r));
-      const { toBlob } = await import("html-to-image");
-      const blob = await toBlob(el, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        type: "image/png",
-      });
-      if (!blob) {
-        alert("이미지 복사에 실패했습니다.");
-        setShareCopied(false);
-        return;
-      }
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      setTimeout(() => setShareCopied(false), 3000);
-      setTimeout(() => {
-        try {
-          window.open("kakaotalk://", "_blank", "noopener");
-        } catch {
-          // ignore
-        }
-      }, 150);
-    } catch (err) {
-      console.error("캘린더 이미지 복사 실패:", err);
-      alert("클립보드에 이미지를 복사할 수 없습니다. '캘린더 JPG 저장'으로 저장한 뒤 카카오톡에서 사진 보내기를 이용해 주세요.");
-      setShareCopied(false);
-    }
-  }, []);
-
-  const selectedShareItem = useMemo(
-    () => shareSchedules.find((s) => s.consultation.id === shareSelectedId),
-    [shareSchedules, shareSelectedId]
-  );
-
   /** 일정 공유 캘린더: 공정이 있는 구간만 표시 (앞뒤 빈 칸 최소화) */
   const shareCalendarRange = useMemo(() => {
     const c = selectedShareItem?.consultation;
@@ -489,7 +582,8 @@ export default function WorkersPage() {
     <div className="p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold text-gray-900">현장 인부 DB</h1>
       <p className="mb-4 text-sm text-gray-600">
-        회사별로 등록한 현장 인부를 저장·관리합니다. 로그인한 회사 데이터만 보입니다.
+        회사별로 등록한 현장 인부를 저장·관리합니다. 여러 명을 체크한 뒤 「일정 보내기」로 문자·카카오톡 전송 화면을 엽니다.
+        (붙여넣기 없이, 문자/카톡에서 보내기만 누르면 됩니다. 서버에서 자동 발송은 유료 API가 필요합니다.)
       </p>
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -559,10 +653,38 @@ export default function WorkersPage() {
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {selectedWorkers.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 bg-slate-50 px-4 py-2.5">
+              <span className="text-sm text-gray-700">
+                <strong>{selectedWorkers.length}</strong>명 선택됨
+                {selectedWorkers.filter((w) => !normalizePhoneDigits(w.phone)).length > 0 && (
+                  <span className="ml-2 text-amber-700">
+                    (전화 없는 인부 {selectedWorkers.filter((w) => !normalizePhoneDigits(w.phone)).length}명 제외됨)
+                  </span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => openShareSchedule(selectedWorkers)}
+                className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700"
+              >
+                선택 인부에게 일정 보내기
+              </button>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="w-10 px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="전체 선택"
+                      className="rounded border-gray-300"
+                    />
+                  </th>
                   <th className="row-actions-sticky min-w-[160px] whitespace-nowrap px-3 py-3 font-medium text-gray-700 sm:hidden">관리</th>
                   <th className="px-4 py-3 font-medium text-gray-700">이름</th>
                   <th className="px-4 py-3 font-medium text-gray-700">별점</th>
@@ -580,9 +702,9 @@ export default function WorkersPage() {
                         type="button"
                         onClick={() => openShareSchedule(item)}
                         className="whitespace-nowrap rounded px-2 py-1 text-green-600 hover:bg-green-50"
-                        title="일정 선택 후 카카오톡으로 공유"
+                        title="일정 선택 후 문자·카카오로 보내기"
                       >
-                        일정 공유
+                        일정 보내기
                       </button>
                       <button
                         type="button"
@@ -602,6 +724,15 @@ export default function WorkersPage() {
                   );
                   return (
                     <tr key={item.id} className="border-b border-gray-100">
+                      <td className="px-3 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedWorkerIds.has(item.id)}
+                          onChange={() => toggleWorkerSelect(item.id)}
+                          aria-label={`${item.name} 선택`}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                       <td className="row-actions-sticky whitespace-nowrap px-3 py-3 sm:hidden">{actions}</td>
                       <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
                       <td className="px-4 py-3">
@@ -699,24 +830,43 @@ export default function WorkersPage() {
         </div>
       )}
 
-      {/* 일정 공유 모달 */}
-      {shareTarget && (
+      {/* 일정 보내기 모달 */}
+      {shareTargets.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-base font-semibold text-gray-800">일정 공유</h2>
+              <h2 className="text-base font-semibold text-gray-800">일정 보내기</h2>
               <button
                 type="button"
-                onClick={() => setShareTarget(null)}
+                onClick={closeShareModal}
                 className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
                 aria-label="닫기"
               >
                 ✕
               </button>
             </div>
-            <p className="mb-3 text-sm text-gray-600">
-              <strong>{shareTarget.name}</strong>
-              {shareTarget.phone ? ` (${shareTarget.phone})` : ""} 님에게 보낼 일정을 선택한 뒤, 아래 버튼으로 캘린더 이미지를 복사해 카카오톡에 붙여넣어 보내세요.
+            <p className="mb-2 text-sm text-gray-600">
+              {shareTargets.length === 1 ? (
+                <>
+                  <strong>{shareTargets[0].name}</strong>
+                  {shareTargets[0].phone ? ` (${shareTargets[0].phone})` : ""} 님에게 보낼 일정을 고른 뒤,{" "}
+                  <strong>문자로 보내기</strong> 또는 <strong>카카오로 보내기</strong>를 누르세요.
+                </>
+              ) : (
+                <>
+                  <strong>{shareTargets.length}명</strong> (
+                  {shareTargets
+                    .slice(0, 3)
+                    .map((w) => w.name)
+                    .join(", ")}
+                  {shareTargets.length > 3 ? ` 외 ${shareTargets.length - 3}명` : ""}
+                  )에게 보낼 일정을 고른 뒤 보내세요.
+                </>
+              )}
+            </p>
+            <p className="mb-3 text-[11px] text-gray-500">
+              문자: 휴대폰 문자 앱이 열리면 수신자·내용이 채워져 있으니 <strong>보내기</strong>만 누르면 됩니다.
+              카카오: 친구 선택 화면이 열리면 보낼 사람을 고르고 전송합니다. (붙여넣기 없음)
             </p>
             {shareLoading ? (
               <p className="py-4 text-sm text-gray-500">일정 목록 불러오는 중…</p>
@@ -742,9 +892,9 @@ export default function WorkersPage() {
                 </select>
                 {selectedShareItem && shareCalendarRange && shareCalendarDays.length > 0 && (
                   <div className="mb-4">
-                    <p className="mb-1.5 text-xs font-medium text-gray-500">캘린더 이미지 (복사 후 카카오톡에 붙여넣기)</p>
+                    <p className="mb-1.5 text-xs font-medium text-gray-500">미리보기 (선택)</p>
                     <p className="mb-1.5 text-[11px] text-gray-500">
-                      카카오톡 채팅창에서 <strong>입력창 길게 누르기 → 붙여넣기</strong> 또는 <strong>Ctrl+V</strong>. 붙여넣기가 안 되면 아래 &quot;캘린더 JPG 저장&quot;으로 저장 후 사진 보내기 하세요.
+                      아래는 참고용 캘린더입니다. 실제 전송은 위 문자/카카오 버튼으로 합니다.
                     </p>
                     <div
                       ref={shareCalendarRef}
@@ -934,11 +1084,19 @@ export default function WorkersPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={handleCopyAndOpenKakao}
-                    disabled={!selectedShareItem || shareCopied}
+                    onClick={handleOpenSms}
+                    disabled={!selectedShareItem || sharePhones.length === 0}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    문자로 보내기{sharePhones.length > 1 ? ` (${sharePhones.length}명)` : ""}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleKakaoShareSend}
+                    disabled={!selectedShareItem}
                     className="rounded-lg bg-[#FEE500] px-4 py-2 text-sm font-medium text-[#191919] hover:bg-[#FDD835] disabled:opacity-50"
                   >
-                    {shareCopied ? "이미지 복사됨 ✓ (카카오톡에서 붙여넣기)" : "캘린더 이미지 복사 후 카카오톡 열기"}
+                    카카오로 보내기
                   </button>
                   <button
                     type="button"
@@ -951,12 +1109,15 @@ export default function WorkersPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShareTarget(null)}
+                    onClick={closeShareModal}
                     className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     닫기
                   </button>
                 </div>
+                {sharePhones.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-700">문자 발송을 쓰려면 인부 전화번호가 필요합니다.</p>
+                )}
               </>
             )}
           </div>

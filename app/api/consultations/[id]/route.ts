@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
+import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -227,6 +228,7 @@ export async function PATCH(
 
 /**
  * 상담 삭제 (선택삭제 시)
+ * 연결된 견적·계약·작업일지 등도 함께 삭제. 일정(schedule_phases)은 상담 행에 있어 함께 제거됨.
  */
 export async function DELETE(
   _request: Request,
@@ -244,6 +246,81 @@ export async function DELETE(
       return NextResponse.json({ error: "잘못된 ID" }, { status: 400 });
     }
 
+    const owned = await sql`
+      SELECT id FROM consultations
+      WHERE id = ${consultationId} AND company_id = ${company.id}
+      LIMIT 1
+    `;
+    if (owned.rows.length === 0) {
+      return NextResponse.json(
+        { error: "해당 상담을 찾을 수 없거나 삭제 권한이 없습니다." },
+        { status: 404 }
+      );
+    }
+
+    const estimateRows = await sql`
+      SELECT id FROM estimates
+      WHERE company_id = ${company.id} AND consultation_id = ${consultationId}
+    `;
+    const estimateIds = (estimateRows.rows as { id: number }[]).map((r) => Number(r.id)).filter((n) => !Number.isNaN(n));
+
+    // 계약: 상담 직접 연결 + 해당 견적 연결
+    await sql`
+      DELETE FROM contracts
+      WHERE company_id = ${company.id} AND consultation_id = ${consultationId}
+    `;
+    for (const estimateId of estimateIds) {
+      await sql`
+        DELETE FROM contracts
+        WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+      `;
+      await sql`
+        DELETE FROM company_work_logs
+        WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+      `;
+      // FK CASCADE가 예전 DB에 없을 수 있어 자재발주·자재리스트도 명시 삭제
+      await sql`
+        DELETE FROM material_order_drafts
+        WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+      `;
+      try {
+        await sql`
+          DELETE FROM site_material_list_items
+          WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+        `;
+        await sql`
+          DELETE FROM site_material_list_sections
+          WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+        `;
+      } catch {
+        /* 테이블 없을 수 있음 */
+      }
+      try {
+        await sql`
+          DELETE FROM estimate_settlements
+          WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+        `;
+        await sql`
+          DELETE FROM estimate_payment_approvals
+          WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
+        `;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 견적 삭제 → 남은 CASCADE
+    if (estimateIds.length > 0) {
+      await sql`
+        DELETE FROM estimates
+        WHERE company_id = ${company.id} AND consultation_id = ${consultationId}
+      `;
+    }
+
+    // 과거에 ON DELETE SET NULL 로 남은 고아 견적(상담 없음) 정리
+    await cleanupOrphanEstimates(company.id);
+
+    // 상담 삭제 → 일정 필드 포함, 채팅(상담) CASCADE
     const result = await sql`
       DELETE FROM consultations
       WHERE id = ${consultationId} AND company_id = ${company.id}
@@ -257,7 +334,13 @@ export async function DELETE(
       );
     }
 
-    return NextResponse.json({ message: "삭제되었습니다." }, { status: 200 });
+    return NextResponse.json(
+      {
+        message: "삭제되었습니다.",
+        deletedEstimates: estimateIds.length,
+      },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("consultations DELETE error:", error);
     const message =

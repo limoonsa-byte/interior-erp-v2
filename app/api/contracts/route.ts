@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -69,6 +70,11 @@ export async function GET() {
   try {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
+    try {
+      await cleanupOrphanEstimates(company.id);
+    } catch (cleanupErr) {
+      console.error("contracts GET cleanup error:", cleanupErr);
+    }
     const result = await sql`
       SELECT id, company_id, consultation_id, estimate_id, title, customer_name, contact, signer_email, document_path, body, body_margins, details, status, sign_token, signed_at, signer_name, signer_address, signer_resident_number, signature_data, created_at, updated_at
       FROM contracts

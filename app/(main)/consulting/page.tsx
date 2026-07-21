@@ -1041,7 +1041,12 @@ export default function ConsultingPage() {
       alert("삭제할 상담을 선택해 주세요.");
       return;
     }
-    if (!confirm(`선택한 ${selectedIds.size}건을 삭제할까요?`)) return;
+    if (
+      !confirm(
+        `선택한 ${selectedIds.size}건을 삭제할까요?\n\n연결된 견적서·일정·계약서·자재발주/리스트·정산·채팅 등도 함께 삭제됩니다.`
+      )
+    )
+      return;
     const ids = Array.from(selectedIds);
     Promise.all(
       ids.map((id) =>

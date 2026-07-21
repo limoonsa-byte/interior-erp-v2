@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
+import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -23,6 +24,12 @@ export async function GET() {
     }
 
     await ensureConsultationsColumns();
+
+    try {
+      await cleanupOrphanEstimates(company.id);
+    } catch (cleanupErr) {
+      console.error("consultations GET cleanup error:", cleanupErr);
+    }
 
     const result =
       await sql`SELECT * FROM consultations WHERE company_id = ${company.id} ORDER BY id DESC`;

@@ -224,14 +224,23 @@ export function MaterialOrderPage() {
   }, []);
 
   useEffect(() => {
-    Promise.allSettled([
-      fetch("/api/estimates").then((r) => r.json()),
-      fetch("/api/consultations").then((r) => r.json()),
-      fetch("/api/company/pics").then((r) => r.json()),
-      fetch("/api/company/me").then((r) => r.json()),
-      fetch("/api/company/order-default-items").then((r) => r.json()),
-      fetch("/api/company/shop-products?limit=500").then((r) => (r.ok ? r.json() : { products: [] })),
-    ]).then(([estRes, consRes, picsRes, meRes, defaultRes, shopRes]) => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await fetch("/api/company/cleanup-orphan-estimates", { method: "POST", credentials: "include" });
+      } catch {
+        /* ignore */
+      }
+      if (cancelled) return;
+      Promise.allSettled([
+        fetch("/api/estimates").then((r) => r.json()),
+        fetch("/api/consultations").then((r) => r.json()),
+        fetch("/api/company/pics").then((r) => r.json()),
+        fetch("/api/company/me").then((r) => r.json()),
+        fetch("/api/company/order-default-items").then((r) => r.json()),
+        fetch("/api/company/shop-products?limit=500").then((r) => (r.ok ? r.json() : { products: [] })),
+      ]).then(([estRes, consRes, picsRes, meRes, defaultRes, shopRes]) => {
+      if (cancelled) return;
       const est = estRes.status === "fulfilled" ? estRes.value : [];
       const cons = consRes.status === "fulfilled" ? consRes.value : [];
       const pics = picsRes.status === "fulfilled" ? picsRes.value : [];
@@ -266,7 +275,13 @@ export function MaterialOrderPage() {
         });
       }
       // 기본은 선택 없음 (완료된 항목 보기 체크 후 선택하도록)
-    }).finally(() => setLoading(false));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const selectedEstimate = useMemo(
@@ -274,13 +289,14 @@ export function MaterialOrderPage() {
     [estimates, selectedEstimateId]
   );
 
-  /** 프로젝트 선택 목록: 완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  /** 프로젝트 선택 목록: 상담이 남아 있는 견적만. 완료 건 보기 꺼짐이면 완료 상담 제외 */
   const filteredEstimates = useMemo(() => {
-    if (showCompleted) return estimates;
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
-      const status = c?.status ?? "";
+      if (!c) return false;
+      if (showCompleted) return true;
+      const status = c.status ?? "";
       return status !== "완료및정산" && status !== "완료";
     });
   }, [estimates, consultations, showCompleted]);

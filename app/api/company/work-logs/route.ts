@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -38,6 +39,12 @@ export async function GET(request: Request) {
     const company = await getCompanyFromCookie();
     if (!company) {
       return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
+    }
+
+    try {
+      await cleanupOrphanEstimates(company.id);
+    } catch (cleanupErr) {
+      console.error("work-logs GET cleanup error:", cleanupErr);
     }
 
     const { searchParams } = new URL(request.url);

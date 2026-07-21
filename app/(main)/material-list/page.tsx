@@ -229,33 +229,50 @@ export default function MaterialListPage() {
   }, [showPrintPreview]);
 
   useEffect(() => {
+    let cancelled = false;
     setEstimateListLoading(true);
     setError(null);
-    Promise.all([
-      fetch("/api/estimates", { credentials: "include" }).then((r) => r.json()),
-      fetch("/api/consultations", { credentials: "include" }).then((r) => r.json()),
-    ])
-      .then(([estData, consData]) => {
-        if (Array.isArray(estData)) {
-          setEstimates(estData as Estimate[]);
-          // 기본은 선택 없음 (완료된 항목 보기 체크 후 선택하도록)
-        } else {
-          setError((estData as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
-        }
-        if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
-        else setConsultations([]);
-      })
-      .catch(() => setError("견적 목록을 불러올 수 없습니다."))
-      .finally(() => setEstimateListLoading(false));
+    (async () => {
+      try {
+        await fetch("/api/company/cleanup-orphan-estimates", { method: "POST", credentials: "include" });
+      } catch {
+        /* ignore */
+      }
+      if (cancelled) return;
+      Promise.all([
+        fetch("/api/estimates", { credentials: "include" }).then((r) => r.json()),
+        fetch("/api/consultations", { credentials: "include" }).then((r) => r.json()),
+      ])
+        .then(([estData, consData]) => {
+          if (cancelled) return;
+          if (Array.isArray(estData)) {
+            setEstimates(estData as Estimate[]);
+          } else {
+            setError((estData as { error?: string }).error || "견적 목록을 불러올 수 없습니다.");
+          }
+          if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
+          else setConsultations([]);
+        })
+        .catch(() => {
+          if (!cancelled) setError("견적 목록을 불러올 수 없습니다.");
+        })
+        .finally(() => {
+          if (!cancelled) setEstimateListLoading(false);
+        });
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /** 현장 선택 목록: 완료 건 보기 꺼짐이면 연결 상담이 완료인 견적 제외 */
+  /** 현장 선택 목록: 상담이 남아 있는 견적만. 완료 건 보기 꺼짐이면 완료 상담 제외 */
   const filteredEstimates = useMemo(() => {
-    if (showCompleted) return estimates;
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
-      const status = c?.status ?? "";
+      if (!c) return false;
+      if (showCompleted) return true;
+      const status = c.status ?? "";
       return status !== "완료및정산" && status !== "완료";
     });
   }, [estimates, consultations, showCompleted]);

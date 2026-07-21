@@ -1300,12 +1300,13 @@ export default function ContractPage() {
     return contracts;
   }, [contracts]);
 
-  /** 견적 선택 모달에 표시할 견적 (상담미팅 관리에서 완료된 항목 제외) */
+  /** 견적 선택 모달: 상담이 남아 있는 견적만, 완료 상담 제외 */
   const estimatesToShowInModal = useMemo(() => {
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
-      const status = c?.status ?? "";
+      if (!c) return false;
+      const status = c.status ?? "";
       return status !== "완료및정산" && status !== "완료";
     });
   }, [estimates, consultations]);

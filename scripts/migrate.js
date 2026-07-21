@@ -111,7 +111,7 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS estimates (
         id SERIAL PRIMARY KEY,
         company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-        consultation_id INT REFERENCES consultations(id) ON DELETE SET NULL,
+        consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE,
         customer_name TEXT,
         contact TEXT,
         address TEXT,
@@ -309,8 +309,8 @@ async function migrate() {
       CREATE TABLE IF NOT EXISTS contracts (
         id SERIAL PRIMARY KEY,
         company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-        consultation_id INT REFERENCES consultations(id) ON DELETE SET NULL,
-        estimate_id INT REFERENCES estimates(id) ON DELETE SET NULL,
+        consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE,
+        estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE,
         title TEXT NOT NULL DEFAULT '',
         customer_name TEXT NOT NULL DEFAULT '',
         contact TEXT NOT NULL DEFAULT '',

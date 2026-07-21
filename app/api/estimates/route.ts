@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -33,6 +34,12 @@ export async function GET() {
   try {
     const company = await getCompanyFromCookie();
     if (!company) return NextResponse.json([], { status: 200 });
+    // 삭제된 상담에 묶여 있던 고아 견적·계약·작업일지 등 정리 (사이드바 주요 메뉴 공통)
+    try {
+      await cleanupOrphanEstimates(company.id);
+    } catch (cleanupErr) {
+      console.error("estimates GET cleanup error:", cleanupErr);
+    }
     let result: Awaited<ReturnType<typeof sql>>;
     try {
       result = await sql`

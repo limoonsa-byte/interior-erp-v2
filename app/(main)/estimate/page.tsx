@@ -2197,7 +2197,14 @@ export default function EstimatePage() {
   };
 
   useEffect(() => {
-    load();
+    (async () => {
+      try {
+        await fetch("/api/company/cleanup-orphan-estimates", { method: "POST", credentials: "include" });
+      } catch {
+        /* ignore */
+      }
+      load();
+    })();
   }, []);
 
   useEffect(() => {
@@ -2209,11 +2216,12 @@ export default function EstimatePage() {
 
   /** 목록에 표시할 견적 (완료 건 보기 꺼짐이면 연결 상담이 완료/완료및정산인 견적 제외) */
   const filteredEstimates = React.useMemo(() => {
-    if (showCompletedInList) return estimates;
     return estimates.filter((est) => {
-      if (est.consultationId == null) return true;
+      if (est.consultationId == null) return false;
       const c = consultationsForList.find((x) => x.id === est.consultationId);
-      const completed = c?.status === "완료" || c?.status === "완료및정산";
+      if (!c) return false;
+      if (showCompletedInList) return true;
+      const completed = c.status === "완료" || c.status === "완료및정산";
       return !completed;
     });
   }, [estimates, consultationsForList, showCompletedInList]);
