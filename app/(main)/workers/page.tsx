@@ -322,7 +322,7 @@ export default function WorkersPage() {
       .filter((p) => p.length >= 10);
   }, [shareTargets]);
 
-  /** 휴대폰 문자 앱으로 바로 열기(수신자·본문 미리 채움). 보내기만 누르면 발송. 붙여넣기 없음. */
+  /** 휴대폰 문자 앱으로 텍스트만 열기(수신자·본문 미리 채움). */
   const handleOpenSms = useCallback(() => {
     if (!shareMessageText) return;
     if (sharePhones.length === 0) {
@@ -549,33 +549,117 @@ export default function WorkersPage() {
   const getPhaseColor = (phaseName: string): string =>
     PHASE_COLORS[sharePhaseColorMap.indexOf(phaseName?.trim() || "공정") % PHASE_COLORS.length] ?? PHASE_COLORS[0];
 
-  const saveShareCalendarAsJpg = useCallback(async () => {
+  const calendarJpgFileName = useMemo(() => {
+    const title = selectedShareItem?.title?.replace(/[/\\?%*:|"]/g, "_") || "일정";
+    return shareCalendarRange
+      ? `일정_${title}_${shareCalendarRange.firstDate}_${shareCalendarRange.lastDate}.jpg`
+      : `일정_${title}.jpg`;
+  }, [selectedShareItem?.title, shareCalendarRange]);
+
+  /** 캘린더 DOM → JPG File */
+  const makeCalendarJpgFile = useCallback(async (): Promise<File | null> => {
     const el = shareCalendarRef.current;
-    if (!el) return;
+    if (!el) return null;
+    el.scrollIntoView({ block: "center", behavior: "instant" });
+    await new Promise((r) => requestAnimationFrame(r));
+    // jpeg dataUrl → File (toBlob의 jpeg quality 지원이 기기마다 달라 toJpeg 사용)
+    const { toJpeg } = await import("html-to-image");
+    const dataUrl = await toJpeg(el, {
+      backgroundColor: "#ffffff",
+      pixelRatio: 2,
+      quality: 0.92,
+    });
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    return new File([blob], calendarJpgFileName, { type: "image/jpeg" });
+  }, [calendarJpgFileName]);
+
+  /**
+   * 문자로 JPG 보내기: 공유 시트에 JPG 첨부 → 메시지(문자/MMS) 선택.
+   * sms: 링크로는 이미지 첨부가 불가해서 Web Share API를 사용합니다.
+   */
+  const handleShareJpgViaMessage = useCallback(async () => {
+    if (!selectedShareItem) return;
     setShareSavingJpg(true);
     try {
-      el.scrollIntoView({ block: "center", behavior: "instant" });
-      await new Promise((r) => requestAnimationFrame(r));
-      const { toJpeg } = await import("html-to-image");
-      const dataUrl = await toJpeg(el, {
-        backgroundColor: "#ffffff",
-        pixelRatio: 2,
-        quality: 0.92,
-      });
+      const file = await makeCalendarJpgFile();
+      if (!file) {
+        alert("캘린더 JPG를 만들 수 없습니다.");
+        return;
+      }
+      const shareData: ShareData = {
+        files: [file],
+        title: selectedShareItem.title || "공사 일정",
+        text: shareMessageText.slice(0, 120),
+      };
+      const canShareFiles =
+        typeof navigator !== "undefined" &&
+        typeof navigator.canShare === "function" &&
+        navigator.canShare(shareData);
+
+      if (canShareFiles && typeof navigator.share === "function") {
+        await navigator.share(shareData);
+        return;
+      }
+
+      const dataUrl = URL.createObjectURL(file);
       const link = document.createElement("a");
-      const title = selectedShareItem?.title?.replace(/[/\\?%*:|"]/g, "_") || "일정";
-      link.download = shareCalendarRange
-        ? `일정_${title}_${shareCalendarRange.firstDate}_${shareCalendarRange.lastDate}.jpg`
-        : `일정_${title}.jpg`;
+      link.download = calendarJpgFileName;
       link.href = dataUrl;
       link.click();
+      URL.revokeObjectURL(dataUrl);
+      alert(
+        "이 기기에서는 문자에 JPG를 바로 붙일 수 없어 JPG를 저장했습니다.\n\n" +
+          "휴대폰 브라우저에서 「문자로 JPG 보내기」를 누르면 메시지 앱으로 JPG가 첨부됩니다.\n" +
+          "PC에서는 저장한 JPG를 문자/카톡에 직접 첨부해 주세요."
+      );
+      if (sharePhones.length > 0) {
+        const short = `${selectedShareItem.title || "공사 일정"} 캘린더 이미지를 보내드립니다.`;
+        const body = encodeURIComponent(short);
+        const phonesJoined = sharePhones.join(",");
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        window.location.href = isIOS
+          ? `sms:/open?addresses=${phonesJoined}&body=${body}`
+          : `sms:${phonesJoined}?body=${body}`;
+      }
+    } catch (err) {
+      if (err instanceof Error && /AbortError|canceled|cancelled/i.test(err.name + err.message)) {
+        return;
+      }
+      console.error("JPG 문자 공유 실패:", err);
+      alert("JPG 공유에 실패했습니다. 「캘린더 JPG 저장」 후 문자에 첨부해 주세요.");
+    } finally {
+      setShareSavingJpg(false);
+    }
+  }, [
+    selectedShareItem,
+    makeCalendarJpgFile,
+    shareMessageText,
+    calendarJpgFileName,
+    sharePhones,
+  ]);
+
+  const saveShareCalendarAsJpg = useCallback(async () => {
+    setShareSavingJpg(true);
+    try {
+      const file = await makeCalendarJpgFile();
+      if (!file) {
+        alert("이미지 저장에 실패했습니다.");
+        return;
+      }
+      const dataUrl = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.download = calendarJpgFileName;
+      link.href = dataUrl;
+      link.click();
+      URL.revokeObjectURL(dataUrl);
     } catch (err) {
       console.error("캘린더 이미지 저장 실패:", err);
       alert("이미지 저장에 실패했습니다.");
     } finally {
       setShareSavingJpg(false);
     }
-  }, [selectedShareItem?.title, shareCalendarRange]);
+  }, [makeCalendarJpgFile, calendarJpgFileName]);
 
 
   return (
@@ -865,8 +949,8 @@ export default function WorkersPage() {
               )}
             </p>
             <p className="mb-3 text-[11px] text-gray-500">
-              문자: 휴대폰 문자 앱이 열리면 수신자·내용이 채워져 있으니 <strong>보내기</strong>만 누르면 됩니다.
-              카카오: 친구 선택 화면이 열리면 보낼 사람을 고르고 전송합니다. (붙여넣기 없음)
+              <strong>문자로 JPG 보내기</strong>: 휴대폰에서 공유 시트가 열리면 「메시지」를 고르면 캘린더 JPG가 첨부됩니다.
+              텍스트만 보낼 때는 「문자(텍스트)」를 쓰세요.
             </p>
             {shareLoading ? (
               <p className="py-4 text-sm text-gray-500">일정 목록 불러오는 중…</p>
@@ -1084,11 +1168,20 @@ export default function WorkersPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
+                    onClick={handleShareJpgViaMessage}
+                    disabled={!selectedShareItem || shareSavingJpg}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <Image className="h-4 w-4" />
+                    {shareSavingJpg ? "JPG 준비 중…" : "문자로 JPG 보내기"}
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleOpenSms}
                     disabled={!selectedShareItem || sharePhones.length === 0}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                    className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                   >
-                    문자로 보내기{sharePhones.length > 1 ? ` (${sharePhones.length}명)` : ""}
+                    문자(텍스트){sharePhones.length > 1 ? ` ${sharePhones.length}명` : ""}
                   </button>
                   <button
                     type="button"
@@ -1105,7 +1198,7 @@ export default function WorkersPage() {
                     className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     <Image className="h-4 w-4" />
-                    {shareSavingJpg ? "저장 중…" : "캘린더 JPG 저장"}
+                    {shareSavingJpg ? "저장 중…" : "JPG 저장"}
                   </button>
                   <button
                     type="button"
@@ -1116,7 +1209,7 @@ export default function WorkersPage() {
                   </button>
                 </div>
                 {sharePhones.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-700">문자 발송을 쓰려면 인부 전화번호가 필요합니다.</p>
+                  <p className="mt-2 text-xs text-amber-700">문자(텍스트)는 인부 전화번호가 필요합니다. JPG 보내기는 휴대폰 공유 시트로 가능합니다.</p>
                 )}
               </>
             )}
