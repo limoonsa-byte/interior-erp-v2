@@ -10,7 +10,7 @@ import {
   mountContractPrintRoot,
   runContractPrintDialog,
 } from "@/lib/contractViewPrint";
-import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 import { resolveContractBodyPdfUrl } from "@/lib/renderPdfUrlToPageImages";
 
 type Contract = {
@@ -76,6 +76,25 @@ function estimateTotalVatExclusive(est: Estimate): number {
   return Math.floor(sum / 10000) * 10000;
 }
 
+/** 견적 VAT 포함금액 (별도 × 1.1 후 만원 단위 절삭 — 견적서 미리보기와 동일) */
+function estimateTotalVatInclusive(est: Estimate): number {
+  const exclusive = estimateTotalVatExclusive(est);
+  if (exclusive <= 0) return 0;
+  return Math.floor((exclusive * 1.1) / 10000) * 10000;
+}
+
+type ContractPreFill = {
+  customerName: string;
+  contact: string;
+  consultationId?: number;
+  estimateId?: number;
+  estimateTitle?: string;
+  address?: string;
+  pyung?: number | string;
+  estimateContractAmount?: number;
+  estimateContractAmountVatIncluded?: number;
+};
+
 function formatDateYMD(dateStr: string | undefined): string {
   if (!dateStr || !dateStr.trim()) return "-";
   const d = new Date(dateStr.trim());
@@ -107,7 +126,7 @@ function ContractForm({
   onCancel,
 }: {
   contract: Contract | null;
-  preFill: { customerName: string; contact: string; consultationId?: number; estimateId?: number; estimateTitle?: string; address?: string; pyung?: number | string; estimateContractAmount?: number } | null;
+  preFill: ContractPreFill | null;
   onSave: () => void;
   onCancel: () => void;
 }) {
@@ -146,6 +165,18 @@ function ContractForm({
   const [projectStartDate, setProjectStartDate] = useState(details.projectStartDate ?? "");
   const [projectEndDate, setProjectEndDate] = useState(details.projectEndDate ?? "");
   const [contractAmount, setContractAmount] = useState(() => formatContractAmountDisplay(details.contractAmount ?? ""));
+  /** false=부가세별도(기본), true=부가세포함 */
+  const [vatIncluded, setVatIncluded] = useState(() => isVatIncluded(detailsUnknown));
+  /** 견적에서 가져온 VAT 별도/포함 금액 — 체크 시 전환용 */
+  const [estimateAmtExclusive, setEstimateAmtExclusive] = useState<number | null>(
+    () => (preFill?.estimateContractAmount && preFill.estimateContractAmount > 0 ? preFill.estimateContractAmount : null)
+  );
+  const [estimateAmtVatIncluded, setEstimateAmtVatIncluded] = useState<number | null>(
+    () =>
+      preFill?.estimateContractAmountVatIncluded && preFill.estimateContractAmountVatIncluded > 0
+        ? preFill.estimateContractAmountVatIncluded
+        : null
+  );
   const [downPaymentPercent, setDownPaymentPercent] = useState(details.downPaymentPercent ?? "");
   const [interimPayments, setInterimPayments] = useState<Array<{ percent: string; daysAfter: string }>>(() =>
     parseInterimLinesFromDetails(detailsUnknown).map((l) => ({
@@ -225,6 +256,7 @@ function ContractForm({
     setProjectStartDate(d.projectStartDate ?? "");
     setProjectEndDate(d.projectEndDate ?? "");
     setContractAmount(formatContractAmountDisplay(d.contractAmount));
+    setVatIncluded(isVatIncluded(du));
     setDownPaymentPercent(d.downPaymentPercent ?? "");
     setInterimPayments(
       parseInterimLinesFromDetails(du).map((l) => ({
@@ -269,8 +301,21 @@ function ContractForm({
         setTitle(preFill.estimateTitle.trim());
         setProjectName(preFill.estimateTitle.trim());
       }
-      if (preFill.estimateContractAmount != null && preFill.estimateContractAmount > 0) {
-        setContractAmount(formatContractAmountDisplay(String(preFill.estimateContractAmount)));
+      const exclusive =
+        preFill.estimateContractAmount != null && preFill.estimateContractAmount > 0
+          ? preFill.estimateContractAmount
+          : null;
+      const inclusive =
+        preFill.estimateContractAmountVatIncluded != null && preFill.estimateContractAmountVatIncluded > 0
+          ? preFill.estimateContractAmountVatIncluded
+          : exclusive != null
+            ? Math.floor((exclusive * 1.1) / 10000) * 10000
+            : null;
+      setEstimateAmtExclusive(exclusive);
+      setEstimateAmtVatIncluded(inclusive != null && inclusive > 0 ? inclusive : null);
+      if (exclusive != null) {
+        setContractAmount(formatContractAmountDisplay(String(exclusive)));
+        setVatIncluded(false);
       }
       if (preFill.address != null && preFill.address.trim()) {
         const p = preFill.pyung != null && String(preFill.pyung).trim() !== "" ? ` (${preFill.pyung}평)` : "";
@@ -280,6 +325,41 @@ function ContractForm({
       }
     }
   }, [preFill, isEdit]);
+
+  /** 수정 시 연결된 견적에서 VAT 별도/포함 금액 로드 */
+  useEffect(() => {
+    const estimateId = contract?.estimateId ?? preFill?.estimateId;
+    if (!estimateId) return;
+    let cancelled = false;
+    fetch(`/api/estimates/${estimateId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (cancelled || data?.error || !data) return;
+        const exclusive = estimateTotalVatExclusive(data as Estimate);
+        const inclusive = estimateTotalVatInclusive(data as Estimate);
+        if (exclusive > 0) setEstimateAmtExclusive(exclusive);
+        if (inclusive > 0) setEstimateAmtVatIncluded(inclusive);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [contract?.estimateId, preFill?.estimateId]);
+
+  const applyVatIncludedToggle = (checked: boolean) => {
+    setVatIncluded(checked);
+    if (checked) {
+      if (estimateAmtVatIncluded != null && estimateAmtVatIncluded > 0) {
+        setContractAmount(formatContractAmountDisplay(String(estimateAmtVatIncluded)));
+      } else if (estimateAmtExclusive != null && estimateAmtExclusive > 0) {
+        const inclusive = Math.floor((estimateAmtExclusive * 1.1) / 10000) * 10000;
+        setEstimateAmtVatIncluded(inclusive);
+        setContractAmount(formatContractAmountDisplay(String(inclusive)));
+      }
+    } else if (estimateAmtExclusive != null && estimateAmtExclusive > 0) {
+      setContractAmount(formatContractAmountDisplay(String(estimateAmtExclusive)));
+    }
+  };
 
   const handleLoadTemplate = () => {
     setLoadingTemplate(true);
@@ -414,6 +494,7 @@ function ContractForm({
       const raw = contractAmount.replace(/\D/g, "").trim();
       if (raw) detailsObj.contractAmount = raw;
     }
+    detailsObj.vatIncluded = vatIncluded ? "1" : "0";
     if (downPaymentPercent.trim()) detailsObj.downPaymentPercent = downPaymentPercent.trim();
     detailsObj.interimPayments = JSON.stringify(interimPayments);
     const rawNum = Number(contractAmount.replace(/\D/g, "")) || 0;
@@ -552,7 +633,7 @@ function ContractForm({
       `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(projectPlace || "")}</td></tr>` +
       `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(projectStartDate || "")}</td></tr>` +
       `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(projectEndDate || "")}</td></tr>` +
-      `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
+      `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">${vatLabelText(vatIncluded)}</span></td></tr>` +
       `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(${sp}${esc(downPaymentPercent || "")}${sp}%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
       interimRows +
       `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(${sp}${esc(paymentSchedule.balancePercentLabel)}${sp}%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
@@ -570,7 +651,7 @@ function ContractForm({
       ? `<div class="contract-print-body contract-print-body-from-page2 prose prose-sm max-w-none">${cleanBody}</div>`
       : "";
     return { page1, bodySection, full: page1 + bodySection };
-  }, [title, clientName, clientAddress, clientResidentNumber, contractorCompanyName, contractorAddress, projectName, projectPlace, projectStartDate, projectEndDate, contractAmountFormatted, downPaymentPercent, interimPayments, body, companyTemplateBody, stampUrl, sigDisplay, paymentSchedule, specialProvisions]);
+  }, [title, clientName, clientAddress, clientResidentNumber, contractorCompanyName, contractorAddress, projectName, projectPlace, projectStartDate, projectEndDate, contractAmountFormatted, vatIncluded, downPaymentPercent, interimPayments, body, companyTemplateBody, stampUrl, sigDisplay, paymentSchedule, specialProvisions]);
   const contractPrintHtml = contractPrintData.full;
 
   /** 본문 HTML을 서명용 PDF(2페이지부터 해당)로 변환. 브라우저 전용. */
@@ -935,18 +1016,35 @@ function ContractForm({
             </div>
             <div className="sm:col-span-2 text-xs font-medium text-gray-500 mt-3 pt-3 border-t border-gray-200">계약금·선금·중도금·잔금</div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-medium text-gray-600">계약금액 <span className="text-gray-500 font-normal">(VAT 별도)</span></label>
-              <div className="mt-0.5 flex items-center gap-2">
+              <label className="block text-xs font-medium text-gray-600">
+                계약금액{" "}
+                <span className="text-gray-500 font-normal">
+                  ({vatIncluded ? "VAT 포함" : "VAT 별도"})
+                </span>
+              </label>
+              <div className="mt-0.5 flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   inputMode="numeric"
                   value={contractAmount}
                   onChange={(e) => setContractAmount(formatContractAmountDisplay(e.target.value))}
-                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
                   placeholder="견적에서 선택 시 자동 입력"
                 />
                 <span className="text-xs text-gray-500 shrink-0">원</span>
+                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 shrink-0 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={vatIncluded}
+                    onChange={(e) => applyVatIncludedToggle(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  부가세포함
+                </label>
               </div>
+              <p className="mt-1 text-[11px] text-gray-500">
+                기본은 부가세별도입니다. 체크 시 견적서의 VAT 포함금액을 계약금액에 넣고, 계약서에 &quot;부가세포함&quot;으로 표시됩니다.
+              </p>
             </div>
             <div className="sm:col-span-2 space-y-2">
               <label className="block text-xs font-medium text-gray-600">선금</label>
@@ -1044,7 +1142,7 @@ export default function ContractPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loadingSource, setLoadingSource] = useState(false);
-  const [preFill, setPreFill] = useState<{ customerName: string; contact: string; consultationId?: number; estimateId?: number; estimateTitle?: string; address?: string; pyung?: number | string; estimateContractAmount?: number } | null>(null);
+  const [preFill, setPreFill] = useState<ContractPreFill | null>(null);
   const [sendModal, setSendModal] = useState<{ id: number; signUrl: string; title?: string } | null>(null);
   const [sendEmail, setSendEmail] = useState("");
   const [signViewContract, setSignViewContract] = useState<Contract | null>(null);
@@ -1242,7 +1340,8 @@ export default function ContractPage() {
 
   const handleSelectEstimate = (e: Estimate) => {
     const c = e.consultationId != null ? consultations.find((x) => x.id === e.consultationId) : undefined;
-    const contractAmountFromEstimate = estimateTotalVatExclusive(e);
+    const exclusive = estimateTotalVatExclusive(e);
+    const inclusive = estimateTotalVatInclusive(e);
     setPreFill({
       customerName: e.customerName ?? "",
       contact: e.contact ?? "",
@@ -1250,7 +1349,8 @@ export default function ContractPage() {
       estimateTitle: e.title ?? "",
       address: c?.address ?? "",
       pyung: c?.pyung,
-      estimateContractAmount: contractAmountFromEstimate > 0 ? contractAmountFromEstimate : undefined,
+      estimateContractAmount: exclusive > 0 ? exclusive : undefined,
+      estimateContractAmountVatIncluded: inclusive > 0 ? inclusive : undefined,
     });
     setSourceModalOpen(false);
     setFormOpen("new");

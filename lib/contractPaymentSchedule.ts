@@ -101,3 +101,14 @@ export function parseInterimLinesFromDetails(details: Record<string, unknown>): 
     },
   ];
 }
+
+/** details.vatIncluded — true면 부가세포함, 기본(미설정)은 부가세별도 */
+export function isVatIncluded(details: Record<string, unknown> | null | undefined): boolean {
+  if (!details || typeof details !== "object") return false;
+  const v = (details as Record<string, unknown>).vatIncluded;
+  return v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true";
+}
+
+export function vatLabelText(vatIncluded: boolean): string {
+  return vatIncluded ? "부가세포함" : "부가세별도";
+}

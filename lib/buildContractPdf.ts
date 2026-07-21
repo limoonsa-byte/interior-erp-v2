@@ -2,7 +2,7 @@ import PDFDocumentKit from "pdfkit";
 import { PDFDocument } from "pdf-lib";
 import { readFile } from "fs/promises";
 import path from "path";
-import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 
 type ContractDetails = Record<string, string>;
 
@@ -173,7 +173,7 @@ function buildContractPage(opts: BuildContractPdfOptions): Promise<Buffer> {
       const parsedSig = signatureDataUrl ? parseSignatureDataUrl(signatureDataUrl) : null;
 
       const payRows: [string, string][] = [];
-      payRows.push(["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 부가세별도` : "-"]);
+      payRows.push(["계약금액", raw ? `${raw.toLocaleString("ko-KR")}원 ${vatLabelText(isVatIncluded(details as unknown as Record<string, unknown>))}` : "-"]);
       payRows.push(["선 금", downPct ? `${fmtAmt(schedule.downAmount)}원 (${downPct} %) 계약이후 바로` : "-"]);
       interimList.forEach((item, i) => {
         const amt = fmtAmt(schedule.interimAmounts[i] ?? 0);

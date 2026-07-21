@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef } from "react";
-import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails } from "@/lib/contractPaymentSchedule";
+import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 import { positionContractSignatureOverlays } from "@/lib/positionContractSignatureOverlays";
 
 export type SignedContractSummaryContract = {
@@ -79,7 +79,7 @@ export function SignedContractSummary({ contract }: { contract: SignedContractSu
       `<tr><td class="contract-print-row-label">공사장소(면적)</td><td colspan="3" class="contract-print-value">${esc(dStr.projectPlace ?? "")}</td></tr>` +
       `<tr><td rowspan="2" class="contract-print-row-label">공사기간</td><td class="contract-print-sub-label">착공</td><td colspan="2" class="contract-print-value">${esc(dStr.projectStartDate ?? "")}</td></tr>` +
       `<tr><td class="contract-print-sub-label">준공</td><td colspan="2" class="contract-print-value">${esc(dStr.projectEndDate ?? "")}</td></tr>` +
-      `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">부가세별도</span></td></tr>` +
+      `<tr><th rowspan="${rowspanMoney}" class="contract-print-section-label">공<br/>사<br/>대<br/>금</th><td class="contract-print-row-label">계약금액</td><td colspan="3" class="contract-print-value">${esc(contractAmountFormatted)}원 <span class="contract-print-red">${vatLabelText(isVatIncluded(dStr as unknown as Record<string, unknown>))}</span></td></tr>` +
       `<tr><td class="contract-print-row-label">선금</td><td colspan="3" class="contract-print-value">${downAmtFmt}원(${sp}${esc(downPct)}${sp}%) <span class="contract-print-red">계약이후 바로</span></td></tr>` +
       interimRows +
       `<tr><td class="contract-print-row-label">잔 금</td><td colspan="3" class="contract-print-value">${balanceAmtFmt}원(${sp}${esc(schedule.balancePercentLabel)}${sp}%) <span class="contract-print-red">공사완료 시</span></td></tr>` +
