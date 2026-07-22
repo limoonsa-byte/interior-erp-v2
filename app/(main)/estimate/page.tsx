@@ -49,6 +49,25 @@ function formatNumber(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+/** 수량·단가 입력: 음수·소수 허용 (앞에 - 하나, 소수점 하나) */
+function sanitizeSignedDecimal(value: string): string {
+  let s = value.replace(/[^\d.-]/g, "");
+  const neg = s.startsWith("-");
+  s = s.replace(/-/g, "");
+  s = s.replace(/\.(?=.*\.)/g, "");
+  return (neg ? "-" : "") + s;
+}
+
+function isNumericDraftString(v: unknown): v is string {
+  return typeof v === "string" && (v === "-" || v === "-." || v.endsWith("."));
+}
+
+function displayNumericField(v: number | string | undefined): string {
+  if (v === 0 || v === undefined) return "";
+  if (isNumericDraftString(v)) return v;
+  return String(v);
+}
+
 /** 견적일자 표시용 YYYY-MM-DD 형식 */
 function formatDateYMD(dateStr: string | undefined): string {
   if (!dateStr || !dateStr.trim()) return "-";
@@ -917,10 +936,12 @@ function EstimateForm({
       (next[idx] as Record<string, unknown>)[field] = value;
       if (field === "qty" || field === "materialUnitPrice" || field === "laborUnitPrice") {
         const v = (next[idx] as Record<string, unknown>)[field];
-        const keepAsString = typeof v === "string" && v.endsWith(".");
+        const keepAsString = isNumericDraftString(v);
         next[idx].qty = field === "qty" && keepAsString ? (v as string) : (Number(next[idx].qty) || 0);
-        next[idx].materialUnitPrice = field === "materialUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].materialUnitPrice ?? 0) || 0);
-        next[idx].laborUnitPrice = field === "laborUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].laborUnitPrice ?? 0) || 0);
+        next[idx].materialUnitPrice =
+          field === "materialUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].materialUnitPrice ?? 0) || 0);
+        next[idx].laborUnitPrice =
+          field === "laborUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].laborUnitPrice ?? 0) || 0);
       }
       return next;
     });
@@ -937,8 +958,8 @@ function EstimateForm({
     });
   };
 
-  /** 수량 0인 항목은 견적서에 포함하지 않음 */
-  const subtotal = items.reduce((sum, it) => ((Number(it.qty) || 0) > 0 ? sum + amount(it) : sum), 0);
+  /** 수량 0만 제외 (음수 수량·금액도 합계에 포함) */
+  const subtotal = items.reduce((sum, it) => ((Number(it.qty) || 0) !== 0 ? sum + amount(it) : sum), 0);
   const overheadRate = (Number(overheadPercent) || 5) / 100;
   const profitRate = (Number(profitPercent) || 10) / 100;
   const overheadAmount = Math.floor(subtotal * overheadRate);
@@ -1617,20 +1638,20 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={3}
-                          inputMode="numeric"
+                          inputMode="decimal"
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.qty === 0 || item.qty === undefined ? "" : (typeof item.qty === "string" && item.qty.endsWith(".") ? item.qty : String(item.qty))}
+                          value={displayNumericField(item.qty)}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.currentTarget.value);
                             updateItem(origIdx, "qty", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.target.value);
                             updateItem(origIdx, "qty", raw === "" ? 0 : raw);
                           }}
-                          placeholder="숫자만"
+                          placeholder="숫자 (음수·소수)"
                         />
                       </td>
                       <td className="p-2">
@@ -1638,20 +1659,20 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={4}
-                          inputMode="numeric"
+                          inputMode="decimal"
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.materialUnitPrice === 0 || item.materialUnitPrice === undefined ? "" : (typeof item.materialUnitPrice === "string" && item.materialUnitPrice.endsWith(".") ? item.materialUnitPrice : String(item.materialUnitPrice))}
+                          value={displayNumericField(item.materialUnitPrice)}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.currentTarget.value);
                             updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.target.value);
                             updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
                           }}
-                          placeholder="숫자만"
+                          placeholder="숫자 (음수·소수)"
                         />
                       </td>
                       <td className="p-2 text-right font-medium">{formatNumber(materialAmount(item))}</td>
@@ -1660,20 +1681,20 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={5}
-                          inputMode="numeric"
+                          inputMode="decimal"
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={item.laborUnitPrice === 0 || item.laborUnitPrice === undefined ? "" : (typeof item.laborUnitPrice === "string" && item.laborUnitPrice.endsWith(".") ? item.laborUnitPrice : String(item.laborUnitPrice))}
+                          value={displayNumericField(item.laborUnitPrice)}
                           onCompositionEnd={(e) => {
-                            const raw = e.currentTarget.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.currentTarget.value);
                             updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
                           }}
                           onChange={(e) => {
-                            const raw = e.target.value.replace(/[^\d.]/g, "").replace(/\.(?=.*\.)/g, "");
+                            const raw = sanitizeSignedDecimal(e.target.value);
                             updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
                           }}
-                          placeholder="숫자만"
+                          placeholder="숫자 (음수·소수)"
                         />
                       </td>
                       <td className="p-2 text-right font-medium">{formatNumber(laborAmount(item))}</td>
@@ -1805,7 +1826,7 @@ function EstimateForm({
                 if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
                 const processRows: { name: string; amount: number }[] = [];
                 groups.forEach((grp) => {
-                  const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
+                  const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) !== 0);
                   if (visibleIndices.length === 0) return;
                   const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
                   if (!displayName) return;
@@ -1933,7 +1954,7 @@ function EstimateForm({
                         </thead>
                         <tbody>
                           {groups.map((grp) => {
-                            const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) > 0);
+                            const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) !== 0);
                             if (visibleIndices.length === 0) return null;
                             const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
                             let groupMat = 0;
