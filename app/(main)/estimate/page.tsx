@@ -62,10 +62,20 @@ function isNumericDraftString(v: unknown): v is string {
   return typeof v === "string" && (v === "-" || v === "-." || v.endsWith("."));
 }
 
-function displayNumericField(v: number | string | undefined): string {
-  if (v === 0 || v === undefined) return "";
+/** 빈값("") vs 0 구분. showZero=true면 0도 "0"으로 표시 (수량용) */
+function displayNumericField(v: number | string | undefined | null, showZero = false): string {
+  if (v === "" || v === undefined || v === null) return "";
+  if (!showZero && v === 0) return "";
   if (isNumericDraftString(v)) return v;
   return String(v);
+}
+
+function normalizeNumericField(v: unknown, keepDraft: boolean): number | string {
+  if (keepDraft && isNumericDraftString(v)) return v as string;
+  if (v === "" || v === null || v === undefined) return "";
+  const n = typeof v === "number" ? v : Number(v);
+  if (Number.isNaN(n)) return "";
+  return n;
 }
 
 /** 견적일자 표시용 YYYY-MM-DD 형식 */
@@ -133,7 +143,7 @@ const emptyItem: EstimateItem = {
   category: "",
   spec: "",
   unit: "식",
-  qty: 1,
+  qty: "",
   materialUnitPrice: 0,
   laborUnitPrice: 0,
   note: "",
@@ -573,7 +583,7 @@ function EstimateForm({
       ...emptyItem,
       ...i,
       processGroup: i.processGroup ?? "",
-      qty: 0,
+      qty: "",
       materialUnitPrice: Number(i.materialUnitPrice ?? (i as EstimateItem & { unitPrice?: number }).unitPrice ?? 0) || 0,
       laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
     }));
@@ -936,12 +946,10 @@ function EstimateForm({
       (next[idx] as Record<string, unknown>)[field] = value;
       if (field === "qty" || field === "materialUnitPrice" || field === "laborUnitPrice") {
         const v = (next[idx] as Record<string, unknown>)[field];
-        const keepAsString = isNumericDraftString(v);
-        next[idx].qty = field === "qty" && keepAsString ? (v as string) : (Number(next[idx].qty) || 0);
-        next[idx].materialUnitPrice =
-          field === "materialUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].materialUnitPrice ?? 0) || 0);
-        next[idx].laborUnitPrice =
-          field === "laborUnitPrice" && keepAsString ? (v as string) : (Number(next[idx].laborUnitPrice ?? 0) || 0);
+        const keepDraft = isNumericDraftString(v);
+        if (field === "qty") next[idx].qty = normalizeNumericField(v, keepDraft);
+        if (field === "materialUnitPrice") next[idx].materialUnitPrice = normalizeNumericField(v, keepDraft);
+        if (field === "laborUnitPrice") next[idx].laborUnitPrice = normalizeNumericField(v, keepDraft);
       }
       return next;
     });
@@ -1642,14 +1650,14 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
-                          value={displayNumericField(item.qty)}
+                          value={displayNumericField(item.qty, true)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
-                            updateItem(origIdx, "qty", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "qty", raw === "" ? "" : raw);
                           }}
                           onChange={(e) => {
                             const raw = sanitizeSignedDecimal(e.target.value);
-                            updateItem(origIdx, "qty", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "qty", raw === "" ? "" : raw);
                           }}
                           placeholder="숫자 (음수·소수)"
                         />
@@ -1666,11 +1674,11 @@ function EstimateForm({
                           value={displayNumericField(item.materialUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
-                            updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "materialUnitPrice", raw === "" ? "" : raw);
                           }}
                           onChange={(e) => {
                             const raw = sanitizeSignedDecimal(e.target.value);
-                            updateItem(origIdx, "materialUnitPrice", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "materialUnitPrice", raw === "" ? "" : raw);
                           }}
                           placeholder="숫자 (음수·소수)"
                         />
@@ -1688,11 +1696,11 @@ function EstimateForm({
                           value={displayNumericField(item.laborUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
-                            updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "laborUnitPrice", raw === "" ? "" : raw);
                           }}
                           onChange={(e) => {
                             const raw = sanitizeSignedDecimal(e.target.value);
-                            updateItem(origIdx, "laborUnitPrice", raw === "" ? 0 : raw);
+                            updateItem(origIdx, "laborUnitPrice", raw === "" ? "" : raw);
                           }}
                           placeholder="숫자 (음수·소수)"
                         />
