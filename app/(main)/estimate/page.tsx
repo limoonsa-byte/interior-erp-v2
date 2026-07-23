@@ -78,6 +78,16 @@ function normalizeNumericField(v: unknown, keepDraft: boolean): number | string 
   return n;
 }
 
+/** 수량 빈칸만 미리보기 제외. 0·음수·양수는 표시 */
+function hasQtyValue(qty: number | string | undefined | null): boolean {
+  if (qty === "" || qty === undefined || qty === null) return false;
+  if (typeof qty === "string") {
+    const t = qty.trim();
+    if (t === "" || t === "-" || t === "." || t === "-.") return false;
+  }
+  return !Number.isNaN(Number(qty));
+}
+
 /** 견적일자 표시용 YYYY-MM-DD 형식 */
 function formatDateYMD(dateStr: string | undefined): string {
   if (!dateStr || !dateStr.trim()) return "-";
@@ -966,8 +976,8 @@ function EstimateForm({
     });
   };
 
-  /** 수량 0만 제외 (음수 수량·금액도 합계에 포함) */
-  const subtotal = items.reduce((sum, it) => ((Number(it.qty) || 0) !== 0 ? sum + amount(it) : sum), 0);
+  /** 수량 빈칸만 제외 (0·음수·양수는 합계·미리보기 포함) */
+  const subtotal = items.reduce((sum, it) => (hasQtyValue(it.qty) ? sum + amount(it) : sum), 0);
   const overheadRate = (Number(overheadPercent) || 5) / 100;
   const profitRate = (Number(profitPercent) || 10) / 100;
   const overheadAmount = Math.floor(subtotal * overheadRate);
@@ -1834,7 +1844,7 @@ function EstimateForm({
                 if (currentIndices.length > 0) groups.push({ name: currentName, indices: currentIndices });
                 const processRows: { name: string; amount: number }[] = [];
                 groups.forEach((grp) => {
-                  const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) !== 0);
+                  const visibleIndices = grp.indices.filter((i) => hasQtyValue(items[i].qty));
                   if (visibleIndices.length === 0) return;
                   const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
                   if (!displayName) return;
@@ -1962,7 +1972,7 @@ function EstimateForm({
                         </thead>
                         <tbody>
                           {groups.map((grp) => {
-                            const visibleIndices = grp.indices.filter((i) => (Number(items[i].qty) || 0) !== 0);
+                            const visibleIndices = grp.indices.filter((i) => hasQtyValue(items[i].qty));
                             if (visibleIndices.length === 0) return null;
                             const displayName = grp.name.startsWith("\u200B") ? "" : grp.name;
                             let groupMat = 0;
