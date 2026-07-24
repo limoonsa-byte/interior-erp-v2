@@ -68,6 +68,7 @@ export default function AdminPage() {
   const [estimateTemplates, setEstimateTemplates] = useState<EstimateTemplateItem[]>([]);
   const [defaultEstimateTemplates, setDefaultEstimateTemplates] = useState<DefaultEstimateTemplate[]>([]);
   const [estimateTemplateTitle, setEstimateTemplateTitle] = useState("");
+  const [estimateTemplateEditId, setEstimateTemplateEditId] = useState<number | null>(null);
   const [estimateTemplateFile, setEstimateTemplateFile] = useState<File | null>(null);
   const [estimateTemplateLoading, setEstimateTemplateLoading] = useState(false);
   const [estimateTemplateError, setEstimateTemplateError] = useState<string | null>(null);
@@ -189,6 +190,7 @@ export default function AdminPage() {
     if (modal === "estimate-templates") {
       queueMicrotask(() => {
         setEstimateTemplateTitle("");
+        setEstimateTemplateEditId(null);
         setEstimateTemplateFile(null);
         setEstimateTemplateError(null);
       });
@@ -475,6 +477,31 @@ export default function AdminPage() {
       .catch(() => setCompanyPwMessage("오류가 발생했습니다."));
   };
 
+  const refreshEstimateTemplates = () => {
+    fetch("/api/company/estimate-templates")
+      .then((r) => r.json())
+      .then((arr) => {
+        if (Array.isArray(arr)) {
+          setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
+        }
+      });
+  };
+
+  const clearEstimateTemplateForm = () => {
+    setEstimateTemplateTitle("");
+    setEstimateTemplateEditId(null);
+    setEstimateTemplateFile(null);
+    if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+  };
+
+  const handleStartEditEstimateTemplate = (t: EstimateTemplateItem) => {
+    setEstimateTemplateEditId(t.id);
+    setEstimateTemplateTitle(t.title);
+    setEstimateTemplateFile(null);
+    if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+    setEstimateTemplateError(null);
+  };
+
   const handleAddEstimateTemplate = () => {
     const title = estimateTemplateTitle.trim();
     if (!title) {
@@ -484,30 +511,29 @@ export default function AdminPage() {
     setEstimateTemplateError(null);
     setEstimateTemplateLoading(true);
 
-    const doPost = (items: unknown[], processOrder: string[], note?: string) => {
-      fetch("/api/company/estimate-templates", {
-        method: "POST",
+    const doSave = (items: unknown[] | undefined, processOrder: string[] | undefined) => {
+      const isEdit = estimateTemplateEditId != null;
+      const url = isEdit ? `/api/company/estimate-templates/${estimateTemplateEditId}` : "/api/company/estimate-templates";
+      const method = isEdit ? "PATCH" : "POST";
+      const body: Record<string, unknown> = { title };
+      if (items !== undefined) body.items = items;
+      if (processOrder !== undefined) body.processOrder = processOrder;
+
+      fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, items, processOrder, note: note ?? null }),
+        body: JSON.stringify(body),
       })
         .then(async (res) => {
           const data = await res.json().catch(() => ({}));
           if (res.ok) {
-            setEstimateTemplateTitle("");
-            setEstimateTemplateFile(null);
-            if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
-            fetch("/api/company/estimate-templates")
-              .then((r) => r.json())
-              .then((arr) => {
-                if (Array.isArray(arr)) {
-                  setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
-                }
-              });
+            clearEstimateTemplateForm();
+            refreshEstimateTemplates();
           } else {
-            setEstimateTemplateError((data as { error?: string }).error || "저장 실패");
+            setEstimateTemplateError((data as { error?: string }).error || (isEdit ? "수정 실패" : "저장 실패"));
           }
         })
-        .catch(() => setEstimateTemplateError("저장 중 오류가 발생했습니다."))
+        .catch(() => setEstimateTemplateError(isEdit ? "수정 중 오류가 발생했습니다." : "저장 중 오류가 발생했습니다."))
         .finally(() => setEstimateTemplateLoading(false));
     };
 
@@ -550,7 +576,7 @@ export default function AdminPage() {
           });
           const parsed = parseEstimateExcelRows(rows);
           if (parsed && parsed.items.length > 0) {
-            doPost(parsed.items, parsed.processOrder);
+            doSave(parsed.items, parsed.processOrder);
           } else {
             setEstimateTemplateError("엑셀에서 견적 항목을 찾지 못했습니다. 견적서 엑셀 저장 형식으로 올려 주세요.");
             setEstimateTemplateLoading(false);
@@ -561,8 +587,11 @@ export default function AdminPage() {
         }
       };
       reader.readAsBinaryString(estimateTemplateFile);
+    } else if (estimateTemplateEditId != null) {
+      // 수정: 엑셀 없으면 제목만 변경
+      doSave(undefined, undefined);
     } else {
-      doPost([], []);
+      doSave([], []);
     }
   };
 
@@ -676,6 +705,7 @@ export default function AdminPage() {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setEstimateTemplates((prev) => prev.filter((t) => t.id !== id));
+          if (estimateTemplateEditId === id) clearEstimateTemplateForm();
         } else {
           alert((data as { error?: string }).error || "삭제 실패");
         }
@@ -1544,15 +1574,27 @@ export default function AdminPage() {
                 placeholder="예: 아파트 표준견적, 상가 견적"
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
+              {estimateTemplateEditId != null && (
+                <button
+                  type="button"
+                  onClick={clearEstimateTemplateForm}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleAddEstimateTemplate}
                 disabled={estimateTemplateLoading || !estimateTemplateTitle.trim()}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                저장
+                {estimateTemplateEditId != null ? "수정 저장" : "저장"}
               </button>
             </div>
+            {estimateTemplateEditId != null && (
+              <p className="mb-2 text-xs text-blue-700">선택한 우리 회사 양식을 수정 중입니다. 제목만 바꾸거나, 엑셀을 선택해 내용까지 바꿀 수 있습니다.</p>
+            )}
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <input
                 ref={estimateTemplateFileInputRef}
@@ -1590,16 +1632,27 @@ export default function AdminPage() {
                 {estimateTemplates.map((t) => (
                   <li
                     key={t.id}
-                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                      estimateTemplateEditId === t.id ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"
+                    }`}
                   >
                     <span className="font-medium text-gray-800">{t.title}</span>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteEstimateTemplate(t.id)}
-                      className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
-                    >
-                      삭제
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleStartEditEstimateTemplate(t)}
+                        className="rounded px-2 py-1 text-blue-600 hover:bg-blue-50"
+                      >
+                        수정
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteEstimateTemplate(t.id)}
+                        className="rounded px-2 py-1 text-red-600 hover:bg-red-50"
+                      >
+                        삭제
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

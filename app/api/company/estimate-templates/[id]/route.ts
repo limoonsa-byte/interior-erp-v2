@@ -13,7 +13,7 @@ async function getCompanyFromCookie() {
   }
 }
 
-/** 견적 템플릿 내용 수정 (견적서 작성에서 "템플릿으로 저장" 시) */
+/** 견적 템플릿 수정 (제목·항목·순서·특이사항) */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -31,28 +31,31 @@ export async function PATCH(
     }
 
     const body = await request.json();
+    const hasTitle = Object.prototype.hasOwnProperty.call(body, "title");
+    const title = hasTitle ? (typeof body.title === "string" ? body.title.trim() : "") : null;
+    if (hasTitle && !title) {
+      return NextResponse.json({ error: "템플릿 제목을 입력해 주세요." }, { status: 400 });
+    }
+
     const items = Array.isArray(body.items) ? JSON.stringify(body.items) : null;
     const processOrder = Array.isArray(body.processOrder) ? JSON.stringify(body.processOrder) : null;
     const hasNote = Object.prototype.hasOwnProperty.call(body, "note");
     const note = hasNote ? (typeof body.note === "string" ? body.note : null) : null;
 
-    if (items == null && processOrder == null && !hasNote) {
-      return NextResponse.json({ error: "items, processOrder 또는 note 중 하나는 필요합니다." }, { status: 400 });
+    if (!hasTitle && items == null && processOrder == null && !hasNote) {
+      return NextResponse.json({ error: "title, items, processOrder 또는 note 중 하나는 필요합니다." }, { status: 400 });
     }
 
-    const result = hasNote
-      ? await sql`
-          UPDATE company_estimate_templates
-          SET items = COALESCE(${items}, items), process_order = COALESCE(${processOrder}, process_order), note = ${note}
-          WHERE id = ${templateId} AND company_id = ${company.id}
-          RETURNING id
-        `
-      : await sql`
-          UPDATE company_estimate_templates
-          SET items = COALESCE(${items}, items), process_order = COALESCE(${processOrder}, process_order)
-          WHERE id = ${templateId} AND company_id = ${company.id}
-          RETURNING id
-        `;
+    const result = await sql`
+      UPDATE company_estimate_templates
+      SET
+        title = COALESCE(${title}, title),
+        items = COALESCE(${items}, items),
+        process_order = COALESCE(${processOrder}, process_order),
+        note = CASE WHEN ${hasNote} THEN ${note} ELSE note END
+      WHERE id = ${templateId} AND company_id = ${company.id}
+      RETURNING id
+    `;
 
     if (result.rows.length === 0) {
       return NextResponse.json(
