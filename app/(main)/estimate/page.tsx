@@ -88,6 +88,20 @@ function hasQtyValue(qty: number | string | undefined | null): boolean {
   return !Number.isNaN(Number(qty));
 }
 
+/** 저장용: 빈칸은 null, 입력한 0은 0으로 유지 */
+function serializeQty(qty: number | string | undefined | null): number | null {
+  if (!hasQtyValue(qty)) return null;
+  return Number(qty);
+}
+
+/** 불러오기용: null/빈칸 → "", 0은 0 */
+function parseQty(qty: unknown): number | string {
+  if (qty === "" || qty === null || qty === undefined) return "";
+  const n = Number(qty);
+  if (Number.isNaN(n)) return "";
+  return n;
+}
+
 /** 견적일자 표시용 YYYY-MM-DD 형식 */
 function formatDateYMD(dateStr: string | undefined): string {
   if (!dateStr || !dateStr.trim()) return "-";
@@ -284,7 +298,7 @@ function EstimateForm({
           ...emptyItem,
           ...i,
           processGroup: i.processGroup ?? "",
-          qty: Number(i.qty) || 0,
+          qty: parseQty(i.qty),
           materialUnitPrice: Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0,
           laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
         }))
@@ -635,7 +649,7 @@ function EstimateForm({
         category: it.category,
         spec: it.spec,
         unit: it.unit,
-        qty: Number(it.qty) || 0,
+        qty: serializeQty(it.qty),
         materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
         laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
         note: it.note,
@@ -1071,7 +1085,7 @@ function EstimateForm({
           category: it.category,
           spec: it.spec,
           unit: it.unit,
-          qty: Number(it.qty) || 0,
+          qty: serializeQty(it.qty),
           materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
           laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
           note: it.note,
