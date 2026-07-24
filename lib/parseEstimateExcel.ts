@@ -7,7 +7,8 @@ export type ParsedEstimateItem = {
   category: string;
   spec: string;
   unit: string;
-  qty: number;
+  /** 빈칸은 null. 0은 의도한 0 */
+  qty: number | null;
   materialUnitPrice?: number;
   laborUnitPrice?: number;
   note: string;
@@ -27,6 +28,15 @@ function parseNum(v: unknown): number {
   const s = String(v).replace(/,/g, "").replace(/\s/g, "").trim();
   const n = Number(s);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** 빈 셀은 null, "0"은 0 */
+function parseOptionalNum(v: unknown): number | null {
+  if (v == null || v === "") return null;
+  const s = String(v).replace(/,/g, "").replace(/\s/g, "").trim();
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function parseEstimateExcelRows(rawRows: (string | number)[][]): ParsedEstimateExcel | null {
@@ -89,7 +99,7 @@ export function parseEstimateExcelRows(rawRows: (string | number)[][]): ParsedEs
       category: b,
       spec: c,
       unit: d || "식",
-      qty: 0,
+      qty: hasQtyCol ? parseOptionalNum(rows[r]?.[4]) : null,
       materialUnitPrice: mat,
       laborUnitPrice: labor,
       note: h,

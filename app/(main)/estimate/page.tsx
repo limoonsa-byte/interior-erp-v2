@@ -914,7 +914,14 @@ function EstimateForm({
           const d = get(r, 3);
           const h = get(r, colNote);
           const rowType = get(r, colRowType);
-          const qty = 0;
+          const qty = hasQtyCol ? (() => {
+            const raw = rows[r]?.[4];
+            if (raw == null || String(raw).trim() === "") return "";
+            const s = String(raw).replace(/,/g, "").replace(/\s/g, "").trim();
+            if (s === "") return "";
+            const n = Number(s);
+            return Number.isFinite(n) ? n : "";
+          })() : "";
           const mat = parseNum(rows[r]?.[colMat]);
           const labor = parseNum(rows[r]?.[colLabor]);
           // 공정명 행: I열 "공정" / B열 "#"이면서 A열이 공정명(숫자 아님) / 또는 A열만 글자이고 B·C·D 비어있고 숫자 아님

@@ -504,6 +504,74 @@ async function migrate() {
     `;
     await sql`CREATE INDEX IF NOT EXISTS shop_taxonomy_sub_company_line_idx ON shop_taxonomy_subcategories(company_id, shop_line, sort_order)`;
     console.log("[migrate] shop_taxonomy OK");
+
+    // 한 번만: 빈 수량이 0으로 잘못 저장된 견적/템플릿을 null(빈칸)로 복구
+    await sql`
+      CREATE TABLE IF NOT EXISTS schema_data_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    const blankQtyFlag = await sql`
+      SELECT id FROM schema_data_migrations WHERE id = 'blank_qty_zero_to_null_v1'
+    `;
+    if (blankQtyFlag.rows.length === 0) {
+      function blankZeroQtys(itemsJson) {
+        let items;
+        try {
+          items = JSON.parse(itemsJson == null ? "[]" : String(itemsJson));
+        } catch {
+          return null;
+        }
+        if (!Array.isArray(items)) return null;
+        let changed = false;
+        const next = items.map((it) => {
+          if (!it || typeof it !== "object") return it;
+          const q = it.qty;
+          if (q === 0 || q === "0") {
+            changed = true;
+            return { ...it, qty: null };
+          }
+          return it;
+        });
+        return changed ? JSON.stringify(next) : null;
+      }
+
+      const estimateRows = await sql`SELECT id, items FROM estimates WHERE items IS NOT NULL`;
+      let estFixed = 0;
+      for (const row of estimateRows.rows) {
+        const next = blankZeroQtys(row.items);
+        if (next == null) continue;
+        await sql`UPDATE estimates SET items = ${next} WHERE id = ${row.id}`;
+        estFixed++;
+      }
+
+      const companyTpl = await sql`SELECT id, items FROM company_estimate_templates`;
+      let companyFixed = 0;
+      for (const row of companyTpl.rows) {
+        const next = blankZeroQtys(row.items);
+        if (next == null) continue;
+        await sql`UPDATE company_estimate_templates SET items = ${next} WHERE id = ${row.id}`;
+        companyFixed++;
+      }
+
+      const masterTpl = await sql`SELECT id, items FROM master_default_estimate_templates`;
+      let masterFixed = 0;
+      for (const row of masterTpl.rows) {
+        const next = blankZeroQtys(row.items);
+        if (next == null) continue;
+        await sql`UPDATE master_default_estimate_templates SET items = ${next} WHERE id = ${row.id}`;
+        masterFixed++;
+      }
+
+      await sql`INSERT INTO schema_data_migrations (id) VALUES ('blank_qty_zero_to_null_v1')`;
+      console.log(
+        `[migrate] blank_qty_zero_to_null_v1 OK (estimates=${estFixed}, company_templates=${companyFixed}, master_templates=${masterFixed})`
+      );
+    } else {
+      console.log("[migrate] blank_qty_zero_to_null_v1 already applied");
+    }
+
     console.log("[migrate] 완료");
   } catch (err) {
     console.error("[migrate] 실패:", err.message);
