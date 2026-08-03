@@ -192,7 +192,7 @@ export default function LaborPayDetailPage() {
     }
     const site = estimate?.title?.trim() || estimate?.customerName?.trim() || "현장";
     const url = linkForToken(r.accessToken);
-    const bodyText = `[인건비 입력 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+    const bodyText = `[결제 금액 입력 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
     openDeviceSms(phone, bodyText);
     setMessage("문자앱을 열었습니다. 보내기를 눌러 주세요.");
   };
