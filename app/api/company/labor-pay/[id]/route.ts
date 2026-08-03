@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { removeLaborPayFromApproval } from "@/lib/mergeLaborPayIntoApproval";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -28,10 +29,20 @@ export async function DELETE(
     const result = await sql`
       DELETE FROM labor_pay_requests
       WHERE id = ${requestId} AND company_id = ${company.id}
-      RETURNING id
+      RETURNING id, estimate_id
     `;
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "요청을 찾을 수 없습니다." }, { status: 404 });
+    }
+    const deleted = result.rows[0] as { id: number; estimate_id: number };
+    try {
+      await removeLaborPayFromApproval({
+        estimateId: Number(deleted.estimate_id),
+        companyId: company.id,
+        laborPayRequestId: Number(deleted.id),
+      });
+    } catch (mergeErr) {
+      console.error("labor-pay delete → approval remove error:", mergeErr);
     }
     return NextResponse.json({ message: "삭제되었습니다." });
   } catch (error) {

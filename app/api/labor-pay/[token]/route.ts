@@ -1,5 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
+import { mergeLaborPayIntoApproval } from "@/lib/mergeLaborPayIntoApproval";
 
 /** 공개: 인건비 입력 링크 조회 (로그인 없음) */
 export async function GET(
@@ -70,27 +71,56 @@ export async function POST(
     }
 
     const existing = await sql`
-      SELECT id, status FROM labor_pay_requests WHERE access_token = ${accessToken} LIMIT 1
+      SELECT id, status, company_id, estimate_id, worker_name
+      FROM labor_pay_requests WHERE access_token = ${accessToken} LIMIT 1
     `;
     if (existing.rows.length === 0) {
       return NextResponse.json({ error: "링크를 찾을 수 없거나 만료되었습니다." }, { status: 404 });
     }
-    if (String((existing.rows[0] as { status?: string }).status) !== "open") {
+    const existingRow = existing.rows[0] as {
+      id: number;
+      status?: string;
+      company_id: number;
+      estimate_id: number;
+      worker_name?: string | null;
+    };
+    if (String(existingRow.status) !== "open") {
       return NextResponse.json({ error: "이미 제출된 링크입니다. 회사에 재발급을 요청해 주세요." }, { status: 409 });
     }
 
+    const roundedAmount = Math.round(amount);
     const updated = await sql`
       UPDATE labor_pay_requests
-      SET amount = ${Math.round(amount)},
+      SET amount = ${roundedAmount},
           content = ${content},
           status = 'submitted',
           submitted_at = NOW(),
           updated_at = NOW()
       WHERE access_token = ${accessToken} AND status = 'open'
-      RETURNING id
+      RETURNING id, company_id, estimate_id, worker_name
     `;
     if (updated.rows.length === 0) {
       return NextResponse.json({ error: "이미 제출되었거나 처리할 수 없습니다." }, { status: 409 });
+    }
+
+    const row = updated.rows[0] as {
+      id: number;
+      company_id: number;
+      estimate_id: number;
+      worker_name?: string | null;
+    };
+    try {
+      await mergeLaborPayIntoApproval({
+        estimateId: Number(row.estimate_id),
+        companyId: Number(row.company_id),
+        laborPayRequestId: Number(row.id),
+        workerName: String(row.worker_name ?? ""),
+        amount: roundedAmount,
+        content,
+      });
+    } catch (mergeErr) {
+      console.error("labor-pay → payment approval merge error:", mergeErr);
+      // 제출 자체는 성공. 승인서 반영 실패는 로그만 남김.
     }
 
     return NextResponse.json({ message: "제출되었습니다. 감사합니다." });
