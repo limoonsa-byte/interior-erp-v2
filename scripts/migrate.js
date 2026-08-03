@@ -528,6 +528,8 @@ async function migrate() {
     console.log("[migrate] labor_pay_requests OK");
     await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS labor_pay_notice TEXT`;
     console.log("[migrate] companies.labor_pay_notice OK");
+    await sql`ALTER TABLE labor_pay_requests ADD COLUMN IF NOT EXISTS attachments_json TEXT`;
+    console.log("[migrate] labor_pay_requests.attachments_json OK");
 
     // 한 번만: 빈 수량이 0으로 잘못 저장된 견적/템플릿을 null(빈칸)로 복구
     await sql`

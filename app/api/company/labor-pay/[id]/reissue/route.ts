@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
+import { removeLaborPayFromApproval } from "@/lib/mergeLaborPayIntoApproval";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -33,6 +34,7 @@ export async function POST(
           status = 'open',
           amount = NULL,
           content = NULL,
+          attachments_json = NULL,
           submitted_at = NULL,
           updated_at = NOW()
       WHERE id = ${requestId} AND company_id = ${company.id}
@@ -42,6 +44,15 @@ export async function POST(
       return NextResponse.json({ error: "요청을 찾을 수 없습니다." }, { status: 404 });
     }
     const r = result.rows[0] as Record<string, unknown>;
+    try {
+      await removeLaborPayFromApproval({
+        estimateId: Number(r.estimate_id),
+        companyId: company.id,
+        laborPayRequestId: Number(r.id),
+      });
+    } catch (mergeErr) {
+      console.error("labor-pay reissue → approval remove error:", mergeErr);
+    }
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get("origin") || "";
     const accessToken = String(r.access_token ?? "");
     return NextResponse.json({

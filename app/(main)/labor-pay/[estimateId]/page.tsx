@@ -20,6 +20,13 @@ type Worker = {
   role?: string;
 };
 
+type LaborPayAttachmentMeta = {
+  kind: "photo" | "file";
+  name: string;
+  mime: string;
+  index: number;
+};
+
 type LaborPayRequest = {
   id: number;
   estimateId: number;
@@ -32,6 +39,7 @@ type LaborPayRequest = {
   submittedAt: string | null;
   createdAt: string | null;
   linkUrl?: string;
+  attachments?: LaborPayAttachmentMeta[];
 };
 
 function formatNum(n: number): string {
@@ -184,7 +192,11 @@ export default function LaborPayDetailPage() {
     }
     const site = estimate?.title?.trim() || estimate?.customerName?.trim() || "현장";
     const url = linkForToken(r.accessToken);
+<<<<<<< HEAD
     const bodyText = `[내역서 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+=======
+    const bodyText = `[결제 금액 입력 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+>>>>>>> origin/cursor/labor-pay-to-approval-a43f
     openDeviceSms(phone, bodyText);
     setMessage("문자앱을 열었습니다. 보내기를 눌러 주세요.");
   };
@@ -327,6 +339,7 @@ export default function LaborPayDetailPage() {
                   <th className="px-2 py-2 font-medium">상태</th>
                   <th className="px-2 py-2 text-right font-medium">금액</th>
                   <th className="px-2 py-2 font-medium">내용</th>
+                  <th className="px-2 py-2 font-medium">첨부</th>
                   <th className="px-2 py-2 font-medium">링크</th>
                   <th className="px-2 py-2 font-medium">관리</th>
                 </tr>
@@ -356,6 +369,26 @@ export default function LaborPayDetailPage() {
                         <div className="truncate text-gray-700" title={r.content || ""}>
                           {r.content?.trim() || "—"}
                         </div>
+                      </td>
+                      <td className="px-2 py-2">
+                        {Array.isArray(r.attachments) && r.attachments.length > 0 ? (
+                          <ul className="space-y-1 text-xs">
+                            {r.attachments.map((a) => (
+                              <li key={`${r.id}-${a.index}`}>
+                                <a
+                                  href={`/api/company/labor-pay/${r.id}/attachment?index=${a.index}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  {a.kind === "photo" ? "사진" : "파일"} · {a.name}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap gap-1">

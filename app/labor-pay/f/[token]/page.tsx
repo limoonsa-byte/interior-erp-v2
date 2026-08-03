@@ -2,6 +2,13 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import {
+  LABOR_PAY_MAX_BYTES,
+  LABOR_PAY_MAX_FILES,
+  LABOR_PAY_MAX_PHOTOS,
+  type LaborPayAttachmentKind,
+  type LaborPayAttachmentMeta,
+} from "@/lib/laborPayAttachments";
 
 type PublicLaborPay = {
   workerName: string;
@@ -12,7 +19,29 @@ type PublicLaborPay = {
   customerName: string;
   address: string;
   notice?: string | null;
+  attachments?: LaborPayAttachmentMeta[];
 };
+
+type PendingAttachment = {
+  kind: LaborPayAttachmentKind;
+  name: string;
+  mime: string;
+  data: string;
+  previewUrl?: string;
+};
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      const comma = result.indexOf(",");
+      resolve(comma >= 0 ? result.slice(comma + 1) : result);
+    };
+    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function LaborPayPublicFormPage() {
   const params = useParams();
@@ -22,6 +51,9 @@ export default function LaborPayPublicFormPage() {
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
   const [content, setContent] = useState("");
+  const [photos, setPhotos] = useState<PendingAttachment[]>([]);
+  const [files, setFiles] = useState<PendingAttachment[]>([]);
+  const [submittedAttachments, setSubmittedAttachments] = useState<LaborPayAttachmentMeta[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
 
@@ -36,16 +68,72 @@ export default function LaborPayPublicFormPage() {
       .then(async (res) => {
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error((json as { error?: string }).error || "링크를 불러올 수 없습니다.");
-        setData(json as PublicLaborPay);
-        if ((json as PublicLaborPay).status === "submitted") {
+        const payload = json as PublicLaborPay;
+        setData(payload);
+        if (payload.status === "submitted") {
           setDone(true);
-          if ((json as PublicLaborPay).amount != null) setAmount(String((json as PublicLaborPay).amount));
-          if ((json as PublicLaborPay).content) setContent(String((json as PublicLaborPay).content));
+          if (payload.amount != null) setAmount(String(payload.amount));
+          if (payload.content) setContent(String(payload.content));
+          setSubmittedAttachments(Array.isArray(payload.attachments) ? payload.attachments : []);
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "오류가 발생했습니다."))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    return () => {
+      photos.forEach((p) => {
+        if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+      });
+    };
+  }, [photos]);
+
+  const addFiles = async (kind: LaborPayAttachmentKind, fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    setError(null);
+    const incoming = Array.from(fileList);
+    const next: PendingAttachment[] = [];
+
+    for (const file of incoming) {
+      if (file.size > LABOR_PAY_MAX_BYTES) {
+        setError(`첨부 파일은 개당 최대 1MB까지 가능합니다. (${file.name})`);
+        return;
+      }
+      if (kind === "photo" && !file.type.startsWith("image/")) {
+        setError("사진은 이미지 파일만 선택할 수 있습니다.");
+        return;
+      }
+      const data = await readFileAsBase64(file);
+      next.push({
+        kind,
+        name: file.name || (kind === "photo" ? "photo.jpg" : "file"),
+        mime: file.type || (kind === "photo" ? "image/jpeg" : "application/octet-stream"),
+        data,
+        previewUrl: kind === "photo" ? URL.createObjectURL(file) : undefined,
+      });
+    }
+
+    if (kind === "photo") {
+      setPhotos((prev) => {
+        const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_PHOTOS);
+        prev.slice(merged.length).forEach((p) => {
+          if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+        });
+        return merged;
+      });
+    } else {
+      setFiles((prev) => [...prev, ...next].slice(0, LABOR_PAY_MAX_FILES));
+    }
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos((prev) => {
+      const target = prev[idx];
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,13 +141,29 @@ export default function LaborPayPublicFormPage() {
     setSubmitting(true);
     setError(null);
     try {
+      const attachments = [...photos, ...files].map(({ kind, name, mime, data }) => ({
+        kind,
+        name,
+        mime,
+        data,
+      }));
       const res = await fetch(`/api/labor-pay/${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, content }),
+        body: JSON.stringify({ amount, content, attachments }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((json as { error?: string }).error || "제출에 실패했습니다.");
+      setSubmittedAttachments(
+        Array.isArray((json as { attachments?: LaborPayAttachmentMeta[] }).attachments)
+          ? (json as { attachments: LaborPayAttachmentMeta[] }).attachments
+          : attachments.map((a, index) => ({
+              kind: a.kind,
+              name: a.name,
+              mime: a.mime,
+              index,
+            }))
+      );
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "제출에 실패했습니다.");
@@ -120,6 +224,25 @@ export default function LaborPayPublicFormPage() {
             <p className="font-medium">제출이 완료되었습니다. 감사합니다.</p>
             {amount ? <p className="mt-2">금액: {Number(amount).toLocaleString("ko-KR")}원</p> : null}
             {content ? <p className="mt-1 whitespace-pre-wrap">내용: {content}</p> : null}
+            {submittedAttachments.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                <p className="font-medium">첨부</p>
+                <ul className="space-y-1">
+                  {submittedAttachments.map((a) => (
+                    <li key={`${a.kind}-${a.index}`}>
+                      <a
+                        href={`/api/labor-pay/${encodeURIComponent(token)}/attachment?index=${a.index}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-700 underline"
+                      >
+                        {a.kind === "photo" ? "사진" : "파일"} · {a.name}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         ) : (
           <form onSubmit={submit} className="mt-5 space-y-4">
@@ -144,6 +267,68 @@ export default function LaborPayPublicFormPage() {
                 placeholder="작업 내용, 기간 등을 적어 주세요"
                 required
               />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                사진 첨부 (최대 {LABOR_PAY_MAX_PHOTOS}장, 각 1MB)
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                onChange={(e) => {
+                  void addFiles("photo", e.target.files);
+                  e.target.value = "";
+                }}
+                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+              />
+              {photos.length > 0 ? (
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {photos.map((p, idx) => (
+                    <div key={`${p.name}-${idx}`} className="relative overflow-hidden rounded-lg border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.previewUrl} alt={p.name} className="h-20 w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(idx)}
+                        className="absolute right-1 top-1 rounded bg-black/60 px-1.5 text-xs text-white"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-700">
+                파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개, 1MB)
+              </label>
+              <input
+                type="file"
+                onChange={(e) => {
+                  void addFiles("file", e.target.files);
+                  e.target.value = "";
+                }}
+                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+              />
+              {files.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-sm text-gray-700">
+                  {files.map((f, idx) => (
+                    <li key={`${f.name}-${idx}`} className="flex items-center justify-between gap-2">
+                      <span className="truncate">{f.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        className="shrink-0 text-xs text-red-600"
+                      >
+                        삭제
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button

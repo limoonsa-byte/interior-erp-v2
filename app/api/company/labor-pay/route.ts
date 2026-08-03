@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { randomUUID } from "crypto";
+import { attachmentsToMeta, parseAttachmentsJson } from "@/lib/laborPayAttachments";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -26,6 +27,7 @@ function mapRow(r: Record<string, unknown>) {
     content: r.content != null ? String(r.content) : null,
     submittedAt: r.submitted_at != null ? String(r.submitted_at) : null,
     createdAt: r.created_at != null ? String(r.created_at) : null,
+    attachments: attachmentsToMeta(parseAttachmentsJson(r.attachments_json)),
   };
 }
 
@@ -50,7 +52,7 @@ export async function GET(request: Request) {
     }
 
     const result = await sql`
-      SELECT id, estimate_id, worker_id, worker_name, access_token, status, amount, content, submitted_at, created_at
+      SELECT id, estimate_id, worker_id, worker_name, access_token, status, amount, content, submitted_at, created_at, attachments_json
       FROM labor_pay_requests
       WHERE company_id = ${company.id} AND estimate_id = ${estimateId}
       ORDER BY id DESC
