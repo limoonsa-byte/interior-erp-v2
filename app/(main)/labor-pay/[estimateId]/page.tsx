@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Banknote, Copy, Link2, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Banknote, Copy, Link2, MessageSquare, RefreshCw, Trash2 } from "lucide-react";
 
 type Estimate = {
   id: number;
@@ -45,6 +45,20 @@ function linkForToken(token: string): string {
   return `/labor-pay/f/${token}`;
 }
 
+function normalizePhoneDigits(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
+}
+
+function openDeviceSms(phoneDigits: string, bodyText: string) {
+  const body = encodeURIComponent(bodyText);
+  const isIOS =
+    typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const href = isIOS
+    ? `sms:/open?addresses=${phoneDigits}&body=${body}`
+    : `sms:${phoneDigits}?body=${body}`;
+  window.location.href = href;
+}
+
 export default function LaborPayDetailPage() {
   const params = useParams();
   const estimateId = Number(params?.estimateId);
@@ -56,6 +70,15 @@ export default function LaborPayDetailPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const workerPhoneById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const w of workers) {
+      const digits = normalizePhoneDigits(w.phone ?? "");
+      if (digits.length >= 10) map.set(w.id, digits);
+    }
+    return map;
+  }, [workers]);
 
   const load = useCallback(async () => {
     if (!Number.isFinite(estimateId) || estimateId < 1) {
@@ -130,7 +153,7 @@ export default function LaborPayDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || "링크 생성 실패");
-      setMessage("링크를 생성했습니다.");
+      setMessage("링크를 생성했습니다. 「문자」버튼으로 인부에게 보낼 수 있습니다.");
       setSelectedWorkerIds([]);
       await load();
     } catch (e) {
@@ -150,6 +173,22 @@ export default function LaborPayDetailPage() {
     }
   };
 
+  const sendSms = (r: LaborPayRequest) => {
+    const phone =
+      (r.workerId != null ? workerPhoneById.get(r.workerId) : undefined) ?? "";
+    if (!phone) {
+      alert(
+        "인부 전화번호가 없습니다. 현장 인부 DB에 전화번호를 등록한 뒤 다시 시도해 주세요."
+      );
+      return;
+    }
+    const site = estimate?.title?.trim() || estimate?.customerName?.trim() || "현장";
+    const url = linkForToken(r.accessToken);
+    const bodyText = `[인건비 입력 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+    openDeviceSms(phone, bodyText);
+    setMessage("문자앱을 열었습니다. 보내기를 눌러 주세요.");
+  };
+
   const reissue = async (id: number) => {
     if (!confirm("재발급하면 기존 제출 내용이 지워지고 새 링크가 만들어집니다. 계속할까요?")) return;
     try {
@@ -159,7 +198,7 @@ export default function LaborPayDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as { error?: string }).error || "재발급 실패");
-      setMessage("재발급했습니다. 새 링크를 복사해 보내 주세요.");
+      setMessage("재발급했습니다. 「문자」버튼으로 새 링크를 보내 주세요.");
       await load();
     } catch (e) {
       alert(e instanceof Error ? e.message : "재발급에 실패했습니다.");
@@ -226,6 +265,7 @@ export default function LaborPayDetailPage() {
         <h2 className="mb-2 text-sm font-semibold text-gray-800">1. 인부 지정 후 링크 생성</h2>
         <p className="mb-3 text-xs text-gray-500">
           현장 인부 DB에 등록된 인부를 선택합니다. 이미 대기 중인 링크가 있으면 그대로 사용합니다.
+          문자 발송은 인부 DB에 전화번호가 있어야 합니다.
         </p>
         {workers.length === 0 ? (
           <p className="text-sm text-gray-500">
@@ -241,6 +281,7 @@ export default function LaborPayDetailPage() {
               {workers.map((w) => {
                 const checked = selectedWorkerIds.includes(w.id);
                 const hasOpen = assignedWorkerIds.has(w.id) && requests.some((r) => r.workerId === w.id && r.status === "open");
+                const hasPhone = workerPhoneById.has(w.id);
                 return (
                   <label
                     key={w.id}
@@ -254,6 +295,7 @@ export default function LaborPayDetailPage() {
                     />
                     <span className="font-medium text-gray-800">{w.name}</span>
                     {w.role ? <span className="text-xs text-gray-500">{w.role}</span> : null}
+                    {!hasPhone ? <span className="text-xs text-amber-700">전화 없음</span> : null}
                     {hasOpen ? <span className="text-xs text-amber-700">대기 링크 있음</span> : null}
                   </label>
                 );
@@ -292,6 +334,7 @@ export default function LaborPayDetailPage() {
               <tbody className="divide-y divide-gray-100">
                 {requests.map((r) => {
                   const submitted = r.status === "submitted";
+                  const hasPhone = r.workerId != null && workerPhoneById.has(r.workerId);
                   return (
                     <tr key={r.id} className={submitted ? "bg-emerald-50/40" : ""}>
                       <td className="px-2 py-2 font-medium text-gray-900">{r.workerName || "-"}</td>
@@ -315,14 +358,26 @@ export default function LaborPayDetailPage() {
                         </div>
                       </td>
                       <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => copyLink(r.accessToken)}
-                          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          복사
-                        </button>
+                        <div className="flex flex-wrap gap-1">
+                          <button
+                            type="button"
+                            onClick={() => copyLink(r.accessToken)}
+                            className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            복사
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => sendSms(r)}
+                            disabled={!hasPhone}
+                            title={hasPhone ? "문자앱 열기" : "인부 DB에 전화번호가 필요합니다"}
+                            className="inline-flex items-center gap-1 rounded border border-green-300 bg-white px-2 py-1 text-xs text-green-700 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" />
+                            문자
+                          </button>
+                        </div>
                       </td>
                       <td className="px-2 py-2">
                         <div className="flex flex-wrap gap-1">
