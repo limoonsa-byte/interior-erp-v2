@@ -41,7 +41,7 @@ const baseMenuItems: MenuItem[] = [
   { href: "/mobile/material-order", label: "자재 발주", icon: Package },
   { href: "/mobile/material-list", label: "현장용 자재리스트", icon: ListChecks },
   { href: "/mobile/work-log", label: "작업일지", icon: ClipboardList },
-  { href: "/mobile/labor-pay", label: "인건비 지급", icon: Banknote },
+  { href: "/mobile/labor-pay", label: "내역서 요청", icon: Banknote },
   { href: "/mobile/payment", label: "결제 승인 관리", icon: CreditCard },
   { href: "/mobile/settlement", label: "정산", icon: Wallet },
   { href: "/mobile/statistics", label: "통계", icon: BarChart3 },

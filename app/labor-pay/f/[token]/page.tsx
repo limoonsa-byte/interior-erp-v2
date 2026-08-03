@@ -89,7 +89,7 @@ export default function LaborPayPublicFormPage() {
   return (
     <div className="min-h-dvh bg-slate-50 px-4 py-8">
       <div className="mx-auto w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h1 className="text-lg font-semibold text-gray-900">인건비 지급 입력</h1>
+        <h1 className="text-lg font-semibold text-gray-900">결제 금액 입력</h1>
         <p className="mt-1 text-sm text-gray-500">회사에서 보낸 링크입니다. 금액과 내용을 입력해 주세요.</p>
 
         <div className="mt-4 space-y-1 rounded-lg bg-gray-50 px-3 py-3 text-sm text-gray-700">

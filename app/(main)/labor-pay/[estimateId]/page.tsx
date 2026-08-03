@@ -112,7 +112,7 @@ export default function LaborPayDetailPage() {
       } else setWorkers([]);
 
       if (!reqRes.ok) {
-        setError((reqData as { error?: string }).error || "인건비 요청을 불러올 수 없습니다.");
+        setError((reqData as { error?: string }).error || "내역서 요청을 불러올 수 없습니다.");
         setRequests([]);
       } else {
         setRequests(Array.isArray(reqData.requests) ? (reqData.requests as LaborPayRequest[]) : []);
@@ -184,7 +184,7 @@ export default function LaborPayDetailPage() {
     }
     const site = estimate?.title?.trim() || estimate?.customerName?.trim() || "현장";
     const url = linkForToken(r.accessToken);
-    const bodyText = `[인건비 입력 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+    const bodyText = `[내역서 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
     openDeviceSms(phone, bodyText);
     setMessage("문자앱을 열었습니다. 보내기를 눌러 주세요.");
   };
@@ -241,7 +241,7 @@ export default function LaborPayDetailPage() {
         </Link>
         <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
           <Banknote className="h-6 w-6 text-slate-600" />
-          인건비 지급
+          내역서 요청
         </h1>
       </div>
 

@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
-  title: "인건비 지급 입력",
-  description: "인건비 금액과 내용을 입력하는 링크입니다.",
+  title: "결제 금액 입력",
+  description: "결제 금액과 내용을 입력하는 링크입니다.",
   robots: { index: false, follow: false },
 };
 

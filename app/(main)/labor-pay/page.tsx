@@ -48,7 +48,7 @@ export default function LaborPayListPage() {
         if (Array.isArray(consData)) setConsultations(consData as Consultation[]);
         else setConsultations([]);
       })
-      .catch(() => setError("인건비 지급 목록을 불러올 수 없습니다."))
+      .catch(() => setError("내역서 요청 목록을 불러올 수 없습니다."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -67,7 +67,7 @@ export default function LaborPayListPage() {
     <div className="flex flex-col gap-4 p-4 sm:p-6">
       <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
         <Banknote className="h-6 w-6 text-slate-600" />
-        인건비 지급
+        내역서 요청
       </h1>
       <p className="text-sm text-gray-500">
         현장을 선택한 뒤 인부를 지정하고 링크를 보내면, 인부가 금액·내용을 적어 회신합니다.

@@ -15,7 +15,7 @@ const defaultMenuItems = [
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재발주페이지", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
-  { href: "/labor-pay", label: "인건비 지급", icon: Banknote },
+  { href: "/labor-pay", label: "내역서 요청", icon: Banknote },
   { href: "/payment", label: "결제 승인 관리", icon: CreditCard },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },

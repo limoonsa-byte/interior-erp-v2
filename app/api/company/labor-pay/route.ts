@@ -64,7 +64,7 @@ export async function GET(request: Request) {
     const msg = error instanceof Error ? error.message : String(error);
     if (/relation.*does not exist|labor_pay_requests/i.test(msg)) {
       return NextResponse.json(
-        { error: "인건비 지급 테이블이 없습니다. 배포/마이그레이션 후 다시 시도해 주세요." },
+        { error: "내역서 요청 테이블이 없습니다. 배포/마이그레이션 후 다시 시도해 주세요." },
         { status: 500 }
       );
     }
@@ -153,7 +153,7 @@ export async function POST(request: Request) {
     const msg = error instanceof Error ? error.message : String(error);
     if (/relation.*does not exist|labor_pay_requests/i.test(msg)) {
       return NextResponse.json(
-        { error: "인건비 지급 테이블이 없습니다. 배포/마이그레이션 후 다시 시도해 주세요." },
+        { error: "내역서 요청 테이블이 없습니다. 배포/마이그레이션 후 다시 시도해 주세요." },
         { status: 500 }
       );
     }

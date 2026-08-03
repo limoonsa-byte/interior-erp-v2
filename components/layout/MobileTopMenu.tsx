@@ -14,7 +14,7 @@ const PAGE_TITLES: { match: RegExp; label: string }[] = [
   { match: /^\/mobile\/material-order/, label: "자재 발주" },
   { match: /^\/mobile\/material-list/, label: "자재 리스트" },
   { match: /^\/mobile\/work-log/, label: "작업일지" },
-  { match: /^\/mobile\/labor-pay/, label: "인건비 지급" },
+  { match: /^\/mobile\/labor-pay/, label: "내역서 요청" },
   { match: /^\/mobile\/payment/, label: "결제 승인" },
   { match: /^\/mobile\/settlement/, label: "정산" },
   { match: /^\/mobile\/statistics/, label: "통계" },
