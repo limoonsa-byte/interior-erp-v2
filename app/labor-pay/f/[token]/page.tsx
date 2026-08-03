@@ -88,27 +88,27 @@ export default function LaborPayPublicFormPage() {
 
     try {
       for (const file of incoming) {
-        if (kind === "photo" && file.type && !file.type.startsWith("image/") && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
-          setError("사진은 이미지 파일만 선택할 수 있습니다.");
-          return;
-        }
+        // 사진 칸: 이미지가 아니어도 카메라/갤러리 결과면 압축 시도
         const compressed = await compressAttachmentFile(file, LABOR_PAY_MAX_BYTES, {
-          preferImage: kind === "photo",
+          // 사진 칸은 무조건 이미지 압축. 파일 칸도 image/* 이면 압축.
+          preferImage: kind === "photo" || Boolean(file.type && file.type.startsWith("image/")),
         });
+        if (compressed.bytes > LABOR_PAY_MAX_BYTES) {
+          throw new Error(`첨부를 1MB 이하로 만들지 못했습니다. (${compressed.name})`);
+        }
         const data = await blobToBase64(compressed.blob);
         const previewUrl =
           kind === "photo" || compressed.mime.startsWith("image/")
             ? URL.createObjectURL(compressed.blob)
             : undefined;
+        const kb = Math.max(1, Math.round(compressed.bytes / 1024));
         next.push({
           kind,
           name: compressed.name || (kind === "photo" ? "photo.jpg" : "file"),
           mime: compressed.mime,
           data,
           previewUrl,
-          note: compressed.compressed
-            ? `자동 압축 ${(compressed.blob.size / 1024).toFixed(0)}KB`
-            : undefined,
+          note: compressed.compressed ? `${kb}KB로 자동 축소` : `${kb}KB`,
         });
       }
 
@@ -281,7 +281,7 @@ export default function LaborPayPublicFormPage() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 사진 첨부 (최대 {LABOR_PAY_MAX_PHOTOS}장)
               </label>
-              <p className="mb-1 text-xs text-gray-500">큰 사진도 자동으로 1MB 이하로 줄여 보냅니다.</p>
+              <p className="mb-1 text-xs text-gray-500">촬영·선택 즉시 자동으로 1MB 이하로 줄입니다.</p>
               <input
                 type="file"
                 accept="image/*"
@@ -321,7 +321,7 @@ export default function LaborPayPublicFormPage() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개)
               </label>
-              <p className="mb-1 text-xs text-gray-500">이미지는 자동 압축, 그 외 파일은 1MB 이하만 가능합니다.</p>
+              <p className="mb-1 text-xs text-gray-500">이미지·사진 파일은 자동으로 1MB 이하로 줄입니다.</p>
               <input
                 type="file"
                 disabled={compressing || submitting}
