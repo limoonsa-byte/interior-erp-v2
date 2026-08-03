@@ -9,6 +9,7 @@ import {
   type LaborPayAttachmentKind,
   type LaborPayAttachmentMeta,
 } from "@/lib/laborPayAttachments";
+import { blobToBase64, compressAttachmentFile } from "@/lib/compressLaborPayAttachment";
 
 type PublicLaborPay = {
   workerName: string;
@@ -28,20 +29,8 @@ type PendingAttachment = {
   mime: string;
   data: string;
   previewUrl?: string;
+  note?: string;
 };
-
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      const comma = result.indexOf(",");
-      resolve(comma >= 0 ? result.slice(comma + 1) : result);
-    };
-    reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function LaborPayPublicFormPage() {
   const params = useParams();
@@ -55,6 +44,7 @@ export default function LaborPayPublicFormPage() {
   const [files, setFiles] = useState<PendingAttachment[]>([]);
   const [submittedAttachments, setSubmittedAttachments] = useState<LaborPayAttachmentMeta[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -92,38 +82,57 @@ export default function LaborPayPublicFormPage() {
   const addFiles = async (kind: LaborPayAttachmentKind, fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
     setError(null);
+    setCompressing(true);
     const incoming = Array.from(fileList);
     const next: PendingAttachment[] = [];
 
-    for (const file of incoming) {
-      if (file.size > LABOR_PAY_MAX_BYTES) {
-        setError(`첨부 파일은 개당 최대 1MB까지 가능합니다. (${file.name})`);
-        return;
-      }
-      if (kind === "photo" && !file.type.startsWith("image/")) {
-        setError("사진은 이미지 파일만 선택할 수 있습니다.");
-        return;
-      }
-      const data = await readFileAsBase64(file);
-      next.push({
-        kind,
-        name: file.name || (kind === "photo" ? "photo.jpg" : "file"),
-        mime: file.type || (kind === "photo" ? "image/jpeg" : "application/octet-stream"),
-        data,
-        previewUrl: kind === "photo" ? URL.createObjectURL(file) : undefined,
-      });
-    }
-
-    if (kind === "photo") {
-      setPhotos((prev) => {
-        const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_PHOTOS);
-        prev.slice(merged.length).forEach((p) => {
-          if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+    try {
+      for (const file of incoming) {
+        if (kind === "photo" && file.type && !file.type.startsWith("image/") && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)) {
+          setError("사진은 이미지 파일만 선택할 수 있습니다.");
+          return;
+        }
+        const compressed = await compressAttachmentFile(file, LABOR_PAY_MAX_BYTES, {
+          preferImage: kind === "photo",
         });
-        return merged;
-      });
-    } else {
-      setFiles((prev) => [...prev, ...next].slice(0, LABOR_PAY_MAX_FILES));
+        const data = await blobToBase64(compressed.blob);
+        const previewUrl =
+          kind === "photo" || compressed.mime.startsWith("image/")
+            ? URL.createObjectURL(compressed.blob)
+            : undefined;
+        next.push({
+          kind,
+          name: compressed.name || (kind === "photo" ? "photo.jpg" : "file"),
+          mime: compressed.mime,
+          data,
+          previewUrl,
+          note: compressed.compressed
+            ? `자동 압축 ${(compressed.blob.size / 1024).toFixed(0)}KB`
+            : undefined,
+        });
+      }
+
+      if (kind === "photo") {
+        setPhotos((prev) => {
+          const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_PHOTOS);
+          prev.slice(merged.length).forEach((p) => {
+            if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+          });
+          return merged;
+        });
+      } else {
+        setFiles((prev) => {
+          const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_FILES);
+          prev.slice(merged.length).forEach((p) => {
+            if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
+          });
+          return merged;
+        });
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "첨부 처리에 실패했습니다.");
+    } finally {
+      setCompressing(false);
     }
   };
 
@@ -270,18 +279,20 @@ export default function LaborPayPublicFormPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                사진 첨부 (최대 {LABOR_PAY_MAX_PHOTOS}장, 각 1MB)
+                사진 첨부 (최대 {LABOR_PAY_MAX_PHOTOS}장)
               </label>
+              <p className="mb-1 text-xs text-gray-500">큰 사진도 자동으로 1MB 이하로 줄여 보냅니다.</p>
               <input
                 type="file"
                 accept="image/*"
                 capture="environment"
                 multiple
+                disabled={compressing || submitting}
                 onChange={(e) => {
                   void addFiles("photo", e.target.files);
                   e.target.value = "";
                 }}
-                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium disabled:opacity-50"
               />
               {photos.length > 0 ? (
                 <div className="mt-2 grid grid-cols-3 gap-2">
@@ -289,6 +300,11 @@ export default function LaborPayPublicFormPage() {
                     <div key={`${p.name}-${idx}`} className="relative overflow-hidden rounded-lg border border-gray-200">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={p.previewUrl} alt={p.name} className="h-20 w-full object-cover" />
+                      {p.note ? (
+                        <span className="absolute bottom-0 left-0 right-0 bg-black/55 px-1 py-0.5 text-[10px] text-white">
+                          {p.note}
+                        </span>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => removePhoto(idx)}
@@ -303,24 +319,35 @@ export default function LaborPayPublicFormPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개, 1MB)
+                파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개)
               </label>
+              <p className="mb-1 text-xs text-gray-500">이미지는 자동 압축, 그 외 파일은 1MB 이하만 가능합니다.</p>
               <input
                 type="file"
+                disabled={compressing || submitting}
                 onChange={(e) => {
                   void addFiles("file", e.target.files);
                   e.target.value = "";
                 }}
-                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium"
+                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium disabled:opacity-50"
               />
               {files.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-sm text-gray-700">
                   {files.map((f, idx) => (
                     <li key={`${f.name}-${idx}`} className="flex items-center justify-between gap-2">
-                      <span className="truncate">{f.name}</span>
+                      <span className="truncate">
+                        {f.name}
+                        {f.note ? <span className="ml-1 text-xs text-gray-500">({f.note})</span> : null}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
+                        onClick={() =>
+                          setFiles((prev) => {
+                            const target = prev[idx];
+                            if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+                            return prev.filter((_, i) => i !== idx);
+                          })
+                        }
                         className="shrink-0 text-xs text-red-600"
                       >
                         삭제
@@ -330,10 +357,11 @@ export default function LaborPayPublicFormPage() {
                 </ul>
               ) : null}
             </div>
+            {compressing && <p className="text-sm text-blue-600">첨부 용량 줄이는 중…</p>}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || compressing}
               className="w-full rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {submitting ? "제출 중…" : "제출하기"}
