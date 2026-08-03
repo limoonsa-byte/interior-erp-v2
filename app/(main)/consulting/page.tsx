@@ -71,6 +71,14 @@ const STATUS_GROUPS: { label: string; options: readonly string[] }[] = [
   { label: "종료", options: ["공사진행", "완료및정산"] },
 ];
 
+/** 목록 단계 필터 (완료 건 보기 옆 체크란) */
+const LIST_STAGE_FILTERS = [
+  { id: "receptionEstimate" as const, label: "접수~견적", statuses: ["접수", "현장상담실측", "견적서작성"] },
+  { id: "materialContract" as const, label: "자재~계약", statuses: ["자재리스트", "계약서작성", "디자인", "계약"] },
+  { id: "construction" as const, label: "공사진행", statuses: ["공사진행"] },
+];
+type ListStageFilterId = (typeof LIST_STAGE_FILTERS)[number]["id"];
+
 /** 자재리스트 이상이면 접수/현장상담실측/견적서작성 선택 비활성화 */
 const STATUS_LOCKED_AFTER = ["자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
@@ -908,10 +916,23 @@ export default function ConsultingPage() {
   const [filterDatePreset, setFilterDatePreset] = useState<"" | "금일" | "작일" | "당월" | "전체">("전체");
   /** 완료 건 보기: 기본 꺼짐(완료 건 숨김) */
   const [showCompleted, setShowCompleted] = useState(false);
+  /** 단계 필터: 기본 전부 켜짐. 모두 끄면 단계 제한 없음(완료 건 보기만 적용) */
+  const [stageFilters, setStageFilters] = useState<Record<ListStageFilterId, boolean>>({
+    receptionEstimate: true,
+    materialContract: true,
+    construction: true,
+  });
 
   const filteredConsultations = React.useMemo(() => {
+    const activeStageStatuses = LIST_STAGE_FILTERS.filter((f) => stageFilters[f.id]).flatMap((f) => f.statuses);
+    const stageFilterActive = LIST_STAGE_FILTERS.some((f) => stageFilters[f.id]);
+
     return consultations.filter((item) => {
       if (!showCompleted && item.status === "완료및정산") return false;
+      if (stageFilterActive) {
+        // 완료 건은 단계 필터에 없고 showCompleted로만 노출
+        if (item.status !== "완료및정산" && !activeStageStatuses.includes(item.status)) return false;
+      }
       if (filterCustomerName.trim()) {
         if (!item.customerName?.toLowerCase().includes(filterCustomerName.trim().toLowerCase())) return false;
       }
@@ -930,7 +951,17 @@ export default function ConsultingPage() {
       }
       return true;
     });
-  }, [consultations, showCompleted, filterCustomerName, filterStatus, filterPic, filterPyungMin, filterDateFrom, filterDateTo]);
+  }, [
+    consultations,
+    showCompleted,
+    stageFilters,
+    filterCustomerName,
+    filterStatus,
+    filterPic,
+    filterPyungMin,
+    filterDateFrom,
+    filterDateTo,
+  ]);
 
   /** 완료 및 정산된 건이 있을 때만 '완료 건 보기' 활성화 */
   const hasCompletedSettled = useMemo(
@@ -1233,19 +1264,40 @@ export default function ConsultingPage() {
         </div>
       </div>
 
-      <label
-        className={`mb-3 inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${hasCompletedSettled ? "cursor-pointer border-gray-300 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
-        title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
-      >
-        <input
-          type="checkbox"
-          checked={showCompleted}
-          onChange={(e) => setShowCompleted(e.target.checked)}
-          disabled={!hasCompletedSettled}
-          className="rounded border-gray-300"
-        />
-        <span className={hasCompletedSettled ? "text-gray-700" : "text-gray-400"}>완료 건 보기</span>
-      </label>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <label
+          className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${hasCompletedSettled ? "cursor-pointer border-gray-300 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
+          title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
+        >
+          <input
+            type="checkbox"
+            checked={showCompleted}
+            onChange={(e) => setShowCompleted(e.target.checked)}
+            disabled={!hasCompletedSettled}
+            className="rounded border-gray-300"
+          />
+          <span className={hasCompletedSettled ? "text-gray-700" : "text-gray-400"}>완료 건 보기</span>
+        </label>
+        {LIST_STAGE_FILTERS.map((f) => (
+          <label
+            key={f.id}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm"
+          >
+            <input
+              type="checkbox"
+              checked={stageFilters[f.id]}
+              onChange={(e) =>
+                setStageFilters((prev) => ({
+                  ...prev,
+                  [f.id]: e.target.checked,
+                }))
+              }
+              className="rounded border-gray-300"
+            />
+            <span className="text-gray-700">{f.label}</span>
+          </label>
+        ))}
+      </div>
 
       <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
         <table className="w-full min-w-[640px] text-center text-sm">
