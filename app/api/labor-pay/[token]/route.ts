@@ -1,8 +1,13 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { mergeLaborPayIntoApproval } from "@/lib/mergeLaborPayIntoApproval";
+import {
+  attachmentsToMeta,
+  normalizeSubmitAttachments,
+  parseAttachmentsJson,
+} from "@/lib/laborPayAttachments";
 
-/** 공개: 인건비 입력 링크 조회 (로그인 없음) */
+/** 공개: 결제 금액 입력 링크 조회 (로그인 없음) */
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -15,7 +20,7 @@ export async function GET(
     }
 
     const result = await sql`
-      SELECT r.id, r.worker_name, r.status, r.amount, r.content, r.submitted_at,
+      SELECT r.id, r.worker_name, r.status, r.amount, r.content, r.submitted_at, r.attachments_json,
              e.title AS estimate_title, e.customer_name, e.address,
              c.labor_pay_notice
       FROM labor_pay_requests r
@@ -29,6 +34,7 @@ export async function GET(
     }
     const r = result.rows[0] as Record<string, unknown>;
     const notice = r.labor_pay_notice != null ? String(r.labor_pay_notice).trim() : "";
+    const attachments = attachmentsToMeta(parseAttachmentsJson(r.attachments_json));
     return NextResponse.json({
       workerName: String(r.worker_name ?? ""),
       status: String(r.status ?? "open"),
@@ -39,14 +45,22 @@ export async function GET(
       customerName: String(r.customer_name ?? ""),
       address: String(r.address ?? ""),
       notice: notice || null,
+      attachments,
     });
   } catch (error) {
     console.error("labor-pay public GET error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/attachments_json/i.test(msg)) {
+      return NextResponse.json(
+        { error: "첨부 기능 마이그레이션이 필요합니다. 잠시 후 다시 시도해 주세요." },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }
 
-/** 공개: 금액·내용 제출 */
+/** 공개: 금액·내용·첨부 제출 */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ token: string }> }
@@ -62,12 +76,16 @@ export async function POST(
     const amountRaw = String(body.amount ?? "").replace(/[^\d.-]/g, "");
     const amount = amountRaw === "" || amountRaw === "-" ? NaN : Number(amountRaw);
     const content = String(body.content ?? "").trim();
+    const normalized = normalizeSubmitAttachments(body.attachments);
 
     if (!Number.isFinite(amount)) {
       return NextResponse.json({ error: "금액을 올바르게 입력해 주세요." }, { status: 400 });
     }
     if (!content) {
       return NextResponse.json({ error: "내용을 입력해 주세요." }, { status: 400 });
+    }
+    if (!normalized.ok) {
+      return NextResponse.json({ error: normalized.error }, { status: 400 });
     }
 
     const existing = await sql`
@@ -89,10 +107,14 @@ export async function POST(
     }
 
     const roundedAmount = Math.round(amount);
+    const attachmentsJson =
+      normalized.attachments.length > 0 ? JSON.stringify(normalized.attachments) : null;
+
     const updated = await sql`
       UPDATE labor_pay_requests
       SET amount = ${roundedAmount},
           content = ${content},
+          attachments_json = ${attachmentsJson},
           status = 'submitted',
           submitted_at = NOW(),
           updated_at = NOW()
@@ -120,12 +142,21 @@ export async function POST(
       });
     } catch (mergeErr) {
       console.error("labor-pay → payment approval merge error:", mergeErr);
-      // 제출 자체는 성공. 승인서 반영 실패는 로그만 남김.
     }
 
-    return NextResponse.json({ message: "제출되었습니다. 감사합니다." });
+    return NextResponse.json({
+      message: "제출되었습니다. 감사합니다.",
+      attachments: attachmentsToMeta(normalized.attachments),
+    });
   } catch (error) {
     console.error("labor-pay public POST error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/attachments_json/i.test(msg)) {
+      return NextResponse.json(
+        { error: "첨부 기능 마이그레이션이 필요합니다. 배포 후 다시 시도해 주세요." },
+        { status: 500 }
+      );
+    }
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
   }
 }

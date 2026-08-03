@@ -34,6 +34,7 @@ export async function POST(
           status = 'open',
           amount = NULL,
           content = NULL,
+          attachments_json = NULL,
           submitted_at = NULL,
           updated_at = NOW()
       WHERE id = ${requestId} AND company_id = ${company.id}
