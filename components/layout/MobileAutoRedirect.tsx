@@ -13,6 +13,7 @@ const mobileTargets = new Set([
   "/material-order",
   "/material-list",
   "/work-log",
+  "/labor-pay",
   "/payment",
   "/settlement",
   "/statistics",
@@ -28,6 +29,9 @@ function toMobilePath(pathname: string): string | null {
   if (mobileTargets.has(pathname)) return `/mobile${pathname}`;
   if (pathname.startsWith("/schedule/")) return `/mobile${pathname}`;
   if (pathname.startsWith("/payment/")) return `/mobile${pathname}`;
+  if (pathname.startsWith("/labor-pay/") && !pathname.startsWith("/labor-pay/f")) {
+    return `/mobile${pathname}`;
+  }
   return null;
 }
 

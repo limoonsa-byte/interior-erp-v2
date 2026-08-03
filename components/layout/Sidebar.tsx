@@ -23,6 +23,7 @@ import {
   ExternalLink,
   ListChecks,
   Signature,
+  Banknote,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
 
@@ -35,6 +36,7 @@ const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ 
   { href: "/material-order", label: "자재 발주", icon: Package },
   { href: "/material-list", label: "현장용 자재리스트", icon: ListChecks },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
+  { href: "/labor-pay", label: "인건비 지급", icon: Banknote },
   { href: "/payment", label: "결제 승인 관리", icon: CreditCard },
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },

@@ -87,6 +87,10 @@ export async function PUT(request: Request) {
       addedRowsByLabel: body.addedRowsByLabel ?? {},
       memoByKey: body.memoByKey ?? {},
       visibleOrderLabels: Array.isArray(body.visibleOrderLabels) ? body.visibleOrderLabels : [],
+      displayTitleByLabel:
+        body.displayTitleByLabel != null && typeof body.displayTitleByLabel === "object"
+          ? body.displayTitleByLabel
+          : {},
     };
     const dataJson = JSON.stringify(data);
 

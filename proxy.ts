@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-/** 로그인 없이 접근 가능한 경로 (서명 링크는 외부에 전달되므로 공개) */
-const publicPaths = ["/login", "/sign"];
+/** 로그인 없이 접근 가능한 경로 (서명·인건비 공개 링크는 외부 전달용) */
+const publicPaths = ["/login", "/sign", "/labor-pay/f"];
 const mobilePrefix = "/mobile";
 /**
  * 모바일에서 PC 경로로 직접 접근해도 모바일 화면으로 자동 전환되는 라우트.
@@ -17,6 +17,7 @@ const mobileTargets = new Set([
   "/material-order",
   "/material-list",
   "/work-log",
+  "/labor-pay",
   "/payment",
   "/settlement",
   "/statistics",
@@ -36,6 +37,9 @@ function toMobilePath(pathname: string): string | null {
   if (mobileTargets.has(pathname)) return `${mobilePrefix}${pathname}`;
   if (pathname.startsWith("/schedule/")) return `${mobilePrefix}${pathname}`;
   if (pathname.startsWith("/payment/")) return `${mobilePrefix}${pathname}`;
+  if (pathname.startsWith("/labor-pay/") && !pathname.startsWith("/labor-pay/f")) {
+    return `${mobilePrefix}${pathname}`;
+  }
   return null;
 }
 

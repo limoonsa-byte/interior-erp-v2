@@ -505,6 +505,26 @@ async function migrate() {
     await sql`CREATE INDEX IF NOT EXISTS shop_taxonomy_sub_company_line_idx ON shop_taxonomy_subcategories(company_id, shop_line, sort_order)`;
     console.log("[migrate] shop_taxonomy OK");
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS labor_pay_requests (
+        id SERIAL PRIMARY KEY,
+        company_id INT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+        estimate_id INT NOT NULL REFERENCES estimates(id) ON DELETE CASCADE,
+        worker_id INT REFERENCES company_workers(id) ON DELETE SET NULL,
+        worker_name TEXT NOT NULL DEFAULT '',
+        access_token TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'open',
+        amount NUMERIC(14,0),
+        content TEXT,
+        submitted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS labor_pay_requests_company_estimate_idx ON labor_pay_requests(company_id, estimate_id)`;
+    await sql`CREATE INDEX IF NOT EXISTS labor_pay_requests_token_idx ON labor_pay_requests(access_token)`;
+    console.log("[migrate] labor_pay_requests OK");
+
     // 한 번만: 빈 수량이 0으로 잘못 저장된 견적/템플릿을 null(빈칸)로 복구
     await sql`
       CREATE TABLE IF NOT EXISTS schema_data_migrations (
