@@ -64,6 +64,43 @@ export function attachmentsToMeta(list: LaborPayAttachmentStored[]): LaborPayAtt
   }));
 }
 
+/** 목록용: data 없이 kind/name/mime/index만 파싱 (전체 data 파싱 실패 시 빈 배열) */
+export function parseAttachmentsMetaOnly(raw: unknown): LaborPayAttachmentMeta[] {
+  if (raw == null || raw === "") return [];
+  try {
+    // DB에서 이미 meta 배열로 온 경우
+    const text = typeof raw === "string" ? raw.trim() : JSON.stringify(raw);
+    if (!text || text === "[]") return [];
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    // meta only rows (from SQL) or full stored rows
+    return parsed
+      .map((item, i) => {
+        if (!item || typeof item !== "object") return null;
+        const o = item as Record<string, unknown>;
+        const kind = o.kind === "file" ? "file" : o.kind === "photo" ? "photo" : null;
+        if (!kind) return null;
+        const index = o.index != null && !Number.isNaN(Number(o.index)) ? Number(o.index) : i;
+        return {
+          kind,
+          name: String(o.name ?? "").trim() || "attachment",
+          mime: String(o.mime ?? "").trim().toLowerCase() || "application/octet-stream",
+          index,
+        } as LaborPayAttachmentMeta;
+      })
+      .filter((x): x is LaborPayAttachmentMeta => x != null);
+  } catch {
+    return [];
+  }
+}
+
+export function normalizeAttachmentMime(mime: string, kind: LaborPayAttachmentKind): string {
+  const m = (mime || "").trim().toLowerCase();
+  if (m === "image/jpg") return "image/jpeg";
+  if (m) return m;
+  return kind === "photo" ? "image/jpeg" : "application/octet-stream";
+}
+
 /** 공개/회사 제출 payload 검증 후 저장용 배열 반환 */
 export function normalizeSubmitAttachments(raw: unknown): {
   ok: true;

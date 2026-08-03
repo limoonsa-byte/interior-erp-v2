@@ -181,6 +181,34 @@ export default function LaborPayDetailPage() {
     }
   };
 
+  const openAttachment = async (requestId: number, a: LaborPayAttachmentMeta) => {
+    try {
+      const res = await fetch(`/api/company/labor-pay/${requestId}/attachment?index=${a.index}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error || `첨부를 열 수 없습니다. (${res.status})`);
+      }
+      const blob = await res.blob();
+      if (!blob.size) throw new Error("첨부 데이터가 비어 있습니다.");
+      const objectUrl = URL.createObjectURL(blob);
+      const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = a.name || (a.kind === "photo" ? "photo.jpg" : "file");
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "첨부를 열 수 없습니다.");
+    }
+  };
+
   const sendSms = (r: LaborPayRequest) => {
     const phone =
       (r.workerId != null ? workerPhoneById.get(r.workerId) : undefined) ?? "";
@@ -371,14 +399,14 @@ export default function LaborPayDetailPage() {
                           <ul className="space-y-1 text-xs">
                             {r.attachments.map((a) => (
                               <li key={`${r.id}-${a.index}`}>
-                                <a
-                                  href={`/api/company/labor-pay/${r.id}/attachment?index=${a.index}`}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-blue-600 hover:underline"
+                                <button
+                                  type="button"
+                                  onClick={() => void openAttachment(r.id, a)}
+                                  className="text-left text-blue-600 hover:underline"
+                                  title="클릭하여 보기/다운로드"
                                 >
                                   {a.kind === "photo" ? "사진" : "파일"} · {a.name}
-                                </a>
+                                </button>
                               </li>
                             ))}
                           </ul>

@@ -1,6 +1,6 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { parseAttachmentsJson } from "@/lib/laborPayAttachments";
+import { normalizeAttachmentMime, parseAttachmentsJson } from "@/lib/laborPayAttachments";
 
 /** 공개: 제출된 첨부 파일 다운로드/미리보기 */
 export async function GET(
