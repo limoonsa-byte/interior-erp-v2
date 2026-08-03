@@ -36,17 +36,20 @@ export async function GET(
     }
 
     const buf = Buffer.from(item.data, "base64");
+    if (!buf.length) {
+      return NextResponse.json({ error: "첨부 데이터가 비어 있습니다." }, { status: 500 });
+    }
+    const mime = normalizeAttachmentMime(item.mime, item.kind);
     const headers = new Headers();
-    headers.set("Content-Type", item.mime || "application/octet-stream");
+    headers.set("Content-Type", mime);
     headers.set("Content-Length", String(buf.length));
+    const safeName = item.name.replace(/[\r\n"]/g, "_");
     headers.set(
       "Content-Disposition",
-      item.kind === "photo"
-        ? `inline; filename*=UTF-8''${encodeURIComponent(item.name)}`
-        : `attachment; filename*=UTF-8''${encodeURIComponent(item.name)}`
+      `${item.kind === "photo" && mime.startsWith("image/") ? "inline" : "attachment"}; filename="${encodeURIComponent(safeName)}"; filename*=UTF-8''${encodeURIComponent(safeName)}`
     );
-    headers.set("Cache-Control", "private, max-age=3600");
-    return new NextResponse(buf, { status: 200, headers });
+    headers.set("Cache-Control", "private, no-store");
+    return new NextResponse(new Uint8Array(buf), { status: 200, headers });
   } catch (error) {
     console.error("labor-pay public attachment GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });
