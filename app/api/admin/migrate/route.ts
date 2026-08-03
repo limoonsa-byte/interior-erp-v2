@@ -64,6 +64,8 @@ export async function POST(request: Request) {
 
     await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS rating SMALLINT`;
     results.push("company_workers.rating 컬럼 확인");
+    await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS bank_account TEXT`;
+    results.push("company_workers.bank_account 컬럼 확인");
 
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS contract_meeting_at TEXT`;
     results.push("contract_meeting_at 컬럼 확인");

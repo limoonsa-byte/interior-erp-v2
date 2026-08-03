@@ -11,6 +11,7 @@ type PublicLaborPay = {
   siteTitle: string;
   customerName: string;
   address: string;
+  notice?: string | null;
 };
 
 export default function LaborPayPublicFormPage() {
@@ -107,6 +108,12 @@ export default function LaborPayPublicFormPage() {
             <span className="text-gray-500">인부</span> · {data?.workerName || "-"}
           </div>
         </div>
+
+        {data?.notice ? (
+          <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 px-3 py-3 text-sm text-blue-900 whitespace-pre-wrap">
+            {data.notice}
+          </div>
+        ) : null}
 
         {done ? (
           <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">

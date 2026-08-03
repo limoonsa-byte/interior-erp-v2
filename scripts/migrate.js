@@ -207,6 +207,8 @@ async function migrate() {
     console.log("[migrate] company_workers OK");
     await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS rating SMALLINT`;
     console.log("[migrate] company_workers.rating OK");
+    await sql`ALTER TABLE company_workers ADD COLUMN IF NOT EXISTS bank_account TEXT`;
+    console.log("[migrate] company_workers.bank_account OK");
     await sql`
       CREATE TABLE IF NOT EXISTS master_default_order_items (
         id INT PRIMARY KEY DEFAULT 1,
@@ -524,6 +526,8 @@ async function migrate() {
     await sql`CREATE INDEX IF NOT EXISTS labor_pay_requests_company_estimate_idx ON labor_pay_requests(company_id, estimate_id)`;
     await sql`CREATE INDEX IF NOT EXISTS labor_pay_requests_token_idx ON labor_pay_requests(access_token)`;
     console.log("[migrate] labor_pay_requests OK");
+    await sql`ALTER TABLE companies ADD COLUMN IF NOT EXISTS labor_pay_notice TEXT`;
+    console.log("[migrate] companies.labor_pay_notice OK");
 
     // 한 번만: 빈 수량이 0으로 잘못 저장된 견적/템플릿을 null(빈칸)로 복구
     await sql`

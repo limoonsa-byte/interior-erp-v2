@@ -35,6 +35,7 @@ export async function PATCH(
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const role = typeof body.role === "string" ? body.role.trim() : "";
     const memo = typeof body.memo === "string" ? body.memo.trim() : "";
+    const bankAccount = typeof body.bankAccount === "string" ? body.bankAccount.trim() : "";
     const rawRating = body.rating != null ? Number(body.rating) : undefined;
     const rating = rawRating != null && !Number.isNaN(rawRating) ? Math.min(5, Math.max(1, Math.round(rawRating))) : null;
 
@@ -44,7 +45,7 @@ export async function PATCH(
 
     const result = await sql`
       UPDATE company_workers
-      SET name = ${name}, phone = ${phone || null}, role = ${role || null}, memo = ${memo || null}, rating = ${rating}
+      SET name = ${name}, phone = ${phone || null}, role = ${role || null}, memo = ${memo || null}, rating = ${rating}, bank_account = ${bankAccount || null}
       WHERE id = ${workerId} AND company_id = ${company.id}
       RETURNING id
     `;

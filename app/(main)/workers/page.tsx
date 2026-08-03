@@ -12,6 +12,7 @@ type WorkerItem = {
   role: string;
   memo: string;
   rating: number | null;
+  bankAccount: string;
   createdAt: string | null;
 };
 
@@ -186,6 +187,7 @@ export default function WorkersPage() {
   const [phone, setPhone] = useState("");
   const [role, setRole] = useState("");
   const [memo, setMemo] = useState("");
+  const [bankAccount, setBankAccount] = useState("");
   const [rating, setRating] = useState<number | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -195,6 +197,7 @@ export default function WorkersPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editRole, setEditRole] = useState("");
   const [editMemo, setEditMemo] = useState("");
+  const [editBankAccount, setEditBankAccount] = useState("");
   const [editRating, setEditRating] = useState<number | null>(null);
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -215,7 +218,7 @@ export default function WorkersPage() {
       .then((data) => {
         if (Array.isArray(data)) {
           setList(
-            data.map((row: { id: number; name: string; phone?: string; role?: string; memo?: string; rating?: number | null; createdAt?: string | null }) => {
+            data.map((row: { id: number; name: string; phone?: string; role?: string; memo?: string; bankAccount?: string; rating?: number | null; createdAt?: string | null }) => {
               const r = row.rating != null ? Math.min(5, Math.max(1, Math.round(Number(row.rating)))) : null;
               return {
                 id: row.id,
@@ -223,6 +226,7 @@ export default function WorkersPage() {
                 phone: row.phone ?? "",
                 role: row.role ?? "",
                 memo: row.memo ?? "",
+                bankAccount: row.bankAccount ?? "",
                 rating: r as number | null,
                 createdAt: row.createdAt ?? null,
               };
@@ -385,6 +389,7 @@ export default function WorkersPage() {
         phone: phone.trim(),
         role: role.trim(),
         memo: memo.trim(),
+        bankAccount: bankAccount.trim(),
         rating: rating ?? undefined,
       }),
     })
@@ -395,6 +400,7 @@ export default function WorkersPage() {
           setPhone("");
           setRole("");
           setMemo("");
+          setBankAccount("");
           setRating(null);
           loadList();
         } else {
@@ -411,6 +417,7 @@ export default function WorkersPage() {
     setEditPhone(item.phone);
     setEditRole(item.role);
     setEditMemo(item.memo);
+    setEditBankAccount(item.bankAccount);
     setEditRating(item.rating);
     setEditError(null);
   };
@@ -425,6 +432,7 @@ export default function WorkersPage() {
         phone: item.phone,
         role: item.role,
         memo: item.memo,
+        bankAccount: item.bankAccount,
         rating: newRating,
       }),
     })
@@ -454,6 +462,7 @@ export default function WorkersPage() {
         phone: editPhone.trim(),
         role: editRole.trim(),
         memo: editMemo.trim(),
+        bankAccount: editBankAccount.trim(),
         rating: editRating ?? undefined,
       }),
     })
@@ -672,7 +681,7 @@ export default function WorkersPage() {
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <h2 className="mb-3 text-sm font-medium text-gray-700">인부 추가</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <input
             type="text"
             value={name}
@@ -695,6 +704,14 @@ export default function WorkersPage() {
             onChange={(e) => setRole(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleAdd()}
             placeholder="직종 / 역할"
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          <input
+            type="text"
+            value={bankAccount}
+            onChange={(e) => setBankAccount(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            placeholder="계좌 (예: 국민 123-456-789012)"
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
           />
           <input
@@ -773,6 +790,7 @@ export default function WorkersPage() {
                   <th className="px-4 py-3 font-medium text-gray-700">이름</th>
                   <th className="px-4 py-3 font-medium text-gray-700">별점</th>
                   <th className="px-4 py-3 font-medium text-gray-700">전화번호</th>
+                  <th className="px-4 py-3 font-medium text-gray-700">계좌</th>
                   <th className="px-4 py-3 font-medium text-gray-700">직종/역할</th>
                   <th className="px-4 py-3 font-medium text-gray-700">비고</th>
                   <th className="hidden min-w-[180px] whitespace-nowrap px-4 py-3 font-medium text-gray-700 sm:table-cell">관리</th>
@@ -830,6 +848,9 @@ export default function WorkersPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-gray-600">{item.phone || "-"}</td>
+                      <td className="max-w-[180px] truncate px-4 py-3 text-gray-600" title={item.bankAccount}>
+                        {item.bankAccount || "-"}
+                      </td>
                       <td className="px-4 py-3 text-gray-600">{item.role || "-"}</td>
                       <td className="max-w-[200px] truncate px-4 py-3 text-gray-600" title={item.memo}>
                         {item.memo || "-"}
@@ -871,6 +892,13 @@ export default function WorkersPage() {
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value)}
                 placeholder="전화번호"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                value={editBankAccount}
+                onChange={(e) => setEditBankAccount(e.target.value)}
+                placeholder="계좌 (예: 국민 123-456-789012)"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
               <input

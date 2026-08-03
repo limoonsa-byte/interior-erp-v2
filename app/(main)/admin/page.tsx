@@ -24,6 +24,7 @@ type ModalKind =
   | "password-change"
   | "company-login-password"
   | "drawing-api"
+  | "labor-pay-notice"
   | "estimate-templates"
   | "logo-stamp"
   | "company-contract"
@@ -64,6 +65,11 @@ export default function AdminPage() {
   const [drawingApiUrl, setDrawingApiUrl] = useState("");
   const [drawingApiLoading, setDrawingApiLoading] = useState(false);
   const [drawingApiMessage, setDrawingApiMessage] = useState("");
+
+  const [laborPayNotice, setLaborPayNotice] = useState("");
+  const [laborPayNoticeLoading, setLaborPayNoticeLoading] = useState(false);
+  const [laborPayNoticeSaving, setLaborPayNoticeSaving] = useState(false);
+  const [laborPayNoticeMessage, setLaborPayNoticeMessage] = useState("");
 
   const [estimateTemplates, setEstimateTemplates] = useState<EstimateTemplateItem[]>([]);
   const [defaultEstimateTemplates, setDefaultEstimateTemplates] = useState<DefaultEstimateTemplate[]>([]);
@@ -186,6 +192,19 @@ export default function AdminPage() {
         })
         .catch(() => {})
         .finally(() => setDrawingApiLoading(false));
+    }
+    if (modal === "labor-pay-notice") {
+      queueMicrotask(() => {
+        setLaborPayNoticeLoading(true);
+        setLaborPayNoticeMessage("");
+      });
+      fetch("/api/company")
+        .then((res) => res.json())
+        .then((data) => {
+          setLaborPayNotice(data.laborPayNotice || "");
+        })
+        .catch(() => setLaborPayNotice(""))
+        .finally(() => setLaborPayNoticeLoading(false));
     }
     if (modal === "estimate-templates") {
       queueMicrotask(() => {
@@ -861,6 +880,30 @@ export default function AdminPage() {
       .finally(() => setDrawingApiLoading(false));
   };
 
+  const handleSaveLaborPayNotice = () => {
+    setLaborPayNoticeMessage("");
+    setLaborPayNoticeSaving(true);
+    fetch("/api/company", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ laborPayNotice: laborPayNotice.trim() }),
+    })
+      .then(async (res) => {
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setLaborPayNoticeMessage("저장되었습니다.");
+          setTimeout(() => {
+            setModal(null);
+            setLaborPayNoticeMessage("");
+          }, 1500);
+        } else {
+          setLaborPayNoticeMessage((data as { error?: string }).error || "저장 실패");
+        }
+      })
+      .catch(() => setLaborPayNoticeMessage("오류가 발생했습니다."))
+      .finally(() => setLaborPayNoticeSaving(false));
+  };
+
   const handleSaveCompanyInfo = () => {
     setCompanyInfoMessage("");
     setCompanyInfoSaving(true);
@@ -984,6 +1027,15 @@ export default function AdminPage() {
             className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
           >
             회사 정보
+          </button>
+        </li>
+        <li>
+          <button
+            type="button"
+            onClick={() => setModal("labor-pay-notice")}
+            className="min-h-[48px] w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-medium text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+          >
+            인건비 지급 안내
           </button>
         </li>
         <li>
@@ -1390,6 +1442,65 @@ export default function AdminPage() {
                 disabled={drawingApiLoading}
               >
                 {drawingApiLoading ? "저장 중..." : "저장"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 인건비 지급 안내 모달 */}
+      {modal === "labor-pay-notice" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">인건비 지급 안내</h2>
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-3 text-sm text-gray-600">
+              인부에게 보낸 입력 링크에 표시됩니다. 결제일이나 안내 문구를 적어 주세요.
+            </p>
+            <div className="mb-3">
+              <label className="mb-1 block text-xs font-medium text-gray-600">안내 문구</label>
+              <textarea
+                value={laborPayNotice}
+                onChange={(e) => setLaborPayNotice(e.target.value)}
+                placeholder={"예: 결제일: 매월 25일\n입금 후 문자 드립니다."}
+                className="min-h-[120px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                disabled={laborPayNoticeLoading || laborPayNoticeSaving}
+              />
+            </div>
+            {laborPayNoticeMessage && (
+              <p
+                className={`mb-3 text-sm ${
+                  laborPayNoticeMessage.includes("저장되었습니다") ? "text-green-600" : "text-red-600"
+                }`}
+              >
+                {laborPayNoticeMessage}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModal(null)}
+                className="flex-1 rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                disabled={laborPayNoticeSaving}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLaborPayNotice}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                disabled={laborPayNoticeLoading || laborPayNoticeSaving}
+              >
+                {laborPayNoticeSaving ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>

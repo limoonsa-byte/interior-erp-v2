@@ -23,7 +23,7 @@ export async function GET() {
     }
 
     const result = await sql`
-      SELECT id, name, phone, role, memo, rating, created_at
+      SELECT id, name, phone, role, memo, rating, bank_account, created_at
       FROM company_workers
       WHERE company_id = ${company.id}
       ORDER BY name ASC
@@ -31,7 +31,7 @@ export async function GET() {
 
     const list = sortByKoreanDisplayName(
       result.rows.map((row) => {
-      const r = row as { id: number; name: string; phone?: string | null; role?: string | null; memo?: string | null; rating?: number | null; created_at?: string | null };
+      const r = row as { id: number; name: string; phone?: string | null; role?: string | null; memo?: string | null; rating?: number | null; bank_account?: string | null; created_at?: string | null };
       const rating = r.rating != null ? Math.min(5, Math.max(1, Math.round(Number(r.rating)))) : null;
       return {
         id: Number(r.id),
@@ -40,6 +40,7 @@ export async function GET() {
         role: r.role ?? "",
         memo: r.memo ?? "",
         rating: rating as number | null,
+        bankAccount: r.bank_account ?? "",
         createdAt: r.created_at ?? null,
       };
       }),
@@ -70,6 +71,7 @@ export async function POST(request: Request) {
     const phone = typeof body.phone === "string" ? body.phone.trim() : "";
     const role = typeof body.role === "string" ? body.role.trim() : "";
     const memo = typeof body.memo === "string" ? body.memo.trim() : "";
+    const bankAccount = typeof body.bankAccount === "string" ? body.bankAccount.trim() : "";
     const rawRating = body.rating != null ? Number(body.rating) : null;
     const rating = rawRating != null && !Number.isNaN(rawRating) ? Math.min(5, Math.max(1, Math.round(rawRating))) : null;
     if (!name) {
@@ -77,8 +79,8 @@ export async function POST(request: Request) {
     }
 
     await sql`
-      INSERT INTO company_workers (company_id, name, phone, role, memo, rating)
-      VALUES (${company.id}, ${name}, ${phone || null}, ${role || null}, ${memo || null}, ${rating})
+      INSERT INTO company_workers (company_id, name, phone, role, memo, rating, bank_account)
+      VALUES (${company.id}, ${name}, ${phone || null}, ${role || null}, ${memo || null}, ${rating}, ${bankAccount || null})
     `;
 
     return NextResponse.json({ message: "추가되었습니다." }, { status: 200 });

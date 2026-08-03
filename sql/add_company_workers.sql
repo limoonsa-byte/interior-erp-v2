@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS company_workers (
   role TEXT,
   memo TEXT,
   rating SMALLINT CHECK (rating >= 1 AND rating <= 5),
+  bank_account TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

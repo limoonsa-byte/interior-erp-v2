@@ -15,9 +15,11 @@ export async function GET(
 
     const result = await sql`
       SELECT r.id, r.worker_name, r.status, r.amount, r.content, r.submitted_at,
-             e.title AS estimate_title, e.customer_name, e.address
+             e.title AS estimate_title, e.customer_name, e.address,
+             c.labor_pay_notice
       FROM labor_pay_requests r
       JOIN estimates e ON e.id = r.estimate_id AND e.company_id = r.company_id
+      JOIN companies c ON c.id = r.company_id
       WHERE r.access_token = ${accessToken}
       LIMIT 1
     `;
@@ -25,6 +27,7 @@ export async function GET(
       return NextResponse.json({ error: "링크를 찾을 수 없거나 만료되었습니다." }, { status: 404 });
     }
     const r = result.rows[0] as Record<string, unknown>;
+    const notice = r.labor_pay_notice != null ? String(r.labor_pay_notice).trim() : "";
     return NextResponse.json({
       workerName: String(r.worker_name ?? ""),
       status: String(r.status ?? "open"),
@@ -34,6 +37,7 @@ export async function GET(
       siteTitle: String(r.estimate_title ?? ""),
       customerName: String(r.customer_name ?? ""),
       address: String(r.address ?? ""),
+      notice: notice || null,
     });
   } catch (error) {
     console.error("labor-pay public GET error:", error);
