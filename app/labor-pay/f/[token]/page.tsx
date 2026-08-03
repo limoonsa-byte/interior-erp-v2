@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LABOR_PAY_MAX_BYTES,
   LABOR_PAY_MAX_FILES,
@@ -35,6 +35,9 @@ type PendingAttachment = {
 export default function LaborPayPublicFormPage() {
   const params = useParams();
   const token = String(params?.token ?? "").trim();
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const albumRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [data, setData] = useState<PublicLaborPay | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +79,11 @@ export default function LaborPayPublicFormPage() {
       photos.forEach((p) => {
         if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
       });
+      files.forEach((f) => {
+        if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
+      });
     };
-  }, [photos]);
+  }, [photos, files]);
 
   const addFiles = async (kind: LaborPayAttachmentKind, fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -85,18 +91,30 @@ export default function LaborPayPublicFormPage() {
     setCompressing(true);
     const incoming = Array.from(fileList);
     const next: PendingAttachment[] = [];
+    const maxCount = kind === "photo" ? LABOR_PAY_MAX_PHOTOS : LABOR_PAY_MAX_FILES;
+    const already = kind === "photo" ? photos.length : files.length;
+    const room = Math.max(0, maxCount - already);
+    if (room <= 0) {
+      setError(
+        kind === "photo"
+          ? `사진은 최대 ${LABOR_PAY_MAX_PHOTOS}장까지입니다.`
+          : `파일은 최대 ${LABOR_PAY_MAX_FILES}개까지입니다.`
+      );
+      setCompressing(false);
+      return;
+    }
+    const toProcess = incoming.slice(0, room);
 
     try {
-      for (const file of incoming) {
-        // 사진 칸: 이미지가 아니어도 카메라/갤러리 결과면 압축 시도
+      for (const file of toProcess) {
+        // 사진 칸: 무조건 1MB 이하 JPEG. 파일 칸: 이미지면 압축, 실패·비이미지는 규칙대로 처리.
         const compressed = await compressAttachmentFile(file, LABOR_PAY_MAX_BYTES, {
-          // 사진 칸은 무조건 이미지 압축. 파일 칸도 image/* 이면 압축.
-          preferImage: kind === "photo" || Boolean(file.type && file.type.startsWith("image/")),
+          forceImage: kind === "photo",
         });
         if (compressed.bytes > LABOR_PAY_MAX_BYTES) {
           throw new Error(`첨부를 1MB 이하로 만들지 못했습니다. (${compressed.name})`);
         }
-        const data = await blobToBase64(compressed.blob);
+        const dataB64 = await blobToBase64(compressed.blob);
         const previewUrl =
           kind === "photo" || compressed.mime.startsWith("image/")
             ? URL.createObjectURL(compressed.blob)
@@ -106,28 +124,24 @@ export default function LaborPayPublicFormPage() {
           kind,
           name: compressed.name || (kind === "photo" ? "photo.jpg" : "file"),
           mime: compressed.mime,
-          data,
+          data: dataB64,
           previewUrl,
           note: compressed.compressed ? `${kb}KB로 자동 축소` : `${kb}KB`,
         });
       }
 
+      if (incoming.length > room) {
+        setError(
+          kind === "photo"
+            ? `사진은 최대 ${LABOR_PAY_MAX_PHOTOS}장까지라 일부만 추가했습니다.`
+            : `파일은 최대 ${LABOR_PAY_MAX_FILES}개까지라 일부만 추가했습니다.`
+        );
+      }
+
       if (kind === "photo") {
-        setPhotos((prev) => {
-          const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_PHOTOS);
-          prev.slice(merged.length).forEach((p) => {
-            if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-          });
-          return merged;
-        });
+        setPhotos((prev) => [...prev, ...next].slice(0, LABOR_PAY_MAX_PHOTOS));
       } else {
-        setFiles((prev) => {
-          const merged = [...prev, ...next].slice(0, LABOR_PAY_MAX_FILES);
-          prev.slice(merged.length).forEach((p) => {
-            if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
-          });
-          return merged;
-        });
+        setFiles((prev) => [...prev, ...next].slice(0, LABOR_PAY_MAX_FILES));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "첨부 처리에 실패했습니다.");
@@ -281,19 +295,52 @@ export default function LaborPayPublicFormPage() {
               <label className="mb-1 block text-sm font-medium text-gray-700">
                 사진 첨부 (최대 {LABOR_PAY_MAX_PHOTOS}장)
               </label>
-              <p className="mb-1 text-xs text-gray-500">촬영·선택 즉시 자동으로 1MB 이하로 줄입니다.</p>
+              <p className="mb-2 text-xs text-gray-500">
+                촬영·앨범 선택 즉시 <span className="font-medium text-gray-700">자동으로 1MB 이하</span>로
+                줄입니다.
+              </p>
               <input
+                ref={cameraRef}
                 type="file"
                 accept="image/*"
                 capture="environment"
-                multiple
-                disabled={compressing || submitting}
+                disabled={compressing || submitting || photos.length >= LABOR_PAY_MAX_PHOTOS}
                 onChange={(e) => {
                   void addFiles("photo", e.target.files);
                   e.target.value = "";
                 }}
-                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium disabled:opacity-50"
+                className="hidden"
               />
+              <input
+                ref={albumRef}
+                type="file"
+                accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp"
+                multiple
+                disabled={compressing || submitting || photos.length >= LABOR_PAY_MAX_PHOTOS}
+                onChange={(e) => {
+                  void addFiles("photo", e.target.files);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={compressing || submitting || photos.length >= LABOR_PAY_MAX_PHOTOS}
+                  onClick={() => cameraRef.current?.click()}
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  카메라 촬영
+                </button>
+                <button
+                  type="button"
+                  disabled={compressing || submitting || photos.length >= LABOR_PAY_MAX_PHOTOS}
+                  onClick={() => albumRef.current?.click()}
+                  className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  앨범에서 선택
+                </button>
+              </div>
               {photos.length > 0 ? (
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {photos.map((p, idx) => (
@@ -319,18 +366,30 @@ export default function LaborPayPublicFormPage() {
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개)
+                파일 첨부 (최대 {LABOR_PAY_MAX_FILES}개 · 개당 1MB)
               </label>
-              <p className="mb-1 text-xs text-gray-500">이미지·사진 파일은 자동으로 1MB 이하로 줄입니다.</p>
+              <p className="mb-2 text-xs text-gray-500">
+                사진·이미지 파일도 여기로 넣으면 자동으로 1MB 이하로 줄입니다.
+              </p>
               <input
+                ref={fileRef}
                 type="file"
-                disabled={compressing || submitting}
+                accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.hwp,.xls,.xlsx,.zip,.txt"
+                disabled={compressing || submitting || files.length >= LABOR_PAY_MAX_FILES}
                 onChange={(e) => {
                   void addFiles("file", e.target.files);
                   e.target.value = "";
                 }}
-                className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium disabled:opacity-50"
+                className="hidden"
               />
+              <button
+                type="button"
+                disabled={compressing || submitting || files.length >= LABOR_PAY_MAX_FILES}
+                onClick={() => fileRef.current?.click()}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+              >
+                파일 선택
+              </button>
               {files.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-sm text-gray-700">
                   {files.map((f, idx) => (
@@ -357,7 +416,7 @@ export default function LaborPayPublicFormPage() {
                 </ul>
               ) : null}
             </div>
-            {compressing && <p className="text-sm text-blue-600">첨부 용량 줄이는 중…</p>}
+            {compressing && <p className="text-sm text-blue-600">첨부 용량 줄이는 중… (1MB 이하)</p>}
             {error && <p className="text-sm text-red-600">{error}</p>}
             <button
               type="submit"
