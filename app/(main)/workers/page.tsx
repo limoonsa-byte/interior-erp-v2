@@ -634,8 +634,8 @@ export default function WorkersPage() {
     <div className="p-4 md:p-6">
       <h1 className="mb-1 text-xl font-semibold text-gray-900">현장 인부 DB</h1>
       <p className="mb-4 text-sm text-gray-600">
-        회사별로 등록한 현장 인부를 저장·관리합니다. 여러 명을 체크한 뒤 「일정 보내기」로 문자·카카오톡 전송 화면을 엽니다.
-        (붙여넣기 없이, 문자/카톡에서 보내기만 누르면 됩니다. 서버에서 자동 발송은 유료 API가 필요합니다.)
+        회사별로 등록한 현장 인부를 저장·관리합니다. 여러 명을 체크한 뒤 「일정 보내기」로 보냅니다. 일정 이미지는 JPG
+        저장 후 문자 앱에서 사진 첨부하면 됩니다.
       </p>
 
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
