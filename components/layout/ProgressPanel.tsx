@@ -15,6 +15,7 @@ import { useRightPanel } from "./RightPanelContext";
 
 type Consultation = {
   id: number;
+  title?: string;
   customerName?: string;
   status?: string;
   constructionStartAt?: string;
@@ -53,6 +54,7 @@ type Estimate = {
   consultationId?: number;
   customerName?: string;
   title?: string;
+  displayTitle?: string;
 };
 
 /** 전체일정 `/schedule` 과 동일한 날짜 파싱 */
@@ -268,7 +270,7 @@ export function ProgressPanel() {
                         href={`/consulting?detail=${c.id}`}
                         className="block truncate rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
                       >
-                        {c.customerName || `상담 #${c.id}`}
+                        {(c.title ?? "").trim() || c.customerName || `상담 #${c.id}`}
                       </Link>
                     </li>
                   ))}
@@ -289,7 +291,7 @@ export function ProgressPanel() {
                         href={`/estimate?estimateId=${e.id}`}
                         className="min-w-0 flex-1 truncate rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
                       >
-                        {e.title || e.customerName || `견적 #${e.id}`}
+                        {e.displayTitle || e.title || e.customerName || `견적 #${e.id}`}
                       </Link>
                       <Link
                         href={`/chat?estimateId=${e.id}`}

@@ -11,6 +11,7 @@ type Estimate = {
   customerName?: string;
   contact?: string;
   title?: string;
+  displayTitle?: string;
   estimateDate?: string;
 };
 
@@ -437,7 +438,9 @@ export default function PaymentDetailPage() {
 
       {estimate && (
         <div className="rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-700">
-          <p className="font-medium text-gray-900">{estimate.title?.trim() ? estimate.title : "제목 없음"}</p>
+          <p className="font-medium text-gray-900">
+            {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+          </p>
           <p className="mt-1 text-xs text-gray-500">
             고객명: {estimate.customerName || "-"} / 연락처: {estimate.contact?.trim() ? estimate.contact : "-"}
           </p>
@@ -633,7 +636,10 @@ export default function PaymentDetailPage() {
 
             <div className="payment-approval-print-content mx-auto w-full max-w-4xl">
               <h1 className="mb-2 text-2xl font-bold text-gray-900">결제 승인서</h1>
-              <p className="mb-1 text-sm text-gray-700">현장명: {estimate?.title?.trim() ? estimate.title : "-"}</p>
+              <p className="mb-1 text-sm text-gray-700">
+                현장명:{" "}
+                {(estimate?.displayTitle || estimate?.title || "").trim() || "-"}
+              </p>
               <p className="mb-1 text-sm text-gray-700">고객명: {estimate?.customerName?.trim() ? estimate.customerName : "-"}</p>
               <p className="mb-1 text-sm text-gray-700">연락처: {estimate?.contact?.trim() ? estimate.contact : "-"}</p>
               <p className="mb-1 text-sm text-gray-700">견적일자: {formatDateYMD(estimate?.estimateDate)}</p>

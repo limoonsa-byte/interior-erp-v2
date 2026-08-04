@@ -3,7 +3,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
-type EstimateItem = { id: number; consultationId?: number; title: string | null; customerName?: string; processOrder?: string[] };
+type EstimateItem = {
+  id: number;
+  consultationId?: number;
+  title: string | null;
+  displayTitle?: string;
+  customerName?: string;
+  processOrder?: string[];
+};
 type EstimateDetailItem = {
   processGroup?: string;
   category?: string;
@@ -444,7 +451,8 @@ export default function WorkLogPage() {
                 <option value="">선택 안 함</option>
                 {estimatesForProjectSelect.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.title || `견적 #${e.id}`} {e.customerName ? ` (${e.customerName})` : ""}
+                    {e.displayTitle || e.title || `견적 #${e.id}`}
+                    {e.customerName ? ` (${e.customerName})` : ""}
                   </option>
                 ))}
               </select>

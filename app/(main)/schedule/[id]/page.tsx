@@ -54,6 +54,7 @@ type SchedulePhase = { name: string; start: string; end: string; color?: string 
 
 type Consultation = {
   id: number;
+  title?: string;
   customerName: string;
   contact: string;
   address: string;
@@ -281,7 +282,12 @@ export default function ScheduleDetailPage() {
         }
         const estimates = Array.isArray(est) ? est : [];
         const e = estimates.find((x: Estimate) => x.consultationId === id);
-        setEstimateTitle(e?.title?.trim() || `${(c as { customerName?: string })?.customerName || "상담"} (견적 없음)`);
+        const consultTitle = String((c as { title?: string })?.title ?? "").trim();
+        setEstimateTitle(
+          e?.title?.trim() ||
+            consultTitle ||
+            `${(c as { customerName?: string })?.customerName || "상담"} (견적 없음)`
+        );
       })
       .catch(() => setConsultation(null))
       .finally(() => setLoading(false));

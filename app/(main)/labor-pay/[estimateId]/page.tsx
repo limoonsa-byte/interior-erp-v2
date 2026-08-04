@@ -8,6 +8,7 @@ import { ArrowLeft, Banknote, Copy, Link2, MessageSquare, RefreshCw, Trash2 } fr
 type Estimate = {
   id: number;
   title?: string;
+  displayTitle?: string;
   customerName?: string;
   address?: string;
   contact?: string;
@@ -218,7 +219,11 @@ export default function LaborPayDetailPage() {
       );
       return;
     }
-    const site = estimate?.title?.trim() || estimate?.customerName?.trim() || "현장";
+    const site =
+      estimate?.displayTitle?.trim() ||
+      estimate?.title?.trim() ||
+      estimate?.customerName?.trim() ||
+      "현장";
     const url = linkForToken(r.accessToken);
     const bodyText = `[내역서 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
     openDeviceSms(phone, bodyText);
@@ -283,7 +288,9 @@ export default function LaborPayDetailPage() {
 
       {estimate && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm shadow-sm">
-          <div className="font-medium text-gray-900">{estimate.title?.trim() || "제목 없음"}</div>
+          <div className="font-medium text-gray-900">
+            {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+          </div>
           <div className="mt-1 text-gray-600">고객: {estimate.customerName || "-"}</div>
           <div className="text-gray-600">주소: {estimate.address || "-"}</div>
           <div className="text-gray-600">연락처: {estimate.contact || "-"}</div>

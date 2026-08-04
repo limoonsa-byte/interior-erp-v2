@@ -10,6 +10,7 @@ import {
 } from "@/lib/scheduleCalendarDayDisplay";
 import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
 import { chunkDaysForPrint, padChunkToWeekRows } from "@/lib/schedule-print-chunk";
+import { displayProjectTitle } from "@/lib/projectTitle";
 
 /** 완료 상태값 (체크박스로 보기/숨기기) */
 const COMPLETED_STATUS = "완료및정산";
@@ -52,6 +53,7 @@ function resolveScheduleAccent(consultation: { id: number; scheduleListColor?: s
 
 type Consultation = {
   id: number;
+  title?: string;
   customerName: string;
   contact: string;
   address: string;
@@ -364,7 +366,11 @@ export default function SchedulePage() {
         const est = estimates.find((e) => e.consultationId === consultation.id);
         return {
           consultation,
-          estimateTitle: (est?.title?.trim() || "제목 없음"),
+          estimateTitle: displayProjectTitle({
+            estimateTitle: est?.title,
+            consultationTitle: consultation.title,
+            customerName: consultation.customerName,
+          }),
           hasEstimate: !!est,
         };
       })

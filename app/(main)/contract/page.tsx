@@ -53,6 +53,7 @@ type Estimate = {
   contact?: string;
   address?: string;
   title?: string;
+  displayTitle?: string;
   items?: { qty?: number; materialUnitPrice?: number; laborUnitPrice?: number; unitPrice?: number }[];
   overheadPercent?: number;
   profitPercent?: number;
@@ -1347,7 +1348,7 @@ export default function ContractPage() {
       customerName: e.customerName ?? "",
       contact: e.contact ?? "",
       estimateId: e.id,
-      estimateTitle: e.title ?? "",
+      estimateTitle: (e.displayTitle || e.title || "").trim(),
       address: c?.address ?? "",
       pyung: c?.pyung,
       estimateContractAmount: exclusive > 0 ? exclusive : undefined,
@@ -1416,14 +1417,20 @@ export default function ContractPage() {
           ) : (
             <ul className="space-y-2">
               {estimatesToShowInModal.map((e) => (
-                <li key={e.id} className="flex items-center justify-between rounded border border-gray-100 p-3">
-                  <span className="font-medium">{e.customerName || "-"}</span>
-                  <span className="text-gray-500">{e.contact || ""}</span>
-                  <span className="text-xs text-gray-400">{e.title || ""}</span>
+                <li key={e.id} className="flex items-center justify-between gap-2 rounded border border-gray-100 p-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-gray-900">
+                      {(e.displayTitle || e.title || "").trim() || "-"}
+                    </div>
+                    <div className="truncate text-sm text-gray-500">
+                      {e.customerName || "-"}
+                      {e.contact ? ` · ${e.contact}` : ""}
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleSelectEstimate(e)}
-                    className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                    className="shrink-0 rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
                   >
                     선택
                   </button>

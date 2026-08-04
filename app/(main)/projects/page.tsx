@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link";
 import { Calendar, Image } from "lucide-react";
 import { getHolidayName, isKoreanHoliday } from "@/lib/koreanHolidays";
+import { displayProjectTitle } from "@/lib/projectTitle";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -15,6 +16,7 @@ const PROJECT_COLORS = [
 
 type Consultation = {
   id: number;
+  title?: string;
   customerName: string;
   contact: string;
   address: string;
@@ -107,7 +109,11 @@ export default function ProjectsPage() {
       const est = estimates.find((e) => e.consultationId === c.id);
       return {
         consultation: c,
-        title: est?.title?.trim() || "제목 없음",
+        title: displayProjectTitle({
+          estimateTitle: est?.title,
+          consultationTitle: c.title,
+          customerName: c.customerName,
+        }),
       };
     });
   }, [projects, estimates]);
@@ -356,7 +362,7 @@ export default function ProjectsPage() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="row-actions-sticky w-32 p-2 text-left font-medium text-gray-700 sm:hidden">일정</th>
                   <th className="hidden p-3 text-left font-medium text-gray-700 sm:table-cell sm:w-8" />
-                  <th className="p-3 text-left font-medium text-gray-700">프로젝트(견적 제목)</th>
+                  <th className="p-3 text-left font-medium text-gray-700">프로젝트 제목</th>
                   <th className="p-3 text-left font-medium text-gray-700">공정</th>
                   <th className="p-3 text-left font-medium text-gray-700">고객명</th>
                   <th className="p-3 text-left font-medium text-gray-700 w-32">공사 시작일</th>

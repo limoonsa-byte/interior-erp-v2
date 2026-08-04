@@ -17,6 +17,7 @@ type Estimate = {
   customerName?: string;
   contact?: string;
   title?: string;
+  displayTitle?: string;
   estimateDate?: string;
   items?: EstimateItemRow[];
   overheadPercent?: number;
@@ -188,21 +189,22 @@ export default function PaymentListPage() {
                 filteredEstimates.map((est) => {
                   const total = estimateTotal(est);
                   const paid = Number(paymentTotalsByEstimate[String(est.id)] ?? 0);
+                  const shownTitle = (est.displayTitle || est.title || "").trim() || "제목 없음";
                   const titleLink = (
                     <Link href={`/payment/${est.id}`} className="font-medium text-blue-600 hover:underline">
-                      {est.title?.trim() ? est.title : "제목 없음"}
+                      {shownTitle}
                     </Link>
                   );
                   return (
                     <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
                       <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                        <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleLink}</div>
+                        <div className="max-w-[12rem] truncate" title={shownTitle}>{titleLink}</div>
                       </td>
                       <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
                       <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                       <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
                       <td className="hidden p-2 sm:table-cell sm:p-3">
-                        <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleLink}</div>
+                        <div className="max-w-[18rem] truncate" title={shownTitle}>{titleLink}</div>
                       </td>
                       <td className="p-2 sm:p-3 text-right tabular-nums">{formatNumber(total)}원</td>
                       <td className="p-2 sm:p-3 text-right tabular-nums font-medium">{formatNumber(paid)}원</td>

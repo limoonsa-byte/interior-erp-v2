@@ -2,6 +2,8 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
+import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
+import { displayProjectTitle } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -40,17 +42,33 @@ export async function GET() {
     } catch (cleanupErr) {
       console.error("estimates GET cleanup error:", cleanupErr);
     }
+    await ensureConsultationsColumns();
+
     let result: Awaited<ReturnType<typeof sql>>;
     try {
       result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
-      FROM estimates WHERE company_id = ${company.id} ORDER BY id DESC
+      SELECT e.id, e.company_id, e.consultation_id, e.customer_name, e.contact, e.address, e.title, e.estimate_date, e.note, e.items, e.process_order, e.overhead_percent, e.profit_percent, e.pic_name, e.created_at,
+             c.title AS consultation_title
+      FROM estimates e
+      LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = e.company_id
+      WHERE e.company_id = ${company.id}
+      ORDER BY e.id DESC
     `;
     } catch (colErr) {
       const msg = colErr instanceof Error ? colErr.message : String(colErr);
       if (/column.*pic_name/i.test(msg)) {
         result = await sql`
-      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, created_at
+      SELECT e.id, e.company_id, e.consultation_id, e.customer_name, e.contact, e.address, e.title, e.estimate_date, e.note, e.items, e.process_order, e.overhead_percent, e.profit_percent, e.created_at,
+             c.title AS consultation_title
+      FROM estimates e
+      LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = e.company_id
+      WHERE e.company_id = ${company.id}
+      ORDER BY e.id DESC
+    `;
+      } else if (/consultation_title|c\.title|column.*title/i.test(msg)) {
+        // consultations.title 미적용 환경 폴백
+        result = await sql`
+      SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
       FROM estimates WHERE company_id = ${company.id} ORDER BY id DESC
     `;
       } else {
@@ -74,13 +92,24 @@ export async function GET() {
           processOrder = undefined;
         }
       }
+      const consultationTitle =
+        row.consultation_title != null ? String(row.consultation_title) : undefined;
+      const rawTitle = row.title != null ? String(row.title) : "";
+      const customerName = row.customer_name != null ? String(row.customer_name) : "";
       return {
         id: row.id,
         consultationId: row.consultation_id ?? undefined,
-        customerName: row.customer_name ?? "",
+        customerName,
         contact: row.contact ?? "",
         address: row.address ?? "",
-        title: row.title ?? "",
+        title: rawTitle,
+        /** 화면 표시용: 견적 제목 → 상담 프로젝트 제목 → 고객명 */
+        displayTitle: displayProjectTitle({
+          estimateTitle: rawTitle,
+          consultationTitle,
+          customerName,
+        }),
+        consultationTitle,
         estimateDate: toYYYYMMDD(row.estimate_date),
         note: row.note ?? "",
         items,

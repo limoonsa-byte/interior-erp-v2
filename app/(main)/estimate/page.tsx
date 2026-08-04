@@ -143,6 +143,9 @@ type Estimate = {
   contact: string;
   address: string;
   title: string;
+  /** API: 견적 제목 → 상담 프로젝트 제목 → 고객명 */
+  displayTitle?: string;
+  consultationTitle?: string;
   estimateDate?: string;
   note: string;
   items: EstimateItem[];
@@ -2224,6 +2227,7 @@ function EstimateForm({
 
 type Consultation = {
   id: number;
+  title?: string;
   customerName?: string;
   contact?: string;
   address?: string;
@@ -2345,12 +2349,13 @@ export default function EstimatePage() {
         .then((list) => {
           const c = Array.isArray(list) ? list.find((x: { id: number }) => String(x.id) === cId) : null;
           if (c) {
-            setConsultationPreFill({ 
-              customerName: c.customerName ?? "", 
-              contact: c.contact ?? "", 
+            setConsultationPreFill({
+              customerName: c.customerName ?? "",
+              contact: c.contact ?? "",
               address: c.address ?? "",
               consultationId: c.id,
               pic: (c as { pic?: string }).pic ?? "",
+              titleSuggestion: String((c as { title?: string }).title ?? "").trim() || undefined,
             });
             setFormResetToken((v) => v + 1);
             setFormOpen("new");
@@ -2383,6 +2388,7 @@ export default function EstimatePage() {
       address: c.address ?? "",
       consultationId: c.id,
       pic: c.pic ?? "",
+      titleSuggestion: (c.title ?? "").trim() || undefined,
     });
     setConsultationModalOpen(false);
     setFormResetToken((v) => v + 1);
@@ -2449,6 +2455,7 @@ export default function EstimatePage() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-gray-100 sticky top-0">
                   <tr>
+                    <th className="p-2">프로젝트 제목</th>
                     <th className="p-2">고객명</th>
                     <th className="p-2">연락처</th>
                     <th className="p-2">주소</th>
@@ -2459,6 +2466,11 @@ export default function EstimatePage() {
                 <tbody>
                   {consultationsToShow.map((c) => (
                     <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <td className="p-2 font-medium text-gray-800">
+                        <div className="max-w-[12rem] truncate" title={(c.title ?? "").trim() || "-"}>
+                          {(c.title ?? "").trim() || "-"}
+                        </div>
+                      </td>
                       <td className="p-2 font-medium">{c.customerName || "-"}</td>
                       <td className="p-2">{c.contact || "-"}</td>
                       <td className="p-2 text-gray-600 truncate max-w-[200px]" title={c.address}>{c.address || "-"}</td>
@@ -2597,8 +2609,13 @@ export default function EstimatePage() {
                             <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                             <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                             <td className="p-2 sm:p-3">
-                              <div className="max-w-[18rem] truncate" title={est.title || ""}>
-                                {isChild ? `ㄴ ${est.title || "추가 견적서"}` : est.title || "-"}
+                              <div
+                                className="max-w-[18rem] truncate"
+                                title={est.displayTitle || est.title || ""}
+                              >
+                                {isChild
+                                  ? `ㄴ ${est.title || est.displayTitle || "추가 견적서"}`
+                                  : est.displayTitle || est.title || "-"}
                               </div>
                             </td>
                             <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>

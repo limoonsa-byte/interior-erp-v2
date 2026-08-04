@@ -22,6 +22,7 @@ type Estimate = {
   contact?: string;
   address: string;
   title: string;
+  displayTitle?: string;
   estimateDate?: string;
   note?: string;
   items: EstimateItem[];
@@ -316,7 +317,9 @@ export function MaterialOrderPage() {
   /** 견적 선택 시 현장명(프로젝트 제목)·배송지 주소를 선택한 프로젝트 정보로 자동 채움 */
   useEffect(() => {
     if (!selectedEstimate) return;
-    setRequiredSiteName(selectedEstimate.title ?? "");
+    setRequiredSiteName(
+      (selectedEstimate.displayTitle || selectedEstimate.title || "").trim()
+    );
     setRequiredDeliveryAddress(selectedEstimate.address ?? "");
   }, [selectedEstimate?.id]);
 
@@ -898,8 +901,9 @@ export function MaterialOrderPage() {
                     const subtotal = (est.items || []).reduce(
                       (s, itm) => s + materialAmount(itm), 0
                     );
+                    const shownTitle = (est.displayTitle || est.title || "").trim() || "-";
                     const titleSpan = (
-                      <span className="text-blue-600 hover:underline">{est.title || "-"}</span>
+                      <span className="text-blue-600 hover:underline">{shownTitle}</span>
                     );
                     return (
                       <tr
@@ -908,13 +912,13 @@ export function MaterialOrderPage() {
                         className="text-gray-700 hover:bg-gray-50 cursor-pointer"
                       >
                         <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                          <div className="max-w-[12rem] truncate" title={est.title || ""}>{titleSpan}</div>
+                          <div className="max-w-[12rem] truncate" title={shownTitle}>{titleSpan}</div>
                         </td>
                         <td className="p-2 sm:p-3">{est.estimateDate ? est.estimateDate.slice(0, 10) : "-"}</td>
                         <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
                         <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                         <td className="hidden p-2 sm:table-cell sm:p-3">
-                          <div className="max-w-[18rem] truncate" title={est.title || ""}>{titleSpan}</div>
+                          <div className="max-w-[18rem] truncate" title={shownTitle}>{titleSpan}</div>
                         </td>
                         <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(subtotal)}원</td>
                       </tr>
@@ -938,7 +942,9 @@ export function MaterialOrderPage() {
         {selectedEstimate && (
           <>
             <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm">
-              <div className="font-medium text-gray-800">{selectedEstimate.title || "제목 없음"}</div>
+              <div className="font-medium text-gray-800">
+                {(selectedEstimate.displayTitle || selectedEstimate.title || "").trim() || "제목 없음"}
+              </div>
               <div className="mt-1 text-gray-600">고객: {selectedEstimate.customerName || "-"}</div>
               <div className="text-gray-600">주소: {selectedEstimate.address || "-"}</div>
               {selectedConsultation && (

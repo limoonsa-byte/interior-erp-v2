@@ -19,7 +19,22 @@ export async function GET(
       return NextResponse.json({ error: "잘못된 링크입니다." }, { status: 400 });
     }
 
-    const result = await sql`
+    let result: Awaited<ReturnType<typeof sql>>;
+    try {
+      result = await sql`
+      SELECT r.id, r.worker_name, r.status, r.amount, r.content, r.submitted_at, r.attachments_json,
+             e.title AS estimate_title, e.customer_name, e.address,
+             cons.title AS consultation_title,
+             c.labor_pay_notice
+      FROM labor_pay_requests r
+      JOIN estimates e ON e.id = r.estimate_id AND e.company_id = r.company_id
+      LEFT JOIN consultations cons ON cons.id = e.consultation_id AND cons.company_id = e.company_id
+      JOIN companies c ON c.id = r.company_id
+      WHERE r.access_token = ${accessToken}
+      LIMIT 1
+    `;
+    } catch {
+      result = await sql`
       SELECT r.id, r.worker_name, r.status, r.amount, r.content, r.submitted_at, r.attachments_json,
              e.title AS estimate_title, e.customer_name, e.address,
              c.labor_pay_notice
@@ -29,19 +44,24 @@ export async function GET(
       WHERE r.access_token = ${accessToken}
       LIMIT 1
     `;
+    }
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "링크를 찾을 수 없거나 만료되었습니다." }, { status: 404 });
     }
     const r = result.rows[0] as Record<string, unknown>;
     const notice = r.labor_pay_notice != null ? String(r.labor_pay_notice).trim() : "";
     const attachments = attachmentsToMeta(parseAttachmentsJson(r.attachments_json));
+    const estimateTitle = String(r.estimate_title ?? "").trim();
+    const consultationTitle = String(r.consultation_title ?? "").trim();
+    const customerName = String(r.customer_name ?? "").trim();
+    const siteTitle = estimateTitle || consultationTitle || customerName;
     return NextResponse.json({
       workerName: String(r.worker_name ?? ""),
       status: String(r.status ?? "open"),
       amount: r.amount != null && r.amount !== "" ? Number(r.amount) : null,
       content: r.content != null ? String(r.content) : null,
       submittedAt: r.submitted_at != null ? String(r.submitted_at) : null,
-      siteTitle: String(r.estimate_title ?? ""),
+      siteTitle,
       customerName: String(r.customer_name ?? ""),
       address: String(r.address ?? ""),
       notice: notice || null,

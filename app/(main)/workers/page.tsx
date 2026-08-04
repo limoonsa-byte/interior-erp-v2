@@ -18,6 +18,7 @@ type WorkerItem = {
 
 type ConsultationSchedule = {
   id: number;
+  title?: string;
   customerName: string;
   status?: string;
   address?: string;
@@ -71,7 +72,13 @@ function buildScheduleShareText(
   return lines.join("\n");
 }
 
-type EstimateItem = { id: number; consultationId?: number; title: string };
+type EstimateItem = {
+  id: number;
+  consultationId?: number;
+  title: string;
+  displayTitle?: string;
+  consultationTitle?: string;
+};
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const PHASE_COLORS = ["#3B82F6", "#22C55E", "#EAB308", "#EF4444", "#8B5CF6", "#06B6D4", "#F97316", "#EC4899"];
@@ -290,7 +297,14 @@ export default function WorkersPage() {
         });
         const scheduleList = withSchedule.map((c: ConsultationSchedule) => {
           const e = estimates.find((x: EstimateItem) => x.consultationId === c.id);
-          return { consultation: c, title: e?.title?.trim() || "제목 없음" };
+          return {
+            consultation: c,
+            title:
+              e?.displayTitle?.trim() ||
+              e?.title?.trim() ||
+              (c.title ?? "").trim() ||
+              "제목 없음",
+          };
         });
         setShareSchedules(scheduleList);
         if (scheduleList.length > 0) setShareSelectedId(scheduleList[0].consultation.id);
@@ -957,7 +971,7 @@ export default function WorkersPage() {
                     const end = (consultation.moveInAt || consultation.constructionStartAt || "").slice(0, 10) || start;
                     return (
                       <option key={consultation.id} value={consultation.id}>
-                        {consultation.customerName || "고객"} / {title} ({start} ~ {end})
+                        {title} / {consultation.customerName || "고객"} ({start} ~ {end})
                       </option>
                     );
                   })}
