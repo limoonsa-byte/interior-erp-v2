@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 
 /** 도면 보관함 API에서 한 행 형식 (ERP에서 목록 불러올 때) */
 type DrawingListRow = {
@@ -1148,7 +1149,7 @@ function EstimateForm({
                     address: address.trim(),
                     consultationId: estimate?.consultationId,
                     pic: consultationPic || undefined,
-                    titleSuggestion: `${(title || "추가").trim()} 추가견적`,
+                    titleSuggestion: `${(estimate?.consultationTitle || title || "추가").trim()} 추가견적`,
                   })
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
@@ -2298,7 +2299,7 @@ export default function EstimatePage() {
     });
   }, [estimates, consultationsForList, showCompletedInList]);
 
-  const isAdditionalEstimateTitle = React.useCallback((title?: string) => {
+  const isAdditionalEstimateTitle = React.useCallback((title?: string | null) => {
     const t = String(title ?? "").trim();
     if (!t) return false;
     return t.includes("추가견적") || t.includes("추가 견적");
@@ -2333,9 +2334,20 @@ export default function EstimatePage() {
         return (b.id ?? 0) - (a.id ?? 0);
       });
       const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      const consultId = ordered.find((x) => x.consultationId != null)?.consultationId;
+      const consultTitle =
+        consultId != null
+          ? (consultationsForList.find((c) => c.id === consultId)?.title ?? "").trim()
+          : "";
+      const projectTitle = resolveGroupProjectTitle({
+        consultationTitle: consultTitle,
+        items: ordered,
+        isAdditionalTitle: isAdditionalEstimateTitle,
+      });
       return {
         key: group.key,
         items: ordered,
+        projectTitle,
         mainDate: String(main?.estimateDate ?? ""),
         mainId: main?.id ?? 0,
       };
@@ -2345,7 +2357,7 @@ export default function EstimatePage() {
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });
-  }, [filteredEstimates, isAdditionalEstimateTitle]);
+  }, [filteredEstimates, isAdditionalEstimateTitle, consultationsForList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2610,21 +2622,15 @@ export default function EstimatePage() {
                           </div>
                         );
                         const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
+                        const projectTitle = group.projectTitle || "-";
+                        const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
                         return (
                           <tr key={est.id} className={`text-gray-700 hover:bg-gray-50 ${isChild ? "bg-sky-50" : ""}`}>
                             <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
                             <td className="p-2 sm:p-3 font-medium">
-                              {(() => {
-                                const projectTitle =
-                                  (est.displayTitle || est.consultationTitle || est.title || "").trim() ||
-                                  "-";
-                                const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
-                                return (
-                                  <div className="max-w-[18rem] truncate" title={shownTitle}>
-                                    {shownTitle}
-                                  </div>
-                                );
-                              })()}
+                              <div className="max-w-[18rem] truncate" title={shownTitle}>
+                                {shownTitle}
+                              </div>
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
                             <td className="p-2 sm:p-3">{est.customerName || "-"}</td>

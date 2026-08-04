@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 
 type EstimateItem = {
   processGroup?: string;
@@ -34,6 +35,7 @@ type Estimate = {
 
 type Consultation = {
   id: number;
+  title?: string;
   status?: string;
 };
 
@@ -189,7 +191,7 @@ export default function SettlementPage() {
     });
   }, [estimates, consultations, showCompleted]);
 
-  const isAdditionalEstimateTitle = useCallback((title?: string) => {
+  const isAdditionalEstimateTitle = useCallback((title?: string | null) => {
     const t = String(title ?? "").trim();
     if (!t) return false;
     return t.includes("추가견적") || t.includes("추가 견적");
@@ -224,9 +226,20 @@ export default function SettlementPage() {
         return (b.id ?? 0) - (a.id ?? 0);
       });
       const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      const consultId = ordered.find((x) => x.consultationId != null)?.consultationId;
+      const consultTitle =
+        consultId != null
+          ? (consultations.find((c) => c.id === consultId)?.title ?? "").trim()
+          : "";
+      const projectTitle = resolveGroupProjectTitle({
+        consultationTitle: consultTitle,
+        items: ordered,
+        isAdditionalTitle: isAdditionalEstimateTitle,
+      });
       return {
         key: group.key,
         items: ordered,
+        projectTitle,
         mainDate: String(main?.estimateDate ?? ""),
         mainId: main?.id ?? 0,
       };
@@ -236,7 +249,7 @@ export default function SettlementPage() {
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });
-  }, [filteredEstimates, isAdditionalEstimateTitle]);
+  }, [filteredEstimates, isAdditionalEstimateTitle, consultations]);
 
   /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */
   const estimatesForSelect = useMemo(() => {
@@ -650,8 +663,7 @@ export default function SettlementPage() {
                         const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
                         const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
                         const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
-                        const projectTitle =
-                          (est.displayTitle || est.consultationTitle || est.title || "").trim() || "-";
+                        const projectTitle = group.projectTitle || "-";
                         const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
                         const titleSpan = <span className="text-blue-600 hover:underline">{shownTitle}</span>;
                         return (
@@ -700,7 +712,7 @@ export default function SettlementPage() {
         <div className="space-y-4">
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
             <p className="font-medium text-gray-900">
-              {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+              {(estimate.displayTitle || estimate.consultationTitle || estimate.title || "").trim() || "제목 없음"}
             </p>
             <p className="mt-1 text-gray-600">
               {estimate.customerName && <span>고객: {estimate.customerName}</span>}
@@ -1063,7 +1075,7 @@ export default function SettlementPage() {
           <header className="settlement-print-header">
             <h1 className="settlement-print-title">정산서</h1>
             <p className="settlement-print-subtitle">
-              {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+              {(estimate.displayTitle || estimate.consultationTitle || estimate.title || "").trim() || "제목 없음"}
             </p>
             <table className="settlement-print-customer">
               <tbody>

@@ -2,7 +2,10 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
-import { ensureConsultationsColumns } from "@/lib/consultations-migrate";
+import {
+  ensureConsultationsColumns,
+  syncEstimateTitlesFromConsultations,
+} from "@/lib/consultations-migrate";
 import { displayProjectTitle } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
@@ -43,6 +46,8 @@ export async function GET() {
       console.error("estimates GET cleanup error:", cleanupErr);
     }
     await ensureConsultationsColumns();
+    // 상담 프로젝트 제목 → 견적 title 동기화 (목록·상세 전부 상담 제목 기준)
+    await syncEstimateTitlesFromConsultations(company.id);
 
     let result: Awaited<ReturnType<typeof sql>>;
     try {

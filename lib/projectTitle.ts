@@ -25,6 +25,40 @@ export function displayProjectTitle(opts: {
   );
 }
 
+/**
+ * 같은 상담(그룹)의 프로젝트 제목.
+ * 상담 제목을 최우선으로 쓰고, 없으면 메인 견적 표시제목을 그룹 전체에 동일 적용한다.
+ */
+export function resolveGroupProjectTitle(opts: {
+  consultationTitle?: string | null;
+  items: Array<{
+    title?: string | null;
+    displayTitle?: string | null;
+    consultationTitle?: string | null;
+  }>;
+  isAdditionalTitle?: (title?: string | null) => boolean;
+  fallback?: string;
+}): string {
+  const fromConsult = firstNonEmpty(
+    opts.consultationTitle,
+    ...opts.items.map((i) => i.consultationTitle)
+  );
+  if (fromConsult) return fromConsult;
+
+  const isAdditional =
+    opts.isAdditionalTitle ??
+    ((title?: string | null) => {
+      const t = String(title ?? "").trim();
+      return t.includes("추가견적") || t.includes("추가 견적");
+    });
+
+  const main = opts.items.find((i) => !isAdditional(i.title)) ?? opts.items[0] ?? null;
+  return (
+    firstNonEmpty(main?.displayTitle, main?.title, opts.items[0]?.displayTitle, opts.items[0]?.title) ||
+    (opts.fallback ?? "제목 없음")
+  );
+}
+
 /** 선택 목록용: "프로젝트 제목 · 고객명" (제목 없으면 고객명만) */
 export function displayTitleWithCustomer(
   title: string | null | undefined,

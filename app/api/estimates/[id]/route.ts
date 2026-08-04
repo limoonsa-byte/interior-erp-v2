@@ -1,6 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { displayProjectTitle } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -46,20 +47,31 @@ function rowToEstimate(row: Record<string, unknown>) {
       processOrder = undefined;
     }
   }
+  const consultationTitle =
+    row.consultation_title != null ? String(row.consultation_title) : undefined;
+  const rawTitle = row.title != null ? String(row.title) : "";
+  const customerName = row.customer_name != null ? String(row.customer_name) : "";
   return {
     id: row.id,
     consultationId: row.consultation_id ?? undefined,
-    customerName: row.customer_name ?? "",
+    customerName,
     contact: row.contact ?? "",
     address: row.address ?? "",
-    title: row.title ?? "",
+    title: rawTitle,
+    displayTitle: displayProjectTitle({
+      consultationTitle,
+      estimateTitle: rawTitle,
+      customerName,
+    }),
+    consultationTitle,
     estimateDate: toYYYYMMDD(row.estimate_date),
     note: row.note ?? "",
     items,
     processOrder,
     overheadPercent: row.overhead_percent != null ? Number(row.overhead_percent) : 5,
     profitPercent: row.profit_percent != null ? Number(row.profit_percent) : 10,
-    picName: row.pic_name != null ? String(row.pic_name) : undefined,    createdAt: row.created_at != null ? String(row.created_at) : undefined,
+    picName: row.pic_name != null ? String(row.pic_name) : undefined,
+    createdAt: row.created_at != null ? String(row.created_at) : undefined,
   };
 }
 
@@ -80,21 +92,33 @@ export async function GET(
     let result: Awaited<ReturnType<typeof sql>>;
     try {
       result = await sql`
-        SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
-        FROM estimates
-        WHERE id = ${estimateId} AND company_id = ${company.id}
+        SELECT e.id, e.company_id, e.consultation_id, e.customer_name, e.contact, e.address, e.title, e.estimate_date, e.note, e.items, e.process_order, e.overhead_percent, e.profit_percent, e.pic_name, e.created_at,
+               c.title AS consultation_title
+        FROM estimates e
+        LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = e.company_id
+        WHERE e.id = ${estimateId} AND e.company_id = ${company.id}
       `;
     } catch (colErr) {
       const msg = colErr instanceof Error ? colErr.message : String(colErr);
       if (/column.*overhead_percent|column.*profit_percent/i.test(msg)) {
         result = await sql`
-          SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, created_at
-          FROM estimates
-          WHERE id = ${estimateId} AND company_id = ${company.id}
+          SELECT e.id, e.company_id, e.consultation_id, e.customer_name, e.contact, e.address, e.title, e.estimate_date, e.note, e.items, e.process_order, e.created_at,
+                 c.title AS consultation_title
+          FROM estimates e
+          LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = e.company_id
+          WHERE e.id = ${estimateId} AND e.company_id = ${company.id}
         `;
       } else if (/column.*pic_name/i.test(msg)) {
         result = await sql`
-          SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, created_at
+          SELECT e.id, e.company_id, e.consultation_id, e.customer_name, e.contact, e.address, e.title, e.estimate_date, e.note, e.items, e.process_order, e.overhead_percent, e.profit_percent, e.created_at,
+                 c.title AS consultation_title
+          FROM estimates e
+          LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = e.company_id
+          WHERE e.id = ${estimateId} AND e.company_id = ${company.id}
+        `;
+      } else if (/consultation_title|c\.title|column.*title/i.test(msg)) {
+        result = await sql`
+          SELECT id, company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name, created_at
           FROM estimates
           WHERE id = ${estimateId} AND company_id = ${company.id}
         `;
@@ -105,7 +129,7 @@ export async function GET(
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
     }
-    return NextResponse.json(rowToEstimate(result.rows[0]));
+    return NextResponse.json(rowToEstimate(result.rows[0] as Record<string, unknown>));
   } catch (error) {
     console.error("estimates [id] GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

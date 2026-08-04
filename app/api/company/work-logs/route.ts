@@ -60,10 +60,11 @@ export async function GET(request: Request) {
     try {
       result = await sql`
         SELECT w.id, w.log_date, w.estimate_id, w.pic_id, w.content, w.expenses, w.created_at,
-          e.title AS estimate_title,
+          COALESCE(NULLIF(TRIM(c.title), ''), NULLIF(TRIM(e.title), '')) AS estimate_title,
           p.name AS pic_name
         FROM company_work_logs w
         LEFT JOIN estimates e ON e.id = w.estimate_id AND e.company_id = w.company_id
+        LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = w.company_id
         LEFT JOIN company_pics p ON p.id = w.pic_id AND p.company_id = w.company_id
         WHERE w.company_id = ${company.id}
         AND w.log_date >= ${fromDate}::date
@@ -76,10 +77,11 @@ export async function GET(request: Request) {
       if (/column.*expenses|expenses.*does not exist/i.test(colMsg)) {
         result = await sql`
           SELECT w.id, w.log_date, w.estimate_id, w.pic_id, w.content, w.created_at,
-            e.title AS estimate_title,
+            COALESCE(NULLIF(TRIM(c.title), ''), NULLIF(TRIM(e.title), '')) AS estimate_title,
             p.name AS pic_name
           FROM company_work_logs w
           LEFT JOIN estimates e ON e.id = w.estimate_id AND e.company_id = w.company_id
+          LEFT JOIN consultations c ON c.id = e.consultation_id AND c.company_id = w.company_id
           LEFT JOIN company_pics p ON p.id = w.pic_id AND p.company_id = w.company_id
           WHERE w.company_id = ${company.id}
           AND w.log_date >= ${fromDate}::date
