@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Image } from "lucide-react";
 import { getHolidayName, isKoreanHoliday } from "@/lib/koreanHolidays";
 import { sortByKoreanDisplayName } from "@/lib/sortKoreanDisplayName";
+import { canShareJpegFiles, shareJpgViaMessage, toShareableJpegFile } from "@/lib/shareJpgViaMessage";
 
 type WorkerItem = {
   id: number;
@@ -209,6 +210,9 @@ export default function WorkersPage() {
   const [shareSelectedId, setShareSelectedId] = useState<number | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
   const [shareSavingJpg, setShareSavingJpg] = useState(false);
+  /** 일정 선택 시 미리 만들어 둔 JPG — 클릭 직후 share() 호출용(iOS 제스처 유지) */
+  const [readyJpgFile, setReadyJpgFile] = useState<File | null>(null);
+  const [jpgPreparing, setJpgPreparing] = useState(false);
   const shareCalendarRef = useRef<HTMLDivElement>(null);
 
   const loadList = useCallback(() => {
@@ -565,93 +569,152 @@ export default function WorkersPage() {
       : `일정_${title}.jpg`;
   }, [selectedShareItem?.title, shareCalendarRange]);
 
-  /** 캘린더 DOM → JPG File */
+  /** 캘린더 DOM → JPG File (문자 MMS용으로 용량도 맞춤) */
   const makeCalendarJpgFile = useCallback(async (): Promise<File | null> => {
     const el = shareCalendarRef.current;
     if (!el) return null;
-    el.scrollIntoView({ block: "center", behavior: "instant" });
+    el.scrollIntoView({ block: "nearest", behavior: "instant" });
     await new Promise((r) => requestAnimationFrame(r));
-    // jpeg dataUrl → File (toBlob의 jpeg quality 지원이 기기마다 달라 toJpeg 사용)
+    await new Promise((r) => setTimeout(r, 50));
+
     const { toJpeg } = await import("html-to-image");
-    const dataUrl = await toJpeg(el, {
-      backgroundColor: "#ffffff",
-      pixelRatio: 2,
-      quality: 0.92,
-    });
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    return new File([blob], calendarJpgFileName, { type: "image/jpeg" });
-  }, [calendarJpgFileName]);
+    // MMS 첨부가 되도록 해상도·품질을 단계적으로 줄임
+    const attempts: { pixelRatio: number; quality: number }[] = [
+      { pixelRatio: 2, quality: 0.85 },
+      { pixelRatio: 1.5, quality: 0.8 },
+      { pixelRatio: 1.25, quality: 0.72 },
+      { pixelRatio: 1, quality: 0.65 },
+    ];
+    const maxBytes = 900 * 1024;
+    let best: Blob | null = null;
+
+    for (const opt of attempts) {
+      const dataUrl = await toJpeg(el, {
+        backgroundColor: "#ffffff",
+        pixelRatio: opt.pixelRatio,
+        quality: opt.quality,
+        cacheBust: true,
+      });
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      if (!best || blob.size < best.size) best = blob;
+      if (blob.size <= maxBytes) {
+        return toShareableJpegFile(blob, "schedule.jpg");
+      }
+    }
+    return best ? toShareableJpegFile(best, "schedule.jpg") : null;
+  }, []);
+
+  // 일정/캘린더가 바뀌면 JPG를 미리 만들어 두어, 버튼 클릭 시 바로 공유 시트(첨부)로 넘김
+  useEffect(() => {
+    let cancelled = false;
+    setReadyJpgFile(null);
+    if (!selectedShareItem || !shareCalendarRange || shareCalendarDays.length === 0) {
+      setJpgPreparing(false);
+      return;
+    }
+    setJpgPreparing(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const file = await makeCalendarJpgFile();
+          if (!cancelled) setReadyJpgFile(file);
+        } catch (err) {
+          console.error("JPG 미리 생성 실패:", err);
+          if (!cancelled) setReadyJpgFile(null);
+        } finally {
+          if (!cancelled) setJpgPreparing(false);
+        }
+      })();
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [selectedShareItem, shareCalendarRange, shareCalendarDays.length, makeCalendarJpgFile]);
 
   /**
-   * 문자로 JPG 보내기: 공유 시트에 JPG 첨부 → 메시지(문자/MMS) 선택.
-   * sms: 링크로는 이미지 첨부가 불가해서 Web Share API를 사용합니다.
+   * 문자로 JPG 보내기: OS 공유 시트에 JPG 파일 첨부 → 「메시지/문자」선택 시 MMS로 전송.
+   * sms: 스킴은 이미지 첨부가 불가능하므로 Web Share files 만 사용 (텍스트 문자로 폴백하지 않음).
    */
   const handleShareJpgViaMessage = useCallback(async () => {
     if (!selectedShareItem) return;
-    setShareSavingJpg(true);
     try {
-      const file = await makeCalendarJpgFile();
+      let file = readyJpgFile;
+      const hadCache = Boolean(file);
       if (!file) {
-        alert("캘린더 JPG를 만들 수 없습니다.");
+        setShareSavingJpg(true);
+        file = await makeCalendarJpgFile();
+        setShareSavingJpg(false);
+        if (!file) {
+          alert("캘린더 JPG를 만들 수 없습니다. 일정을 다시 선택해 주세요.");
+          return;
+        }
+        setReadyJpgFile(file);
+      }
+
+      if (!canShareJpegFiles()) {
+        const dataUrl = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.download = calendarJpgFileName;
+        link.href = dataUrl;
+        link.click();
+        URL.revokeObjectURL(dataUrl);
+        alert(
+          "이 브라우저에서는 문자에 JPG를 바로 붙일 수 없어 이미지를 저장했습니다.\n\n" +
+            "휴대폰 크롬/사파리에서 이 페이지를 연 뒤 「문자로 JPG 보내기」를 다시 눌러 주세요.\n" +
+            "공유 시트가 뜨면 「메시지」또는 「문자」를 선택하면 JPG가 첨부됩니다."
+        );
         return;
       }
-      const shareData: ShareData = {
-        files: [file],
+
+      const result = await shareJpgViaMessage({
+        file,
+        fileName: "schedule.jpg",
         title: selectedShareItem.title || "공사 일정",
-        text: shareMessageText.slice(0, 120),
-      };
-      const canShareFiles =
-        typeof navigator !== "undefined" &&
-        typeof navigator.canShare === "function" &&
-        navigator.canShare(shareData);
+        text: shareMessageText.slice(0, 80),
+      });
 
-      if (canShareFiles && typeof navigator.share === "function") {
-        await navigator.share(shareData);
-        return;
-      }
-
-      const dataUrl = URL.createObjectURL(file);
-      const link = document.createElement("a");
-      link.download = calendarJpgFileName;
-      link.href = dataUrl;
-      link.click();
-      URL.revokeObjectURL(dataUrl);
-      alert(
-        "이 기기에서는 문자에 JPG를 바로 붙일 수 없어 JPG를 저장했습니다.\n\n" +
-          "휴대폰 브라우저에서 「문자로 JPG 보내기」를 누르면 메시지 앱으로 JPG가 첨부됩니다.\n" +
-          "PC에서는 저장한 JPG를 문자/카톡에 직접 첨부해 주세요."
-      );
-      if (sharePhones.length > 0) {
-        const short = `${selectedShareItem.title || "공사 일정"} 캘린더 이미지를 보내드립니다.`;
-        const body = encodeURIComponent(short);
-        const phonesJoined = sharePhones.join(",");
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        window.location.href = isIOS
-          ? `sms:/open?addresses=${phonesJoined}&body=${body}`
-          : `sms:${phonesJoined}?body=${body}`;
+      if (result === "aborted") return;
+      if (result === "unsupported") {
+        // 비동기 JPG 생성 직후면 iOS 등에서 제스처가 끊길 수 있음 → 캐시 후 재탭 유도
+        if (!hadCache) {
+          alert(
+            "JPG가 준비되었습니다.\n\n「문자로 JPG 보내기」를 한 번 더 눌러 주세요.\n" +
+              "공유 시트에서 「메시지/문자」를 선택하면 JPG가 첨부됩니다."
+          );
+          return;
+        }
+        const dataUrl = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.download = calendarJpgFileName;
+        link.href = dataUrl;
+        link.click();
+        URL.revokeObjectURL(dataUrl);
+        alert(
+          "문자 앱으로 JPG 첨부를 열 수 없어 이미지를 저장했습니다.\n\n" +
+            "휴대폰 기본 브라우저(크롬/사파리)에서 다시 시도하거나,\n" +
+            "저장한 JPG를 문자 작성 화면에서 직접 첨부해 주세요."
+        );
       }
     } catch (err) {
-      if (err instanceof Error && /AbortError|canceled|cancelled/i.test(err.name + err.message)) {
-        return;
-      }
       console.error("JPG 문자 공유 실패:", err);
-      alert("JPG 공유에 실패했습니다. 「캘린더 JPG 저장」 후 문자에 첨부해 주세요.");
+      alert("JPG 공유에 실패했습니다. 「JPG 저장」 후 문자에 직접 첨부해 주세요.");
     } finally {
       setShareSavingJpg(false);
     }
   }, [
     selectedShareItem,
+    readyJpgFile,
     makeCalendarJpgFile,
     shareMessageText,
     calendarJpgFileName,
-    sharePhones,
   ]);
 
   const saveShareCalendarAsJpg = useCallback(async () => {
     setShareSavingJpg(true);
     try {
-      const file = await makeCalendarJpgFile();
+      const file = readyJpgFile || (await makeCalendarJpgFile());
       if (!file) {
         alert("이미지 저장에 실패했습니다.");
         return;
@@ -668,7 +731,7 @@ export default function WorkersPage() {
     } finally {
       setShareSavingJpg(false);
     }
-  }, [makeCalendarJpgFile, calendarJpgFileName]);
+  }, [readyJpgFile, makeCalendarJpgFile, calendarJpgFileName]);
 
 
   return (
@@ -1004,9 +1067,10 @@ export default function WorkersPage() {
                 </select>
                 {selectedShareItem && shareCalendarRange && shareCalendarDays.length > 0 && (
                   <div className="mb-4">
-                    <p className="mb-1.5 text-xs font-medium text-gray-500">미리보기 (선택)</p>
+                    <p className="mb-1.5 text-xs font-medium text-gray-500">캘린더 미리보기 (JPG로 첨부)</p>
                     <p className="mb-1.5 text-[11px] text-gray-500">
-                      아래는 참고용 캘린더입니다. 실제 전송은 위 문자/카카오 버튼으로 합니다.
+                      「문자로 JPG 보내기」를 누르면 공유 시트가 열립니다. 거기서{" "}
+                      <span className="font-medium text-gray-700">메시지/문자</span>를 고르면 JPG가 첨부됩니다.
                     </p>
                     <div
                       ref={shareCalendarRef}
@@ -1196,12 +1260,12 @@ export default function WorkersPage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={handleShareJpgViaMessage}
-                    disabled={!selectedShareItem || shareSavingJpg}
+                    onClick={() => void handleShareJpgViaMessage()}
+                    disabled={!selectedShareItem || shareSavingJpg || jpgPreparing}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                   >
                     <Image className="h-4 w-4" />
-                    {shareSavingJpg ? "JPG 준비 중…" : "문자로 JPG 보내기"}
+                    {jpgPreparing || shareSavingJpg ? "JPG 준비 중…" : "문자로 JPG 보내기"}
                   </button>
                   <button
                     type="button"
@@ -1209,7 +1273,7 @@ export default function WorkersPage() {
                     disabled={!selectedShareItem || sharePhones.length === 0}
                     className="rounded-lg border border-blue-300 bg-white px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                   >
-                    문자(텍스트){sharePhones.length > 1 ? ` ${sharePhones.length}명` : ""}
+                    문자(텍스트만){sharePhones.length > 1 ? ` ${sharePhones.length}명` : ""}
                   </button>
                   <button
                     type="button"
@@ -1221,7 +1285,7 @@ export default function WorkersPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={saveShareCalendarAsJpg}
+                    onClick={() => void saveShareCalendarAsJpg()}
                     disabled={!selectedShareItem || shareSavingJpg}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
@@ -1236,8 +1300,20 @@ export default function WorkersPage() {
                     닫기
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-gray-500">
+                  JPG 첨부는 휴대폰에서 공유 시트의 <span className="font-medium">메시지/문자</span>를 선택해야
+                  합니다. (문자 URL만으로는 이미지 첨부가 불가합니다.)
+                </p>
                 {sharePhones.length === 0 && (
-                  <p className="mt-2 text-xs text-amber-700">문자(텍스트)는 인부 전화번호가 필요합니다. JPG 보내기는 휴대폰 공유 시트로 가능합니다.</p>
+                  <p className="mt-1 text-xs text-amber-700">
+                    문자(텍스트만)은 인부 전화번호가 필요합니다. JPG 첨부는 공유 시트에서 수신자를 고르면 됩니다.
+                  </p>
+                )}
+                {readyJpgFile && (
+                  <p className="mt-1 text-xs text-emerald-700">
+                    JPG 준비됨 ({Math.max(1, Math.round(readyJpgFile.size / 1024))}KB) — 버튼을 눌러 메시지 앱으로
+                    첨부하세요.
+                  </p>
                 )}
               </>
             )}
