@@ -105,6 +105,8 @@ async function migrate() {
     console.log("[migrate] schedule_list_color OK");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_memo TEXT`;
     console.log("[migrate] schedule_memo OK");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS title TEXT`;
+    console.log("[migrate] consultations.title OK");
     await sql`ALTER TABLE consultations DROP COLUMN IF EXISTS region`;
     console.log("[migrate] region 컬럼 제거 OK");
     await sql`

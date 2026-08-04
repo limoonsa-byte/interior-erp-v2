@@ -79,6 +79,8 @@ export async function POST(request: Request) {
     results.push("move_in_at 컬럼 확인");
     await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_phases TEXT`;
     results.push("schedule_phases 컬럼 확인");
+    await sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS title TEXT`;
+    results.push("consultations.title 컬럼 확인");
 
     await sql`
       CREATE TABLE IF NOT EXISTS master_smtp_config (
