@@ -649,9 +649,9 @@ export default function SettlementPage() {
                         const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
                         const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
                         const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
-                        const shownTitle = isChild
-                          ? `ㄴ ${est.title || est.displayTitle || "추가 견적서"}`
-                          : (est.displayTitle || est.title || "").trim() || "-";
+                        const projectTitle =
+                          (est.displayTitle || est.consultationTitle || est.title || "").trim() || "-";
+                        const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
                         const titleSpan = <span className="text-blue-600 hover:underline">{shownTitle}</span>;
                         return (
                           <tr

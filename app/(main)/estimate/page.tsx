@@ -2616,11 +2616,14 @@ export default function EstimatePage() {
                             <td className="p-2 sm:p-3 font-medium">
                               <div
                                 className="max-w-[18rem] truncate"
-                                title={est.displayTitle || est.title || ""}
+                                title={est.displayTitle || est.consultationTitle || est.title || ""}
                               >
-                                {isChild
-                                  ? `ㄴ ${est.title || est.displayTitle || "추가 견적서"}`
-                                  : est.displayTitle || est.title || "-"}
+                                {(() => {
+                                  const projectTitle =
+                                    (est.displayTitle || est.consultationTitle || est.title || "").trim() ||
+                                    "-";
+                                  return isChild ? `ㄴ ${projectTitle}` : projectTitle;
+                                })()}
                               </div>
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
