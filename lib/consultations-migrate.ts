@@ -28,6 +28,7 @@ export async function ensureConsultationsColumns() {
     sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS email TEXT`,
     sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_list_color TEXT`,
     sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS schedule_memo TEXT`,
+    sql`ALTER TABLE consultations ADD COLUMN IF NOT EXISTS title TEXT`,
   ];
   await Promise.all(alters);
 }

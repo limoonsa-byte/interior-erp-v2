@@ -18,6 +18,8 @@ function getTodayDateLocal(): string {
 
 type Consultation = {
   id: number;
+  /** 프로젝트 제목 (고객이름 위) */
+  title?: string;
   customerName: string;
   contact: string;
   email?: string;
@@ -231,6 +233,7 @@ function DetailModal({
       ? ((siteMeasurementInputRef.current?.value?.trim() || data.siteMeasurementAt || data.consultedAt) ?? undefined)
       : ((fd.get("siteMeasurementAt") as string)?.trim() || undefined);
     return {
+      title: ((fd.get("title") as string) ?? data.title ?? "").trim(),
       customerName: (fd.get("customerName") as string) ?? data.customerName,
       contact: (fd.get("contact") as string) ?? data.contact,
       email: (fd.get("email") as string) ?? data.email ?? "",
@@ -505,6 +508,18 @@ function DetailModal({
 
         {/* 기본 정보 */}
         <section className="mb-5 space-y-5">
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-gray-700">
+              프로젝트 제목
+            </label>
+            <input
+              type="text"
+              name="title"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              defaultValue={data.title ?? ""}
+              placeholder="예: OO아파트 31평 전체 리모델링"
+            />
+          </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-semibold text-gray-700">
@@ -862,6 +877,7 @@ function getProgressDateDisplay(item: Consultation): string {
 
 const emptyConsultation: Consultation = {
   id: 0,
+  title: "",
   customerName: "",
   contact: "",
   email: "",
@@ -934,7 +950,10 @@ export default function ConsultingPage() {
         if (item.status !== "완료및정산" && !activeStageStatuses.includes(item.status)) return false;
       }
       if (filterCustomerName.trim()) {
-        if (!item.customerName?.toLowerCase().includes(filterCustomerName.trim().toLowerCase())) return false;
+        const q = filterCustomerName.trim().toLowerCase();
+        const nameHit = item.customerName?.toLowerCase().includes(q);
+        const titleHit = (item.title ?? "").toLowerCase().includes(q);
+        if (!nameHit && !titleHit) return false;
       }
       if (filterStatus) {
         if (item.status !== filterStatus) return false;
@@ -981,6 +1000,7 @@ export default function ConsultingPage() {
         setConsultations(
           data.map((item: Record<string, unknown>) => ({
             id: Number(item.id),
+            title: item.title != null ? String(item.title) : "",
             customerName: String(item.customerName ?? item.customer_name ?? ""),
             contact: String(item.contact ?? ""),
             email: String(item.email ?? (item as { customer_email?: string }).customer_email ?? ""),
@@ -1043,13 +1063,21 @@ export default function ConsultingPage() {
       No: c.id,
       진행상태: c.status,
       진행날짜: getProgressDateDisplay(c),
+      프로젝트제목: c.title ?? "",
       고객명: c.customerName,
       연락처: c.contact,
       주소: c.address,
       평수: c.pyung,
     }));
-    const header = "No,진행상태,진행날짜,고객명,연락처,주소,평수\n";
-    const csv = header + rows.map((r) => `"${r.No}","${(r.진행상태 ?? "").replace(/"/g, '""')}","${(r.진행날짜 ?? "").replace(/"/g, '""')}","${(r.고객명 ?? "").replace(/"/g, '""')}","${(r.연락처 ?? "").replace(/"/g, '""')}","${(r.주소 ?? "").replace(/"/g, '""')}","${r.평수 ?? ""}"`).join("\n");
+    const header = "No,진행상태,진행날짜,프로젝트제목,고객명,연락처,주소,평수\n";
+    const csv =
+      header +
+      rows
+        .map(
+          (r) =>
+            `"${r.No}","${(r.진행상태 ?? "").replace(/"/g, '""')}","${(r.진행날짜 ?? "").replace(/"/g, '""')}","${(r.프로젝트제목 ?? "").replace(/"/g, '""')}","${(r.고객명 ?? "").replace(/"/g, '""')}","${(r.연락처 ?? "").replace(/"/g, '""')}","${(r.주소 ?? "").replace(/"/g, '""')}","${r.평수 ?? ""}"`
+        )
+        .join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1106,12 +1134,12 @@ export default function ConsultingPage() {
       <div className="mb-4 sm:mb-6 rounded-lg border border-gray-200 bg-white p-4 sm:p-5 shadow-sm">
         <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">고객명</label>
+            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">검색</label>
             <input
               type="text"
               value={filterCustomerName}
               onChange={(e) => setFilterCustomerName(e.target.value)}
-              placeholder="고객명 입력"
+              placeholder="고객명·프로젝트 제목"
               className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
@@ -1327,6 +1355,7 @@ export default function ConsultingPage() {
               <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">No.</th>
               <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행상태</th>
               <th className="min-w-[100px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행날짜</th>
+              <th className="min-w-[120px] shrink-0 p-2 sm:p-3 text-left">프로젝트 제목</th>
               <th className="hidden min-w-[72px] shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">고객명</th>
               <th className="min-w-[90px] shrink-0 p-2 sm:p-3 whitespace-nowrap">연락처</th>
               <th className="min-w-[120px] p-2 sm:p-3 text-left">주소</th>
@@ -1335,30 +1364,43 @@ export default function ConsultingPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {filteredConsultations.map((item, idx) => {
+              const openDetail = () => {
+                setActive(item);
+                setEditId(item.id);
+              };
               const customerNameButton = (
                 <button
                   type="button"
-                  onClick={() => {
-                    setActive(item);
-                    setEditId(item.id);
-                  }}
+                  onClick={openDetail}
                   className="text-blue-600 underline-offset-2 hover:underline"
                 >
                   {item.customerName}
                 </button>
               );
+              const titleLabel = (item.title ?? "").trim() || "-";
               return (
                 <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
                   <td className="row-actions-sticky whitespace-nowrap p-2 align-middle font-medium sm:hidden">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(item.id)}
-                        onChange={() => handleToggleSelect(item.id)}
-                        className="cursor-pointer"
-                        aria-label={`${item.customerName} 선택`}
-                      />
-                      {customerNameButton}
+                    <div className="flex min-w-0 flex-col gap-0.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => handleToggleSelect(item.id)}
+                          className="cursor-pointer"
+                          aria-label={`${item.customerName} 선택`}
+                        />
+                        {customerNameButton}
+                      </div>
+                      {(item.title ?? "").trim() ? (
+                        <button
+                          type="button"
+                          onClick={openDetail}
+                          className="truncate pl-6 text-left text-xs text-gray-500"
+                        >
+                          {item.title}
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                   <td className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap">
@@ -1373,6 +1415,16 @@ export default function ConsultingPage() {
                   <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
                   <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
                   <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
+                  <td className="min-w-[120px] max-w-[180px] p-2 sm:p-3 text-left">
+                    <button
+                      type="button"
+                      onClick={openDetail}
+                      className="block w-full truncate text-left text-gray-800 hover:text-blue-600"
+                      title={titleLabel}
+                    >
+                      {titleLabel}
+                    </button>
+                  </td>
                   <td className="hidden min-w-[72px] p-2 sm:table-cell sm:p-3 font-medium whitespace-nowrap">
                     {customerNameButton}
                   </td>

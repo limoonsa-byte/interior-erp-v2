@@ -50,6 +50,7 @@ export async function PATCH(
 
     const body = (await request.json()) as Record<string, unknown>;
     const {
+      title,
       customerName,
       contact,
       email,
@@ -79,6 +80,7 @@ export async function PATCH(
       designMeetingDone,
     } = body;
 
+    const hasTitle = bodyHas(body, "title");
     const hasCustomerName = bodyHas(body, "customerName");
     const hasContact = bodyHas(body, "contact");
     const hasEmail = bodyHas(body, "email");
@@ -87,6 +89,11 @@ export async function PATCH(
     const hasStatus = bodyHas(body, "status");
     const hasPic = bodyHas(body, "pic");
     const hasNote = bodyHas(body, "note");
+    const titleStr = hasTitle
+      ? title != null
+        ? String(title).trim() || null
+        : null
+      : null;
     const hasConsultedAt = bodyHas(body, "consultedAt");
     const hasScope = bodyHas(body, "scope");
     const hasBudget = bodyHas(body, "budget");
@@ -147,6 +154,7 @@ export async function PATCH(
       result = await sql`
         UPDATE consultations
         SET
+          title = CASE WHEN ${hasTitle} THEN ${titleStr} ELSE title END,
           customer_name = CASE WHEN ${hasCustomerName} THEN COALESCE(${customerName != null ? String(customerName) : null}, customer_name) ELSE customer_name END,
           contact = CASE WHEN ${hasContact} THEN COALESCE(${contact != null ? String(contact) : null}, contact) ELSE contact END,
           email = CASE WHEN ${hasEmail} THEN ${email != null ? String(email) : null} ELSE email END,
