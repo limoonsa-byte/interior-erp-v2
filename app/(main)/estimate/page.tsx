@@ -1127,6 +1127,36 @@ function EstimateForm({
       className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm"
     >
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="block text-sm font-medium text-gray-700">프로젝트 제목</label>
+            {isEdit && onCreateAdditional ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onCreateAdditional({
+                    customerName: customerName.trim(),
+                    contact: contact.trim(),
+                    address: address.trim(),
+                    consultationId: estimate?.consultationId,
+                    pic: consultationPic || undefined,
+                    titleSuggestion: `${(title || "추가").trim()} 추가견적`,
+                  })
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+              >
+                + 추가 견적서 작성
+              </button>
+            ) : null}
+          </div>
+          <input
+            type="text"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="예: OO아파트 31평 전체 리모델링"
+          />
+        </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">고객명</label>
           <input
@@ -1155,36 +1185,6 @@ function EstimateForm({
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             placeholder="주소"
-          />
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium text-gray-700">견적 제목</label>
-            {isEdit && onCreateAdditional ? (
-              <button
-                type="button"
-                onClick={() =>
-                  onCreateAdditional({
-                    customerName: customerName.trim(),
-                    contact: contact.trim(),
-                    address: address.trim(),
-                    consultationId: estimate?.consultationId,
-                    pic: consultationPic || undefined,
-                    titleSuggestion: `${(title || "추가").trim()} 추가견적`,
-                  })
-                }
-                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-              >
-                + 추가 견적서 작성
-              </button>
-            ) : null}
-          </div>
-          <input
-            type="text"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="예: 거실 리모델링 견적"
           />
         </div>
         <div>
@@ -2546,10 +2546,10 @@ export default function EstimatePage() {
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
                   <th className="row-actions-sticky w-24 p-2 text-center sm:hidden" aria-label="작업" />
+                  <th className="p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
-                  <th className="p-2 sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                   <th className="hidden w-28 p-2 sm:table-cell sm:w-24 sm:p-3" />
                 </tr>
@@ -2605,10 +2605,7 @@ export default function EstimatePage() {
                         return (
                           <tr key={est.id} className={`text-gray-700 hover:bg-gray-50 ${isChild ? "bg-sky-50" : ""}`}>
                             <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
-                            <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
-                            <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
-                            <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                            <td className="p-2 sm:p-3">
+                            <td className="p-2 sm:p-3 font-medium">
                               <div
                                 className="max-w-[18rem] truncate"
                                 title={est.displayTitle || est.title || ""}
@@ -2618,6 +2615,9 @@ export default function EstimatePage() {
                                   : est.displayTitle || est.title || "-"}
                               </div>
                             </td>
+                            <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
+                            <td className="p-2 sm:p-3">{est.customerName || "-"}</td>
+                            <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                             <td className="p-2 sm:p-3 text-right">{formatNumber(total)}원</td>
                             <td className="hidden whitespace-nowrap p-2 align-middle sm:table-cell sm:p-3">{actions}</td>
                           </tr>

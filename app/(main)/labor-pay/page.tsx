@@ -95,11 +95,10 @@ export default function LaborPayListPage() {
           <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
             <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
               <tr>
-                <th className="row-actions-sticky w-44 p-2 font-semibold sm:hidden">제목</th>
+                <th className="row-actions-sticky min-w-[10rem] p-2 font-semibold sm:p-3">프로젝트 제목</th>
                 <th className="p-2 sm:p-3 font-semibold">견적일자</th>
                 <th className="p-2 sm:p-3 font-semibold">고객명</th>
                 <th className="p-2 sm:p-3 font-semibold">연락처</th>
-                <th className="hidden p-2 font-semibold sm:table-cell sm:p-3">제목</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -131,19 +130,14 @@ export default function LaborPayListPage() {
                   );
                   return (
                     <tr key={est.id} className="text-gray-700 hover:bg-gray-50">
-                      <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                        <div className="max-w-[12rem] truncate" title={shownTitle}>
-                          {titleLink}
-                        </div>
-                      </td>
-                      <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
-                      <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
-                      <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
-                      <td className="hidden p-2 sm:table-cell sm:p-3">
+                      <td className="row-actions-sticky p-2 align-middle font-medium sm:p-3">
                         <div className="max-w-[18rem] truncate" title={shownTitle}>
                           {titleLink}
                         </div>
                       </td>
+                      <td className="p-2 sm:p-3 whitespace-nowrap">{formatDateYMD(est.estimateDate)}</td>
+                      <td className="p-2 sm:p-3">{est.customerName || "-"}</td>
+                      <td className="p-2 sm:p-3">{est.contact?.trim() ? est.contact : "-"}</td>
                     </tr>
                   );
                 })
@@ -151,7 +145,7 @@ export default function LaborPayListPage() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-gray-500">제목을 눌러 인부 지정·링크 발송·회신 확인 화면으로 이동합니다.</p>
+        <p className="text-xs text-gray-500">프로젝트 제목을 눌러 인부 지정·링크 발송·회신 확인 화면으로 이동합니다.</p>
       </div>
     </div>
   );

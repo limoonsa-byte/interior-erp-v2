@@ -521,7 +521,7 @@ export default function SchedulePage() {
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
             <tr>
               <th className="row-actions-sticky w-16 p-2 text-center sm:hidden no-print" aria-label="작업" />
-              <th className="p-2 sm:p-3">제목</th>
+              <th className="p-2 sm:p-3">프로젝트 제목</th>
               <th className="p-2 sm:p-3">공사시작일</th>
               <th className="p-2 sm:p-3">입주일</th>
               <th className="p-2 sm:p-3">고객명</th>

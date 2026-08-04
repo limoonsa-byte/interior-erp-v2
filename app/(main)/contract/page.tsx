@@ -897,7 +897,7 @@ function ContractForm({
       </div>
       <div className="grid gap-3 sm:grid-cols-1">
         <div>
-          <label className="block text-sm font-medium text-gray-700">계약 제목 * (견적서 제목)</label>
+          <label className="block text-sm font-medium text-gray-700">프로젝트 제목 * (계약/견적 제목)</label>
           <input
             type="text"
             value={title}
@@ -1533,7 +1533,7 @@ export default function ContractPage() {
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
                   <th className="row-actions-sticky w-32 p-2 text-center sm:hidden" aria-label="작업" />
-                  <th className="p-2 sm:p-3">제목</th>
+                  <th className="p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3">상태</th>

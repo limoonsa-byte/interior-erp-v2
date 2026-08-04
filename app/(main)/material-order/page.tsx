@@ -879,11 +879,10 @@ export function MaterialOrderPage() {
             <table className="w-full min-w-[680px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="row-actions-sticky w-44 p-2 sm:hidden">제목</th>
+                  <th className="row-actions-sticky min-w-[10rem] p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
-                  <th className="hidden p-2 sm:table-cell sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                 </tr>
               </thead>
@@ -911,15 +910,12 @@ export function MaterialOrderPage() {
                         onClick={() => setSelectedEstimateId(est.id)}
                         className="text-gray-700 hover:bg-gray-50 cursor-pointer"
                       >
-                        <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                          <div className="max-w-[12rem] truncate" title={shownTitle}>{titleSpan}</div>
-                        </td>
-                        <td className="p-2 sm:p-3">{est.estimateDate ? est.estimateDate.slice(0, 10) : "-"}</td>
-                        <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
-                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                        <td className="hidden p-2 sm:table-cell sm:p-3">
+                        <td className="row-actions-sticky p-2 align-middle font-medium sm:p-3">
                           <div className="max-w-[18rem] truncate" title={shownTitle}>{titleSpan}</div>
                         </td>
+                        <td className="p-2 sm:p-3">{est.estimateDate ? est.estimateDate.slice(0, 10) : "-"}</td>
+                        <td className="p-2 sm:p-3">{est.customerName || "-"}</td>
+                        <td className="p-2 sm:p-3">{est.contact || "-"}</td>
                         <td className="p-2 sm:p-3 text-right tabular-nums">{formatNum(subtotal)}원</td>
                       </tr>
                     );

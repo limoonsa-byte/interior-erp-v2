@@ -1353,9 +1353,9 @@ export default function ConsultingPage() {
                 />
               </th>
               <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">No.</th>
+              <th className="min-w-[140px] shrink-0 p-2 sm:p-3 text-left">프로젝트 제목</th>
               <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행상태</th>
               <th className="min-w-[100px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행날짜</th>
-              <th className="min-w-[120px] shrink-0 p-2 sm:p-3 text-left">프로젝트 제목</th>
               <th className="hidden min-w-[72px] shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">고객명</th>
               <th className="min-w-[90px] shrink-0 p-2 sm:p-3 whitespace-nowrap">연락처</th>
               <th className="min-w-[120px] p-2 sm:p-3 text-left">주소</th>
@@ -1381,26 +1381,22 @@ export default function ConsultingPage() {
               return (
                 <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
                   <td className="row-actions-sticky whitespace-nowrap p-2 align-middle font-medium sm:hidden">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(item.id)}
-                          onChange={() => handleToggleSelect(item.id)}
-                          className="cursor-pointer"
-                          aria-label={`${item.customerName} 선택`}
-                        />
-                        {customerNameButton}
-                      </div>
-                      {(item.title ?? "").trim() ? (
-                        <button
-                          type="button"
-                          onClick={openDetail}
-                          className="truncate pl-6 text-left text-xs text-gray-500"
-                        >
-                          {item.title}
-                        </button>
-                      ) : null}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(item.id)}
+                        onChange={() => handleToggleSelect(item.id)}
+                        className="cursor-pointer"
+                        aria-label={`${item.customerName} 선택`}
+                      />
+                      <button
+                        type="button"
+                        onClick={openDetail}
+                        className="min-w-0 truncate text-left text-blue-600 underline-offset-2 hover:underline"
+                        title={titleLabel}
+                      >
+                        {titleLabel}
+                      </button>
                     </div>
                   </td>
                   <td className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap">
@@ -1413,19 +1409,19 @@ export default function ConsultingPage() {
                     />
                   </td>
                   <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
-                  <td className="min-w-[120px] max-w-[180px] p-2 sm:p-3 text-left">
+                  <td className="min-w-[140px] max-w-[220px] p-2 sm:p-3 text-left font-medium">
                     <button
                       type="button"
                       onClick={openDetail}
-                      className="block w-full truncate text-left text-gray-800 hover:text-blue-600"
+                      className="block w-full truncate text-left text-blue-600 underline-offset-2 hover:underline"
                       title={titleLabel}
                     >
                       {titleLabel}
                     </button>
                   </td>
-                  <td className="hidden min-w-[72px] p-2 sm:table-cell sm:p-3 font-medium whitespace-nowrap">
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
+                  <td className="hidden min-w-[72px] p-2 sm:table-cell sm:p-3 whitespace-nowrap">
                     {customerNameButton}
                   </td>
                   <td className="p-2 sm:p-3 whitespace-nowrap">{item.contact}</td>

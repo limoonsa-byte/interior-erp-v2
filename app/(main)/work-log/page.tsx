@@ -318,7 +318,12 @@ export default function WorkLogPage() {
                     expenses: formExpenses.filter((e) => e.label !== "" || e.content !== "" || e.amount !== 0),
                     estimateId: formEstimateId ? Number(formEstimateId) : null,
                     picId: formPicId ? Number(formPicId) : null,
-                    estimateTitle: formEstimateId ? (estimates.find((e) => e.id === Number(formEstimateId))?.title ?? null) : null,
+                    estimateTitle: formEstimateId
+                      ? (() => {
+                          const e = estimates.find((x) => x.id === Number(formEstimateId));
+                          return (e?.displayTitle || e?.title || null) as string | null;
+                        })()
+                      : null,
                     picName: formPicId ? (pics.find((p) => p.id === Number(formPicId))?.name ?? null) : null,
                   }
                 : log
@@ -431,7 +436,7 @@ export default function WorkLogPage() {
           </div>
           <div>
             <div className="mb-1 flex flex-wrap items-center gap-3">
-              <span className="text-xs font-medium text-gray-600">프로젝트(견적)</span>
+              <span className="text-xs font-medium text-gray-600">프로젝트 제목</span>
               <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-700">
                 <input
                   type="checkbox"
