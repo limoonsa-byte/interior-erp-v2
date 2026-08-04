@@ -2614,17 +2614,17 @@ export default function EstimatePage() {
                           <tr key={est.id} className={`text-gray-700 hover:bg-gray-50 ${isChild ? "bg-sky-50" : ""}`}>
                             <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
                             <td className="p-2 sm:p-3 font-medium">
-                              <div
-                                className="max-w-[18rem] truncate"
-                                title={est.displayTitle || est.consultationTitle || est.title || ""}
-                              >
-                                {(() => {
-                                  const projectTitle =
-                                    (est.displayTitle || est.consultationTitle || est.title || "").trim() ||
-                                    "-";
-                                  return isChild ? `ㄴ ${projectTitle}` : projectTitle;
-                                })()}
-                              </div>
+                              {(() => {
+                                const projectTitle =
+                                  (est.displayTitle || est.consultationTitle || est.title || "").trim() ||
+                                  "-";
+                                const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
+                                return (
+                                  <div className="max-w-[18rem] truncate" title={shownTitle}>
+                                    {shownTitle}
+                                  </div>
+                                );
+                              })()}
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
                             <td className="p-2 sm:p-3">{est.customerName || "-"}</td>

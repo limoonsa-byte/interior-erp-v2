@@ -23,6 +23,7 @@ type Estimate = {
   address: string;
   title: string;
   displayTitle?: string;
+  consultationTitle?: string;
   estimateDate?: string;
   note: string;
   items: EstimateItem[];
