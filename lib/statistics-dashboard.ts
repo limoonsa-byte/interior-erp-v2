@@ -17,6 +17,7 @@ export type EstimateStat = {
   id: number;
   consultationId?: number;
   title?: string;
+  displayTitle?: string;
   customerName?: string;
   estimateDate?: string;
   picName?: string;
@@ -179,7 +180,7 @@ export function buildStatistics(
     const paidAmount = num(summaries[key]);
     return {
       estimateId: est.id,
-      siteName: (est.title || "").trim() || `프로젝트 #${est.id}`,
+      siteName: (est.displayTitle || est.title || "").trim() || `프로젝트 #${est.id}`,
       customerName: (est.customerName || "").trim() || "-",
       totalAmount,
       usedAmount,

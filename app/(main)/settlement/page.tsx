@@ -22,6 +22,7 @@ type Estimate = {
   contact: string;
   address: string;
   title: string;
+  displayTitle?: string;
   estimateDate?: string;
   note: string;
   items: EstimateItem[];
@@ -612,11 +613,10 @@ export default function SettlementPage() {
             <table className="w-full min-w-[760px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="row-actions-sticky w-44 p-2 sm:hidden">제목</th>
+                  <th className="row-actions-sticky min-w-[10rem] p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
-                  <th className="hidden p-2 sm:table-cell sm:p-3">제목</th>
                   <th className="p-2 sm:p-3 text-right">고객결제상환</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
                 </tr>
@@ -649,23 +649,22 @@ export default function SettlementPage() {
                         const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
                         const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
                         const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
-                        const displayTitle = isChild ? `ㄴ ${est.title || "추가 견적서"}` : est.title || "-";
-                        const titleSpan = <span className="text-blue-600 hover:underline">{displayTitle}</span>;
+                        const shownTitle = isChild
+                          ? `ㄴ ${est.title || est.displayTitle || "추가 견적서"}`
+                          : (est.displayTitle || est.title || "").trim() || "-";
+                        const titleSpan = <span className="text-blue-600 hover:underline">{shownTitle}</span>;
                         return (
                           <tr
                             key={est.id}
                             onClick={() => setSelectedId(est.id)}
                             className={`text-gray-700 hover:bg-gray-50 cursor-pointer ${isChild ? "bg-sky-50" : ""}`}
                           >
-                            <td className="row-actions-sticky p-2 align-middle sm:hidden">
-                              <div className="max-w-[12rem] truncate" title={displayTitle}>{titleSpan}</div>
+                            <td className="row-actions-sticky p-2 align-middle font-medium sm:p-3">
+                              <div className="max-w-[18rem] truncate" title={shownTitle}>{titleSpan}</div>
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
-                            <td className="p-2 sm:p-3 font-medium">{est.customerName || "-"}</td>
+                            <td className="p-2 sm:p-3">{est.customerName || "-"}</td>
                             <td className="p-2 sm:p-3">{est.contact || "-"}</td>
-                            <td className="hidden p-2 sm:table-cell sm:p-3">
-                              <div className="max-w-[18rem] truncate" title={displayTitle}>{titleSpan}</div>
-                            </td>
                             <td className="p-2 sm:p-3 text-right tabular-nums text-gray-700">
                               {Object.prototype.hasOwnProperty.call(customerPaymentTotalsByEstimate, String(est.id))
                                 ? `${formatNum(customerPaymentTotalsByEstimate[String(est.id)] ?? 0)}원`
@@ -698,10 +697,15 @@ export default function SettlementPage() {
 
           {!detailLoading && estimate && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            {estimate.customerName && <span>고객: {estimate.customerName}</span>}
-            {estimate.address && <span className="ml-3">주소: {estimate.address}</span>}
-          </p>
+          <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
+            <p className="font-medium text-gray-900">
+              {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+            </p>
+            <p className="mt-1 text-gray-600">
+              {estimate.customerName && <span>고객: {estimate.customerName}</span>}
+              {estimate.address && <span className="ml-3">주소: {estimate.address}</span>}
+            </p>
+          </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <h3 className="text-sm font-semibold text-gray-800 mb-2">고객결제 상황</h3>

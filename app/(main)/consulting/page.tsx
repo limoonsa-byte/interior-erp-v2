@@ -1340,7 +1340,7 @@ export default function ConsultingPage() {
                     className="cursor-pointer"
                     aria-label="전체 선택"
                   />
-                  <span>고객명</span>
+                  <span>프로젝트 제목</span>
                 </div>
               </th>
               <th className="hidden w-10 shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">

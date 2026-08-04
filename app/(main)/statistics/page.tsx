@@ -160,7 +160,7 @@ export default function StatisticsPage() {
         })
         .map((e) => ({
           id: e.id,
-          label: (e.title || "").trim() || `프로젝트 #${e.id}`,
+          label: (e.displayTitle || e.title || "").trim() || `프로젝트 #${e.id}`,
         })),
     [
       estimates,
@@ -322,7 +322,7 @@ export default function StatisticsPage() {
             <table className="w-full min-w-[860px] text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="bg-gray-50 text-gray-600">
                 <tr>
-                  <th className="px-3 py-2 text-left">현장명</th>
+                  <th className="px-3 py-2 text-left">프로젝트 제목</th>
                   <th className="px-3 py-2 text-left">고객</th>
                   <th className="px-3 py-2 text-right">전체금액</th>
                   <th className="px-3 py-2 text-right">정산금</th>

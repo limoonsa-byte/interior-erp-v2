@@ -74,6 +74,7 @@ type ChatMessage = {
 type Estimate = {
   id: number;
   title?: string;
+  displayTitle?: string;
   customerName?: string;
 };
 
@@ -356,16 +357,24 @@ export default function ChatPage() {
     }
   };
 
-  const currentRoomLabel = currentEstimateId != null
-    ? (estimates.find((e) => e.id === currentEstimateId)?.title || estimates.find((e) => e.id === currentEstimateId)?.customerName || `견적 #${currentEstimateId}`)
-    : "회사 전체";
+  const currentRoomLabel =
+    currentEstimateId != null
+      ? (() => {
+          const e = estimates.find((x) => x.id === currentEstimateId);
+          return (
+            (e?.displayTitle || e?.title || "").trim() ||
+            e?.customerName ||
+            `견적 #${currentEstimateId}`
+          );
+        })()
+      : "회사 전체";
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
       {/* 채팅방 목록 (견적명 기준) */}
       <div className="w-56 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
-          <p className="text-sm font-semibold text-gray-700">채팅방 (견적명)</p>
+          <p className="text-sm font-semibold text-gray-700">채팅방 (프로젝트 제목)</p>
         </div>
         <ul className="max-h-[320px] overflow-y-auto py-1">
           <li>
@@ -399,10 +408,12 @@ export default function ChatPage() {
                     ? "bg-slate-100 font-medium text-slate-800"
                     : "text-gray-700 hover:bg-gray-50"
                 }`}
-                title={e.customerName || undefined}
+                title={(e.displayTitle || e.title || e.customerName || undefined) as string | undefined}
               >
                 <span className="flex items-center justify-between gap-2">
-                  <span className="truncate">{e.title || e.customerName || `견적 #${e.id}`}</span>
+                  <span className="truncate">
+                    {(e.displayTitle || e.title || "").trim() || e.customerName || `견적 #${e.id}`}
+                  </span>
                   {(unreadByRoom[String(e.id)] ?? 0) > 0 && (
                     <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
                       {unreadByRoom[String(e.id)]! > 99 ? "99+" : unreadByRoom[String(e.id)]}
