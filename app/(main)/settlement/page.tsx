@@ -1061,7 +1061,9 @@ export default function SettlementPage() {
         <div className="settlement-print-only">
           <header className="settlement-print-header">
             <h1 className="settlement-print-title">정산서</h1>
-            <p className="settlement-print-subtitle">{estimate.title}</p>
+            <p className="settlement-print-subtitle">
+              {(estimate.displayTitle || estimate.title || "").trim() || "제목 없음"}
+            </p>
             <table className="settlement-print-customer">
               <tbody>
                 <tr>
