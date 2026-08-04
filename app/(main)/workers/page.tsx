@@ -312,6 +312,8 @@ export default function WorkersPage() {
 
   const closeShareModal = () => {
     setShareTargets([]);
+    setReadyJpgFile(null);
+    setJpgPreparing(false);
   };
 
   const selectedShareItem = useMemo(
