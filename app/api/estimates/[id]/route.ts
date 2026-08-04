@@ -258,6 +258,18 @@ export async function PATCH(
         throw updateErr;
       }
     }
+
+    // 견적 폼 "프로젝트 제목" → 상담 프로젝트 제목 + 같은 상담 메인 견적 동기화
+    if (title != null) {
+      const { syncProjectTitleFromEstimate } = await import("@/lib/consultations-migrate");
+      await syncProjectTitleFromEstimate({
+        companyId: company.id,
+        estimateId,
+        consultationId: consultationId != null ? Number(consultationId) : null,
+        title: String(title),
+      });
+    }
+
     return NextResponse.json({ message: "수정되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("estimates [id] PATCH error:", error);

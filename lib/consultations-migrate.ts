@@ -86,3 +86,59 @@ export async function syncEstimateTitlesFromConsultations(companyId: number) {
     console.error("syncEstimateTitlesFromConsultations error:", err);
   }
 }
+
+/**
+ * 견적 폼의 프로젝트 제목을 상담(consultations.title)과
+ * 같은 상담의 메인 견적들에 한꺼번에 맞춘다. (추가견적 제외)
+ */
+export async function syncProjectTitleFromEstimate(opts: {
+  companyId: number;
+  estimateId?: number | null;
+  consultationId?: number | null;
+  title: string | null | undefined;
+}) {
+  const titleStr = opts.title != null ? String(opts.title).trim() : "";
+  if (!titleStr) return;
+  if (titleStr.includes("추가견적") || titleStr.includes("추가 견적")) return;
+
+  try {
+    let consultationId =
+      opts.consultationId != null && !Number.isNaN(Number(opts.consultationId))
+        ? Number(opts.consultationId)
+        : null;
+
+    if (consultationId == null && opts.estimateId != null) {
+      const est = await sql`
+        SELECT consultation_id FROM estimates
+        WHERE id = ${opts.estimateId} AND company_id = ${opts.companyId}
+        LIMIT 1
+      `;
+      const cid = est.rows[0]?.consultation_id;
+      if (cid != null) consultationId = Number(cid);
+    }
+    if (consultationId == null) return;
+
+    await sql`
+      UPDATE consultations
+      SET title = ${titleStr}
+      WHERE id = ${consultationId} AND company_id = ${opts.companyId}
+    `;
+
+    await sql`
+      UPDATE estimates
+      SET title = ${titleStr}
+      WHERE consultation_id = ${consultationId}
+        AND company_id = ${opts.companyId}
+        AND (
+          title IS NULL
+          OR TRIM(title) = ''
+          OR (
+            title NOT ILIKE ${"%추가견적%"}
+            AND title NOT ILIKE ${"%추가 견적%"}
+          )
+        )
+    `;
+  } catch (err) {
+    console.error("syncProjectTitleFromEstimate error:", err);
+  }
+}

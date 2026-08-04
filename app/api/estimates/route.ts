@@ -174,6 +174,17 @@ export async function POST(request: Request) {
         throw insertErr;
       }
     }
+
+    // 견적 생성 시 입력한 프로젝트 제목을 상담에도 반영 (추가견적 제외)
+    if (consultationId != null && titleVal) {
+      const { syncProjectTitleFromEstimate } = await import("@/lib/consultations-migrate");
+      await syncProjectTitleFromEstimate({
+        companyId: company.id,
+        consultationId: Number(consultationId),
+        title: titleVal,
+      });
+    }
+
     return NextResponse.json({ message: "저장되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("estimates POST error:", error);

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ConditionalAuthProvider } from "@/components/providers/ConditionalAuthProvider";
 import { TabActivation } from "@/components/TabActivation";
+import { ForceAppUpdate } from "@/components/ForceAppUpdate";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ConditionalAuthProvider>
+          <ForceAppUpdate />
           <TabActivation />
           {children}
         </ConditionalAuthProvider>

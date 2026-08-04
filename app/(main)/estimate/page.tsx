@@ -1138,7 +1138,10 @@ function EstimateForm({
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="block text-sm font-medium text-gray-700">프로젝트 제목</label>
+            <label className="block text-sm font-medium text-gray-700">
+              프로젝트 제목
+              <span className="ml-1 font-normal text-gray-400">(상담·견적~정산 공통)</span>
+            </label>
             {isEdit && onCreateAdditional ? (
               <button
                 type="button"
@@ -2267,6 +2270,11 @@ export default function EstimatePage() {
         if (Array.isArray(data)) setEstimates(data);
       })
       .catch(() => setEstimates([]));
+    // 견적 로드 시 상담 제목 동기화가 돌므로, 상담 목록도 다시 받아 제목을 맞춘다
+    fetch("/api/consultations")
+      .then((res) => res.json())
+      .then((list) => setConsultationsForList(Array.isArray(list) ? list : []))
+      .catch(() => setConsultationsForList([]));
   };
 
   useEffect(() => {
