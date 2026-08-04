@@ -70,6 +70,8 @@ type Estimate = {
   id: number;
   consultationId?: number;
   title: string;
+  displayTitle?: string;
+  consultationTitle?: string;
 };
 
 function toDateValue(value: string | undefined): string {
@@ -284,8 +286,10 @@ export default function ScheduleDetailPage() {
         const e = estimates.find((x: Estimate) => x.consultationId === id);
         const consultTitle = String((c as { title?: string })?.title ?? "").trim();
         setEstimateTitle(
-          e?.title?.trim() ||
-            consultTitle ||
+          consultTitle ||
+            e?.consultationTitle?.trim() ||
+            e?.displayTitle?.trim() ||
+            e?.title?.trim() ||
             `${(c as { customerName?: string })?.customerName || "상담"} (견적 없음)`
         );
       })

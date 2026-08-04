@@ -300,9 +300,10 @@ export default function WorkersPage() {
           return {
             consultation: c,
             title:
-              e?.displayTitle?.trim() ||
-              e?.title?.trim() ||
               (c.title ?? "").trim() ||
+              e?.displayTitle?.trim() ||
+              e?.consultationTitle?.trim() ||
+              e?.title?.trim() ||
               "제목 없음",
           };
         });

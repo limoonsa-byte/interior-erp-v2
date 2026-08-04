@@ -103,10 +103,10 @@ export async function GET() {
         contact: row.contact ?? "",
         address: row.address ?? "",
         title: rawTitle,
-        /** 화면 표시용: 견적 제목 → 상담 프로젝트 제목 → 고객명 */
+        /** 화면 표시용: 상담 프로젝트 제목 → 견적 제목 → 고객명 */
         displayTitle: displayProjectTitle({
-          estimateTitle: rawTitle,
           consultationTitle,
+          estimateTitle: rawTitle,
           customerName,
         }),
         consultationTitle,
@@ -133,6 +133,20 @@ export async function POST(request: Request) {
     if (!company) return NextResponse.json({ error: "로그인 필요" }, { status: 401 });
     const body = await request.json();
     const { consultationId, customerName, contact, address, title, estimateDate, note, items, processOrder, overheadPercent, profitPercent, picName } = body;
+    let titleVal = title != null ? String(title).trim() : "";
+    // 제목이 비어 있고 상담이 연결되어 있으면 상담 프로젝트 제목을 사용
+    if (!titleVal && consultationId != null) {
+      try {
+        const consultRes = await sql`
+          SELECT title FROM consultations
+          WHERE id = ${Number(consultationId)} AND company_id = ${company.id}
+          LIMIT 1
+        `;
+        titleVal = String(consultRes.rows[0]?.title ?? "").trim();
+      } catch {
+        // consultations.title 미적용 환경은 빈 제목 유지
+      }
+    }
     const itemsJson = Array.isArray(items) ? JSON.stringify(items) : "[]";
     const processOrderJson = Array.isArray(processOrder) ? JSON.stringify(processOrder) : null;
     const estimateDateVal = estimateDate != null && String(estimateDate).trim() !== "" ? String(estimateDate).slice(0, 10) : null;
@@ -142,14 +156,14 @@ export async function POST(request: Request) {
     try {
       await sql`
       INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent, pic_name)
-      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal}, ${picNameVal})
+      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${titleVal}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal}, ${picNameVal})
     `;
     } catch (insertErr) {
       const msg = insertErr instanceof Error ? insertErr.message : String(insertErr);
       if (/column.*pic_name/i.test(msg)) {
         await sql`
       INSERT INTO estimates (company_id, consultation_id, customer_name, contact, address, title, estimate_date, note, items, process_order, overhead_percent, profit_percent)
-      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${title ?? ""}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal})
+      VALUES (${company.id}, ${consultationId ?? null}, ${customerName ?? ""}, ${contact ?? ""}, ${address ?? ""}, ${titleVal}, ${estimateDateVal}, ${note ?? ""}, ${itemsJson}, ${processOrderJson}, ${overheadVal}, ${profitVal})
     `;
       } else {
         throw insertErr;

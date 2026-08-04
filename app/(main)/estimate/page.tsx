@@ -143,7 +143,7 @@ type Estimate = {
   contact: string;
   address: string;
   title: string;
-  /** API: 견적 제목 → 상담 프로젝트 제목 → 고객명 */
+  /** API: 상담 프로젝트 제목 → 견적 제목 → 고객명 */
   displayTitle?: string;
   consultationTitle?: string;
   estimateDate?: string;
@@ -287,7 +287,9 @@ function EstimateForm({
   const [customerName, setCustomerName] = useState(estimate?.customerName ?? consultationPreFill?.customerName ?? "");
   const [contact, setContact] = useState(estimate?.contact ?? consultationPreFill?.contact ?? "");
   const [address, setAddress] = useState(estimate?.address ?? consultationPreFill?.address ?? "");
-  const [title, setTitle] = useState(estimate?.title ?? consultationPreFill?.titleSuggestion ?? "");
+  const [title, setTitle] = useState(
+    estimate?.consultationTitle || estimate?.title || consultationPreFill?.titleSuggestion || ""
+  );
   const [estimateDate, setEstimateDate] = useState(() => {
     const from = estimate?.estimateDate;
     return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
@@ -331,6 +333,12 @@ function EstimateForm({
       setProfitPercent(estimate.profitPercent ?? 10);
     }
   }, [estimate?.id, estimate?.overheadPercent, estimate?.profitPercent]);
+
+  useEffect(() => {
+    if (estimate != null) {
+      setTitle(estimate.consultationTitle || estimate.title || "");
+    }
+  }, [estimate?.id, estimate?.consultationTitle, estimate?.title]);
 
   const consultationId = estimate?.consultationId ?? consultationPreFill?.consultationId ?? null;
   useEffect(() => {

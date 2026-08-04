@@ -54,7 +54,7 @@ export async function GET(
     const estimateTitle = String(r.estimate_title ?? "").trim();
     const consultationTitle = String(r.consultation_title ?? "").trim();
     const customerName = String(r.customer_name ?? "").trim();
-    const siteTitle = estimateTitle || consultationTitle || customerName;
+    const siteTitle = consultationTitle || estimateTitle || customerName;
     return NextResponse.json({
       workerName: String(r.worker_name ?? ""),
       status: String(r.status ?? "open"),

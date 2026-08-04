@@ -223,6 +223,28 @@ export async function PATCH(
       );
     }
 
+    // 상담 프로젝트 제목이 바뀌면 연결된 견적서 title도 맞춰 둔다 (견적~정산 표시 일관성)
+    if (hasTitle && titleStr) {
+      try {
+        await sql`
+          UPDATE estimates
+          SET title = ${titleStr}
+          WHERE consultation_id = ${consultationId}
+            AND company_id = ${company.id}
+            AND (
+              title IS NULL
+              OR TRIM(title) = ''
+              OR (
+                title NOT ILIKE ${"%추가견적%"}
+                AND title NOT ILIKE ${"%추가 견적%"}
+              )
+            )
+        `;
+      } catch (syncErr) {
+        console.error("consultations PATCH: estimate title sync failed:", syncErr);
+      }
+    }
+
     return NextResponse.json({ message: "수정되었습니다." }, { status: 200 });
   } catch (error) {
     console.error("consultations PATCH error:", error);

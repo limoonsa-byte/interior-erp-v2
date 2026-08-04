@@ -10,8 +10,8 @@ export function firstNonEmpty(...values: Array<string | null | undefined>): stri
 }
 
 /**
- * 프로젝트 제목 (견적 제목 → 상담 제목 → 고객명 → fallback)
- * 일정/프로젝트/공유 등 “현장 제목” 자리용
+ * 프로젝트 제목 (상담 프로젝트 제목 → 견적 제목 → 고객명 → fallback)
+ * 상담에서 입력한 제목이 견적~정산까지 동일하게 보이도록 상담 제목을 우선한다.
  */
 export function displayProjectTitle(opts: {
   estimateTitle?: string | null;
@@ -20,7 +20,7 @@ export function displayProjectTitle(opts: {
   fallback?: string;
 }): string {
   return (
-    firstNonEmpty(opts.estimateTitle, opts.consultationTitle, opts.customerName) ||
+    firstNonEmpty(opts.consultationTitle, opts.estimateTitle, opts.customerName) ||
     (opts.fallback ?? "제목 없음")
   );
 }
