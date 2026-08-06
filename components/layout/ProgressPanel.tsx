@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import {
@@ -10,8 +10,20 @@ import {
   FileText,
   Calendar,
   FolderKanban,
+  ClipboardList,
 } from "lucide-react";
 import { useRightPanel } from "./RightPanelContext";
+
+const LABOR_PAY_SEEN_KEY = "labor-pay-last-seen-submitted-id";
+
+type LaborPayRecent = {
+  id: number;
+  estimateId: number;
+  workerName: string;
+  amount: number | null;
+  submittedAt: string | null;
+  siteTitle: string;
+};
 
 type Consultation = {
   id: number;
@@ -103,16 +115,66 @@ function getThisWeekMondayThroughSundayRange(): { start: string; end: string } {
   return { start: `${y}-${m}-${d}`, end: `${y2}-${m2}-${d2}` };
 }
 
+function readLastSeenSubmittedId(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const n = parseInt(window.localStorage.getItem(LABOR_PAY_SEEN_KEY) || "0", 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function formatLaborPayAmount(amount: number | null): string {
+  if (amount == null || !Number.isFinite(amount)) return "";
+  return `${Math.round(amount).toLocaleString("ko-KR")}원`;
+}
+
 export function ProgressPanel() {
   const { open, setOpen } = useRightPanel();
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [laborPaySubmittedCount, setLaborPaySubmittedCount] = useState(0);
+  const [laborPayLatestId, setLaborPayLatestId] = useState(0);
+  const [laborPayRecent, setLaborPayRecent] = useState<LaborPayRecent[]>([]);
+  const [lastSeenSubmittedId, setLastSeenSubmittedId] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  const loadLaborPaySummary = useCallback(() => {
+    return fetch("/api/company/labor-pay/summary")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data === "object" && !data.error) {
+          setLaborPaySubmittedCount(Number(data.submittedCount) || 0);
+          setLaborPayLatestId(Number(data.latestSubmittedId) || 0);
+          setLaborPayRecent(Array.isArray(data.recent) ? (data.recent as LaborPayRecent[]) : []);
+        }
+      })
+      .catch(() => {
+        /* 테이블 미적용 등은 조용히 무시 */
+      });
+  }, []);
+
+  const markLaborPaySeen = useCallback(() => {
+    const maxId = Math.max(
+      laborPayLatestId,
+      laborPayRecent.reduce((m, r) => Math.max(m, r.id || 0), 0)
+    );
+    if (maxId <= 0) return;
+    try {
+      window.localStorage.setItem(LABOR_PAY_SEEN_KEY, String(maxId));
+    } catch {
+      /* ignore */
+    }
+    setLastSeenSubmittedId(maxId);
+  }, [laborPayLatestId, laborPayRecent]);
+
   useEffect(() => {
+    setLastSeenSubmittedId(readLastSeenSubmittedId());
     Promise.all([
       fetch("/api/consultations").then((r) => r.json()),
       fetch("/api/estimates").then((r) => r.json()),
+      loadLaborPaySummary(),
     ])
       .then(([cons, est]) => {
         setConsultations(Array.isArray(cons) ? cons : []);
@@ -123,7 +185,25 @@ export function ProgressPanel() {
         setEstimates([]);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadLaborPaySummary]);
+
+  // 패널이 열려 있을 때 주기적으로 제출 현황 갱신
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setInterval(() => {
+      void loadLaborPaySummary();
+    }, 60_000);
+    return () => window.clearInterval(t);
+  }, [open, loadLaborPaySummary]);
+
+  /** 확인하지 않은 제출 건수(최근 목록 기준 + 최신 id 비교) */
+  const laborPayNewCount = useMemo(() => {
+    if (laborPayLatestId <= lastSeenSubmittedId) return 0;
+    const fromRecent = laborPayRecent.filter((r) => r.id > lastSeenSubmittedId).length;
+    // 최근 목록에 안 잡힌 신규가 더 있으면 최소 1로 표시
+    if (fromRecent > 0) return fromRecent;
+    return laborPaySubmittedCount > 0 ? 1 : 0;
+  }, [laborPayLatestId, lastSeenSubmittedId, laborPayRecent, laborPaySubmittedCount]);
 
   const receptionConsultCount = consultations.filter((c) => {
     const s = normalizeConsultationStatus(c.status);
@@ -179,11 +259,18 @@ export function ProgressPanel() {
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="flex h-10 w-10 flex-col items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="relative flex h-10 w-10 flex-col items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
             aria-label="진행상황 패널 펼치기"
-            title="진행상황"
+            title={
+              laborPayNewCount > 0
+                ? `진행상황 · 내역서 제출 ${laborPayNewCount}건`
+                : "진행상황"
+            }
           >
             <ChevronLeft className="h-5 w-5" />
+            {laborPayNewCount > 0 ? (
+              <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500" aria-hidden />
+            ) : null}
           </button>
         )}
       </div>
@@ -254,6 +341,40 @@ export function ProgressPanel() {
                     </span>
                   </Link>
                 </li>
+                <li>
+                  <Link
+                    href="/labor-pay"
+                    onClick={markLaborPaySeen}
+                    title="인부가 내역서 요청 링크로 작성·제출한 건수입니다. 클릭하면 확인한 것으로 표시됩니다."
+                    className={clsx(
+                      "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+                      laborPayNewCount > 0
+                        ? "border-rose-200 bg-rose-50 hover:border-rose-300 hover:bg-rose-50/80"
+                        : "border-gray-200 bg-gray-50 hover:border-blue-200 hover:bg-blue-50/50"
+                    )}
+                  >
+                    <ClipboardList
+                      className={clsx(
+                        "h-4 w-4 shrink-0",
+                        laborPayNewCount > 0 ? "text-rose-600" : "text-slate-600"
+                      )}
+                    />
+                    <span className="flex-1 truncate text-gray-700">(내역서 제출)</span>
+                    <span
+                      className={clsx(
+                        "shrink-0 text-sm font-semibold tabular-nums",
+                        laborPayNewCount > 0 ? "text-rose-700" : "text-gray-900"
+                      )}
+                    >
+                      {loading ? "—" : laborPaySubmittedCount}
+                    </span>
+                    {laborPayNewCount > 0 ? (
+                      <span className="shrink-0 rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white">
+                        NEW {laborPayNewCount}
+                      </span>
+                    ) : null}
+                  </Link>
+                </li>
               </ul>
             </div>
 
@@ -301,6 +422,48 @@ export function ProgressPanel() {
                       </Link>
                     </li>
                   ))}
+                </ul>
+              </div>
+            )}
+
+            {/* 최근 내역서 제출 */}
+            {laborPayRecent.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  최근 내역서 제출
+                </p>
+                <ul className="space-y-1">
+                  {laborPayRecent.slice(0, 3).map((r) => {
+                    const isNew = r.id > lastSeenSubmittedId;
+                    const amountLabel = formatLaborPayAmount(r.amount);
+                    return (
+                      <li key={r.id}>
+                        <Link
+                          href={`/labor-pay/${r.estimateId}`}
+                          onClick={markLaborPaySeen}
+                          className={clsx(
+                            "block rounded-lg px-2 py-1.5 text-sm hover:bg-gray-100",
+                            isNew ? "bg-rose-50/70" : ""
+                          )}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {isNew ? (
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-500" aria-hidden />
+                            ) : null}
+                            <span className="min-w-0 flex-1 truncate text-gray-800">
+                              {(r.workerName || "인부").trim()}
+                              {r.siteTitle ? ` · ${r.siteTitle}` : ""}
+                            </span>
+                          </span>
+                          {amountLabel ? (
+                            <span className="mt-0.5 block pl-3 text-xs tabular-nums text-gray-500">
+                              {amountLabel}
+                            </span>
+                          ) : null}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
