@@ -3,6 +3,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { resolveGroupProjectTitle } from "@/lib/projectTitle";
+import { vatLabelText } from "@/lib/contractPaymentSchedule";
+
+const SETTLEMENT_VAT_PREF_KEY = "settlement-vat-included";
+
+/** 견적서·계약과 동일: VAT 별도 × 1.1 후 만원 단위 절삭 */
+function toVatInclusiveManwon(exclusive: number): number {
+  return Math.floor((exclusive * 1.1) / 10000) * 10000;
+}
+
+function readVatIncludedPref(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(SETTLEMENT_VAT_PREF_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 type EstimateItem = {
   processGroup?: string;
@@ -159,6 +176,8 @@ export default function SettlementPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [estimateListLoading, setEstimateListLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
+  /** true면 합계·정산 총금액을 VAT 포함(×1.1)으로 표시 */
+  const [vatIncluded, setVatIncluded] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [estimate, setEstimate] = useState<Estimate | null>(null);
   const [settledAt, setSettledAt] = useState("");
@@ -173,6 +192,19 @@ export default function SettlementPage() {
   );
   /** 견적 전환·재요청 시 늦게 도착한 응답이 폼을 덮어쓰지 않도록 */
   const settlementDetailRequestId = useRef(0);
+
+  useEffect(() => {
+    setVatIncluded(readVatIncludedPref());
+  }, []);
+
+  const setVatIncludedPref = useCallback((next: boolean) => {
+    setVatIncluded(next);
+    try {
+      window.localStorage.setItem(SETTLEMENT_VAT_PREF_KEY, next ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const phasesFromEstimate = useMemo(() => {
     if (!estimate) return [];
@@ -529,13 +561,17 @@ export default function SettlementPage() {
   const overhead = Math.floor(totalEstimate * (overheadPercent / 100));
   const profit = Math.floor(totalEstimate * (profitPercent / 100));
   const settlementTotalAmount = Math.floor((totalEstimate + overhead + profit) / 10000) * 10000;
+  const displaySettlementTotal = vatIncluded
+    ? toVatInclusiveManwon(settlementTotalAmount)
+    : settlementTotalAmount;
+  const vatStatusLabel = vatIncluded ? "VAT 포함" : "VAT 별도";
   const totalReceived = customerPaymentRows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
   const totalUsed = phaseRows.reduce((s, r) => {
     const subSum = (r.subItems || []).reduce((a, x) => a + (Number(x.amount) || 0), 0);
     return s + (r.subItems?.length ? subSum : r.usedAmount);
   }, 0);
-  const remainingAmount = Math.max(0, settlementTotalAmount - totalUsed);
-  const remainingPercent = settlementTotalAmount > 0 ? (remainingAmount / settlementTotalAmount) * 100 : 0;
+  const remainingAmount = Math.max(0, displaySettlementTotal - totalUsed);
+  const remainingPercent = displaySettlementTotal > 0 ? (remainingAmount / displaySettlementTotal) * 100 : 0;
 
   const handlePrint = useCallback(() => {
     const prevTitle = document.title;
@@ -622,6 +658,16 @@ export default function SettlementPage() {
               />
               완료된 항목 보기
             </label>
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700 select-none">
+              <input
+                type="checkbox"
+                checked={vatIncluded}
+                onChange={(e) => setVatIncludedPref(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              부가세포함
+              <span className="text-xs text-gray-500">({vatLabelText(vatIncluded)})</span>
+            </label>
           </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full min-w-[760px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
@@ -632,7 +678,12 @@ export default function SettlementPage() {
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3 text-right">고객결제상환</th>
-                  <th className="p-2 sm:p-3 text-right">합계</th>
+                  <th className="p-2 sm:p-3 text-right">
+                    합계
+                    <span className="ml-1 text-xs font-normal text-gray-500">
+                      ({vatIncluded ? "VAT포함" : "VAT별도"})
+                    </span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -661,7 +712,11 @@ export default function SettlementPage() {
                         );
                         const ohRate = (est.overheadPercent != null ? Number(est.overheadPercent) : 5) / 100;
                         const prRate = (est.profitPercent != null ? Number(est.profitPercent) : 10) / 100;
-                        const total = Math.floor((subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000) * 10000;
+                        const exclusiveTotal =
+                          Math.floor(
+                            (subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000
+                          ) * 10000;
+                        const total = vatIncluded ? toVatInclusiveManwon(exclusiveTotal) : exclusiveTotal;
                         const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
                         const projectTitle = group.projectTitle || "-";
                         const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
@@ -721,9 +776,21 @@ export default function SettlementPage() {
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-2">고객결제 상황</h3>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-800">고객결제 상황</h3>
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-gray-700 select-none no-print">
+                <input
+                  type="checkbox"
+                  checked={vatIncluded}
+                  onChange={(e) => setVatIncludedPref(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                부가세포함
+              </label>
+            </div>
             <p className="text-sm text-gray-600 mb-3">
-              정산 총금액 (VAT 별도) <span className="font-semibold text-gray-900 tabular-nums">{formatNum(settlementTotalAmount)}</span>원
+              정산 총금액 ({vatStatusLabel}){" "}
+              <span className="font-semibold text-gray-900 tabular-nums">{formatNum(displaySettlementTotal)}</span>원
             </p>
             <table className="w-full text-sm border-collapse table-fixed border border-gray-300 settlement-customer-payment-table">
               <colgroup>
@@ -989,8 +1056,10 @@ export default function SettlementPage() {
                     <td className="p-3 border-b border-gray-300" />
                   </tr>
                   <tr className="border-t-2 border-gray-400 bg-gray-200">
-                    <td className="p-3 border-b border-r border-gray-300 whitespace-nowrap">합계금액 (이윤+공과잡비 포함)</td>
-                    <td className="p-3 text-right tabular-nums border-b border-r border-gray-300">{formatNum(settlementTotalAmount)}</td>
+                    <td className="p-3 border-b border-r border-gray-300 whitespace-nowrap">
+                      합계금액 (이윤+공과잡비 포함 · {vatStatusLabel})
+                    </td>
+                    <td className="p-3 text-right tabular-nums border-b border-r border-gray-300">{formatNum(displaySettlementTotal)}</td>
                     <td className="p-3 text-right tabular-nums border-b border-r border-gray-300">{formatNum(totalUsed)}</td>
                     <td className="p-3 border-b border-gray-300" />
                   </tr>
@@ -1000,7 +1069,7 @@ export default function SettlementPage() {
                       {formatNum(remainingAmount)}원
                     </td>
                     <td className="p-3 text-right tabular-nums font-semibold text-gray-900 border-r border-gray-300">
-                      {settlementTotalAmount > 0 ? `${remainingPercent.toFixed(1)}%` : "-"}
+                      {displaySettlementTotal > 0 ? `${remainingPercent.toFixed(1)}%` : "-"}
                     </td>
                     <td className="p-3" />
                   </tr>
@@ -1012,10 +1081,15 @@ export default function SettlementPage() {
           <div className="flex items-center gap-3 flex-wrap no-print">
             {phaseRows.length > 0 && (
               <div className="flex items-center gap-4 py-2 px-3 rounded-lg bg-gray-100 border border-gray-200 text-sm">
-                <span><strong>합계금액</strong> {formatNum(settlementTotalAmount)}원</span>
+                <span>
+                  <strong>합계금액</strong> ({vatStatusLabel}) {formatNum(displaySettlementTotal)}원
+                </span>
                 <span><strong>받은금액</strong> {formatNum(totalReceived)}원</span>
                 <span><strong>쓴금액</strong> {formatNum(totalUsed)}원</span>
-                <span><strong>공사 남은금액</strong> <span className="text-gray-900 font-semibold">{formatNum(Math.max(0, settlementTotalAmount - totalUsed))}원</span></span>
+                <span>
+                  <strong>공사 남은금액</strong>{" "}
+                  <span className="text-gray-900 font-semibold">{formatNum(remainingAmount)}원</span>
+                </span>
               </div>
             )}
             <button
@@ -1094,7 +1168,7 @@ export default function SettlementPage() {
           <section className="settlement-print-section">
             <h2 className="settlement-print-section-title">고객결제 현황</h2>
             <p className="settlement-print-total-line">
-              정산 총금액 (VAT 별도) <strong>{formatNum(settlementTotalAmount)}원</strong>
+              정산 총금액 ({vatStatusLabel}) <strong>{formatNum(displaySettlementTotal)}원</strong>
             </p>
             <table className="settlement-print-table settlement-print-table-dark-header">
               <thead>
@@ -1203,8 +1277,8 @@ export default function SettlementPage() {
                   <td className="text-right tabular-nums">{formatNum(overhead)}원</td>
                 </tr>
                 <tr className="settlement-print-row-summary-total">
-                  <td className="font-semibold">총금액 (이윤+공과잡비)</td>
-                  <td className="text-right tabular-nums font-semibold">{formatNum(settlementTotalAmount)}원</td>
+                  <td className="font-semibold">총금액 (이윤+공과잡비 · {vatStatusLabel})</td>
+                  <td className="text-right tabular-nums font-semibold">{formatNum(displaySettlementTotal)}원</td>
                 </tr>
                 <tr>
                   <td>내가 쓴 금액 합계</td>
@@ -1214,7 +1288,7 @@ export default function SettlementPage() {
                   <td className="font-semibold">정산금액 (총금액-지출금액)</td>
                   <td className="text-right tabular-nums font-semibold">
                     {formatNum(remainingAmount)}원
-                    {settlementTotalAmount > 0 && (
+                    {displaySettlementTotal > 0 && (
                       <span className="ml-1">(이윤률 {remainingPercent.toFixed(1)}%)</span>
                     )}
                   </td>
