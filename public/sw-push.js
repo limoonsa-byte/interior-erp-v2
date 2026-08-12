@@ -44,14 +44,18 @@ self.addEventListener("push", (event) => {
           const path = u.pathname || "";
           if (!path.includes("/chat")) return false;
           const clientEid = u.searchParams.get("estimateId");
-          // url에 estimateId가 있으면 같은 방만, 없으면 전체채팅
+          const clientPeer = u.searchParams.get("peerPicId");
           try {
             const target = new URL(targetUrl, self.location.origin);
             const targetEid = target.searchParams.get("estimateId");
-            if (targetEid == null || targetEid === "") {
-              return clientEid == null || clientEid === "";
+            const targetPeer = target.searchParams.get("peerPicId");
+            if (targetPeer != null && targetPeer !== "") {
+              return String(clientPeer) === String(targetPeer);
             }
-            return String(clientEid) === String(targetEid);
+            if (targetEid == null || targetEid === "") {
+              return (clientEid == null || clientEid === "") && (clientPeer == null || clientPeer === "");
+            }
+            return String(clientEid) === String(targetEid) && (clientPeer == null || clientPeer === "");
           } catch {
             return true;
           }

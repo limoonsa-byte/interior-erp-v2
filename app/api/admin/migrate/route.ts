@@ -148,6 +148,12 @@ export async function POST(request: Request) {
     await sql`ALTER TABLE contracts ADD COLUMN IF NOT EXISTS document_data TEXT`;
     results.push("contracts.document_data 컬럼 확인");
 
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS sender_pic_id INT REFERENCES company_pics(id) ON DELETE SET NULL`;
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS peer_pic_id INT REFERENCES company_pics(id) ON DELETE CASCADE`;
+    results.push("company_chat_messages.sender_pic_id, peer_pic_id 컬럼 확인");
+    await sql`ALTER TABLE chat_push_subscriptions ADD COLUMN IF NOT EXISTS subscriber_pic_id INT REFERENCES company_pics(id) ON DELETE SET NULL`;
+    results.push("chat_push_subscriptions.subscriber_pic_id 컬럼 확인");
+
     return NextResponse.json({
       message: "마이그레이션 완료",
       done: results,

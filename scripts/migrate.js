@@ -293,6 +293,8 @@ async function migrate() {
     `;
     await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS consultation_id INT REFERENCES consultations(id) ON DELETE CASCADE`;
     await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS estimate_id INT REFERENCES estimates(id) ON DELETE CASCADE`;
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS sender_pic_id INT REFERENCES company_pics(id) ON DELETE SET NULL`;
+    await sql`ALTER TABLE company_chat_messages ADD COLUMN IF NOT EXISTS peer_pic_id INT REFERENCES company_pics(id) ON DELETE CASCADE`;
     console.log("[migrate] company_chat_messages OK");
     await sql`
       CREATE TABLE IF NOT EXISTS chat_push_subscriptions (
@@ -308,6 +310,7 @@ async function migrate() {
       )
     `;
     await sql`ALTER TABLE chat_push_subscriptions ADD COLUMN IF NOT EXISTS subscriber_name TEXT`;
+    await sql`ALTER TABLE chat_push_subscriptions ADD COLUMN IF NOT EXISTS subscriber_pic_id INT REFERENCES company_pics(id) ON DELETE SET NULL`;
     console.log("[migrate] chat_push_subscriptions OK");
     await sql`
       CREATE TABLE IF NOT EXISTS contracts (

@@ -1,17 +1,6 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { sql } from "@vercel/postgres";
-
-async function getCompanyFromCookie() {
-  const cookieStore = await cookies();
-  const cookie = cookieStore.get("company");
-  if (!cookie) return null;
-  try {
-    return JSON.parse(cookie.value) as { id: number };
-  } catch {
-    return null;
-  }
-}
+import { getCompanyFromCookie, getPicIdFromSession } from "@/lib/company-cookie";
 
 /** Push 구독 등록 (채팅 페이지에서 호출) */
 export async function POST(request: Request) {
@@ -19,31 +8,50 @@ export async function POST(request: Request) {
   if (!company) {
     return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
+  const myPicId = getPicIdFromSession(company);
   try {
     const body = await request.json();
     const endpoint = typeof body.endpoint === "string" ? body.endpoint.trim() : "";
     const p256dh = typeof body.keys?.p256dh === "string" ? body.keys.p256dh.trim() : "";
     const auth = typeof body.keys?.auth === "string" ? body.keys.auth.trim() : "";
     const subscriberName = typeof body.subscriberName === "string" ? body.subscriberName.trim() : null;
+    const subscriberPicIdParam = body.subscriberPicId;
+    const subscriberPicId =
+      subscriberPicIdParam != null
+        ? parseInt(String(subscriberPicIdParam), 10)
+        : myPicId;
     const estimateIdParam = body.estimateId;
-    const estimateId =
-      estimateIdParam != null ? parseInt(String(estimateIdParam), 10) : null;
+    const estimateId = estimateIdParam != null ? parseInt(String(estimateIdParam), 10) : null;
     if (!endpoint || !p256dh || !auth) {
       return NextResponse.json(
         { error: "endpoint, keys.p256dh, keys.auth 가 필요합니다." },
         { status: 400 }
       );
     }
-    await sql`
-      INSERT INTO chat_push_subscriptions (company_id, estimate_id, endpoint, p256dh, auth, subscriber_name)
-      VALUES (${company.id}, ${estimateId}, ${endpoint}, ${p256dh}, ${auth}, ${subscriberName})
-      ON CONFLICT (endpoint) DO UPDATE SET
-        company_id = EXCLUDED.company_id,
-        estimate_id = EXCLUDED.estimate_id,
-        p256dh = EXCLUDED.p256dh,
-        auth = EXCLUDED.auth,
-        subscriber_name = EXCLUDED.subscriber_name
-    `;
+    try {
+      await sql`
+        INSERT INTO chat_push_subscriptions (company_id, estimate_id, endpoint, p256dh, auth, subscriber_name, subscriber_pic_id)
+        VALUES (${company.id}, ${estimateId}, ${endpoint}, ${p256dh}, ${auth}, ${subscriberName}, ${subscriberPicId})
+        ON CONFLICT (endpoint) DO UPDATE SET
+          company_id = EXCLUDED.company_id,
+          estimate_id = EXCLUDED.estimate_id,
+          p256dh = EXCLUDED.p256dh,
+          auth = EXCLUDED.auth,
+          subscriber_name = EXCLUDED.subscriber_name,
+          subscriber_pic_id = EXCLUDED.subscriber_pic_id
+      `;
+    } catch {
+      await sql`
+        INSERT INTO chat_push_subscriptions (company_id, estimate_id, endpoint, p256dh, auth, subscriber_name)
+        VALUES (${company.id}, ${estimateId}, ${endpoint}, ${p256dh}, ${auth}, ${subscriberName})
+        ON CONFLICT (endpoint) DO UPDATE SET
+          company_id = EXCLUDED.company_id,
+          estimate_id = EXCLUDED.estimate_id,
+          p256dh = EXCLUDED.p256dh,
+          auth = EXCLUDED.auth,
+          subscriber_name = EXCLUDED.subscriber_name
+      `;
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     const errMsg = String(e instanceof Error ? e.message : e);

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { MessageCircle, Send, MessageSquare, Bell, BellOff } from "lucide-react";
+import { MessageCircle, Send, MessageSquare, Bell, BellOff, User } from "lucide-react";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -78,13 +78,34 @@ type Estimate = {
   customerName?: string;
 };
 
+type CompanyPic = {
+  id: number;
+  name: string;
+  position?: string;
+};
+
 export default function ChatPage() {
   const searchParams = useSearchParams();
+  const peerPicIdParam = searchParams.get("peerPicId");
+  const currentPeerPicId =
+    peerPicIdParam != null ? parseInt(peerPicIdParam, 10) : null;
+  const isDmRoom =
+    currentPeerPicId != null &&
+    !Number.isNaN(currentPeerPicId) &&
+    currentPeerPicId > 0;
   const estimateIdParam = searchParams.get("estimateId");
-  const currentEstimateId = estimateIdParam ? parseInt(estimateIdParam, 10) : null;
-  const isValidRoom = estimateIdParam === null || (currentEstimateId != null && !Number.isNaN(currentEstimateId) && currentEstimateId > 0);
+  const currentEstimateId =
+    !isDmRoom && estimateIdParam ? parseInt(estimateIdParam, 10) : null;
+  const isValidRoom =
+    (isDmRoom && currentPeerPicId != null) ||
+    estimateIdParam === null ||
+    (currentEstimateId != null &&
+      !Number.isNaN(currentEstimateId) &&
+      currentEstimateId > 0);
 
   const [estimates, setEstimates] = useState<Estimate[]>([]);
+  const [pics, setPics] = useState<CompanyPic[]>([]);
+  const [myPicId, setMyPicId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [senderName, setSenderName] = useState("");
@@ -124,24 +145,39 @@ export default function ChatPage() {
       const res = await fetch(`/api/company/chat/rooms-summary?lastRead=${q}`);
       if (!res.ok) return;
       const data = await res.json();
-      const rooms = (data.rooms || []) as { estimateId: number | null; unreadCount: number }[];
+      const rooms = (data.rooms || []) as {
+        estimateId: number | null;
+        peerPicId?: number | null;
+        unreadCount: number;
+      }[];
       const next: Record<string, number> = {};
       for (const r of rooms) {
-        const key = r.estimateId == null ? "all" : String(r.estimateId);
+        const key =
+          r.peerPicId != null
+            ? `dm:${r.peerPicId}`
+            : r.estimateId == null
+              ? "all"
+              : String(r.estimateId);
         next[key] = r.unreadCount;
       }
       setUnreadByRoom(next);
     } catch (_) {}
   }, []);
 
-  const roomKey = currentEstimateId == null ? "all" : String(currentEstimateId);
+  const roomKey = isDmRoom
+    ? `dm:${currentPeerPicId}`
+    : currentEstimateId == null
+      ? "all"
+      : String(currentEstimateId);
 
   const fetchMessages = useCallback(async (notifyOnReturn = false) => {
     if (!isValidRoom) return;
     try {
-      const url = currentEstimateId != null
-        ? `/api/company/chat?estimateId=${currentEstimateId}`
-        : "/api/company/chat";
+      const url = isDmRoom
+        ? `/api/company/chat?peerPicId=${currentPeerPicId}`
+        : currentEstimateId != null
+          ? `/api/company/chat?estimateId=${currentEstimateId}`
+          : "/api/company/chat";
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -168,7 +204,7 @@ export default function ChatPage() {
             try {
               const n = new Notification(nextLast!.senderName?.trim() || "erp메세지", {
                 body: nextLast!.body.slice(0, 80) + (nextLast!.body.length > 80 ? "…" : ""),
-                tag: `chat-${currentEstimateId ?? "all"}`,
+                tag: isDmRoom ? `chat-dm-${currentPeerPicId}` : `chat-${currentEstimateId ?? "all"}`,
                 icon: "/vercel.svg",
               });
               n.onclick = () => {
@@ -188,8 +224,7 @@ export default function ChatPage() {
         setMessages(nextMessages);
         lastNotifiedIdRef.current = nextLast?.id ?? lastNotifiedIdRef.current;
         if (nextLast) {
-          const key = currentEstimateId == null ? "all" : String(currentEstimateId);
-          lastReadRef.current[key] = nextLast.id;
+          lastReadRef.current[roomKey] = nextLast.id;
           if (typeof window !== "undefined") {
             try {
               localStorage.setItem("chat-last-read", JSON.stringify(lastReadRef.current));
@@ -202,7 +237,7 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
-  }, [currentEstimateId, isValidRoom, senderName, companyName]);
+  }, [currentEstimateId, currentPeerPicId, isDmRoom, isValidRoom, roomKey, senderName, companyName]);
 
   useEffect(() => {
     fetch("/api/company/me")
@@ -211,6 +246,7 @@ export default function ChatPage() {
         const company = data.company;
         const name = company?.name || company?.code || "";
         setCompanyName(name);
+        if (company?.picId != null) setMyPicId(Number(company.picId));
         if (!senderName) {
           const displayName = company?.picName || name || "";
           setSenderName(displayName);
@@ -218,6 +254,22 @@ export default function ChatPage() {
       })
       .catch(() => {});
   }, [senderName]);
+
+  useEffect(() => {
+    fetch("/api/company/pics")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setPics(
+          list.map((p: { id: number; name: string; position?: string }) => ({
+            id: p.id,
+            name: p.name,
+            position: p.position,
+          }))
+        );
+      })
+      .catch(() => setPics([]));
+  }, []);
 
   useEffect(() => {
     fetch("/api/estimates")
@@ -254,6 +306,7 @@ export default function ChatPage() {
               keys: { p256dh: b64urlToBase64(sub.getKey("p256dh")), auth: b64urlToBase64(sub.getKey("auth")) },
               estimateId: null,
               subscriberName: (senderName || companyName || "").trim() || undefined,
+              subscriberPicId: myPicId ?? undefined,
             }),
           });
           return;
@@ -277,12 +330,13 @@ export default function ChatPage() {
             },
             estimateId: null,
             subscriberName: (senderName || companyName || "").trim() || undefined,
+            subscriberPicId: myPicId ?? undefined,
           }),
         });
       } catch (_) {}
     })();
     return () => { cancelled = true; };
-  }, [isValidRoom, notificationPermission, currentEstimateId, senderName, companyName]);
+  }, [isValidRoom, notificationPermission, currentEstimateId, senderName, companyName, myPicId]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
@@ -357,6 +411,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           senderName: name,
           body: text,
+          ...(isDmRoom && currentPeerPicId != null ? { peerPicId: currentPeerPicId } : {}),
           ...(currentEstimateId != null ? { estimateId: currentEstimateId } : {}),
         }),
       });
@@ -385,8 +440,12 @@ export default function ChatPage() {
     }
   };
 
-  const currentRoomLabel =
-    currentEstimateId != null
+  const dmPics = pics.filter((p) => p.id !== myPicId);
+  const currentPeer = isDmRoom ? pics.find((p) => p.id === currentPeerPicId) : null;
+
+  const currentRoomLabel = isDmRoom
+    ? currentPeer?.name || "직원"
+    : currentEstimateId != null
       ? (() => {
           const e = estimates.find((x) => x.id === currentEstimateId);
           return (
@@ -397,23 +456,26 @@ export default function ChatPage() {
         })()
       : "회사 전체";
 
+  const isCompanyAllActive = !isDmRoom && currentEstimateId === null;
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-4">
-      {/* 채팅방 목록 (견적명 기준) */}
-      <div className="w-56 shrink-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
-          <p className="text-sm font-semibold text-gray-700">채팅방 (프로젝트 제목)</p>
-        </div>
-        <ul className="max-h-[320px] overflow-y-auto py-1">
-          <li>
-            <Link
-              href="/chat"
-              className={`block px-3 py-2.5 text-sm ${
-                currentEstimateId === null
-                  ? "bg-slate-100 font-medium text-slate-800"
-                  : "text-gray-700 hover:bg-gray-50"
-              }`}
-            >
+      {/* 채팅방 목록 */}
+      <div className="flex w-56 shrink-0 flex-col gap-3 overflow-hidden">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
+            <p className="text-sm font-semibold text-gray-700">채팅방 (프로젝트)</p>
+          </div>
+          <ul className="max-h-[240px] overflow-y-auto py-1">
+            <li>
+              <Link
+                href="/chat"
+                className={`block px-3 py-2.5 text-sm ${
+                  isCompanyAllActive
+                    ? "bg-slate-100 font-medium text-slate-800"
+                    : "text-gray-700 hover:bg-gray-50"
+                }`}
+              >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-2 min-w-0">
                   <MessageSquare className="h-4 w-4 shrink-0" />
@@ -432,7 +494,7 @@ export default function ChatPage() {
               <Link
                 href={`/chat?estimateId=${e.id}`}
                 className={`block truncate px-3 py-2.5 text-sm ${
-                  currentEstimateId === e.id
+                  !isDmRoom && currentEstimateId === e.id
                     ? "bg-slate-100 font-medium text-slate-800"
                     : "text-gray-700 hover:bg-gray-50"
                 }`}
@@ -452,6 +514,51 @@ export default function ChatPage() {
             </li>
           ))}
         </ul>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="border-b border-gray-200 bg-gray-50 px-3 py-2">
+            <p className="text-sm font-semibold text-gray-700">직원 1:1 대화</p>
+          </div>
+          {myPicId == null ? (
+            <p className="px-3 py-4 text-xs text-gray-500">
+              개인코드로 로그인하면 직원과 1:1 채팅을 할 수 있습니다.
+            </p>
+          ) : dmPics.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-gray-500">등록된 다른 직원이 없습니다.</p>
+          ) : (
+            <ul className="max-h-[240px] overflow-y-auto py-1">
+              {dmPics.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/chat?peerPicId=${p.id}`}
+                    className={`block px-3 py-2.5 text-sm ${
+                      isDmRoom && currentPeerPicId === p.id
+                        ? "bg-slate-100 font-medium text-slate-800"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                    title={p.name}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <User className="h-4 w-4 shrink-0 text-slate-500" />
+                        <span className="truncate">{p.name}</span>
+                        {p.position ? (
+                          <span className="shrink-0 text-[10px] text-gray-400">{p.position}</span>
+                        ) : null}
+                      </span>
+                      {(unreadByRoom[`dm:${p.id}`] ?? 0) > 0 && (
+                        <span className="shrink-0 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                          {unreadByRoom[`dm:${p.id}`]! > 99 ? "99+" : unreadByRoom[`dm:${p.id}`]}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {/* 채팅 영역 */}
@@ -459,7 +566,7 @@ export default function ChatPage() {
         <h1 className="mb-2 flex flex-wrap items-center gap-2 text-xl font-semibold text-gray-900">
           <MessageCircle className="h-6 w-6 text-slate-600" />
           채팅
-          {currentEstimateId != null && (
+          {(isDmRoom || currentEstimateId != null) && (
             <span className="text-base font-medium text-slate-600">· {currentRoomLabel}</span>
           )}
           {canShowNotificationUI && "Notification" in window && (
@@ -504,7 +611,9 @@ export default function ChatPage() {
           )}
         </h1>
         <p className="mb-3 text-sm text-gray-500">
-          견적별로 채팅방이 구분됩니다. 왼쪽에서 견적(견적명)을 선택하세요.
+          {isDmRoom
+            ? "선택한 직원과만 보이는 1:1 대화입니다."
+            : "견적별 채팅방 또는 아래 직원 목록에서 1:1 대화를 선택하세요."}
         </p>
 
         {!isValidRoom ? (
@@ -515,13 +624,17 @@ export default function ChatPage() {
           <div className="flex flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
             <div className="flex shrink-0 items-center gap-2 border-b border-gray-100 px-3 py-2">
               <label className="text-sm text-gray-600">이름:</label>
-              <input
-                type="text"
-                value={senderName}
-                onChange={(e) => setSenderName(e.target.value)}
-                placeholder={companyName || "이름 입력"}
-                className="max-w-[120px] rounded-lg border border-gray-300 px-2 py-1 text-sm"
-              />
+              {isDmRoom ? (
+                <span className="text-sm font-medium text-slate-700">{senderName || companyName || "사용자"}</span>
+              ) : (
+                <input
+                  type="text"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  placeholder={companyName || "이름 입력"}
+                  className="max-w-[120px] rounded-lg border border-gray-300 px-2 py-1 text-sm"
+                />
+              )}
               <span className="text-xs text-gray-400">· {currentRoomLabel}</span>
             </div>
 
