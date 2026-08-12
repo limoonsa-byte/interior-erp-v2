@@ -157,16 +157,33 @@ export default function ChatPage() {
           lastNotifiedIdRef.current = nextLast.id;
         } else if (shouldNotify) {
           playNotificationSound();
-          if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          const pageHidden = typeof document !== "undefined" && document.hidden;
+          // 카톡처럼: 이 방을 보고 있을 때는 OS 알림창 생략, 백그라운드일 때만 알림창
+          if (
+            pageHidden &&
+            typeof window !== "undefined" &&
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
             try {
-              new Notification("erp메세지", {
+              const n = new Notification(nextLast!.senderName?.trim() || "erp메세지", {
                 body: nextLast!.body.slice(0, 80) + (nextLast!.body.length > 80 ? "…" : ""),
                 tag: `chat-${currentEstimateId ?? "all"}`,
+                renotify: true,
+                icon: "/vercel.svg",
               });
+              n.onclick = () => {
+                try {
+                  window.focus();
+                  n.close();
+                } catch (_) {}
+              };
             } catch (_) {}
           }
-          if (originalTitleRef.current === "") originalTitleRef.current = document.title;
-          document.title = `(1) 채팅 - ${CHAT_TITLE}`;
+          if (pageHidden) {
+            if (originalTitleRef.current === "") originalTitleRef.current = document.title;
+            document.title = `(1) 채팅 - ${CHAT_TITLE}`;
+          }
           lastNotifiedIdRef.current = nextLast!.id;
         }
         setMessages(nextMessages);
@@ -226,7 +243,7 @@ export default function ChatPage() {
         const vapidRes = await fetch("/api/company/chat/vapid-public");
         const { publicKey } = await vapidRes.json();
         if (!publicKey || cancelled) return;
-        const reg = await navigator.serviceWorker.register("/sw-push.js", { scope: "/chat" });
+        const reg = await navigator.serviceWorker.register("/sw-push.js", { scope: "/" });
         await reg.update();
         const sub = await reg.pushManager.getSubscription();
         if (sub && !cancelled) {
@@ -236,7 +253,7 @@ export default function ChatPage() {
             body: JSON.stringify({
               endpoint: sub.endpoint,
               keys: { p256dh: b64urlToBase64(sub.getKey("p256dh")), auth: b64urlToBase64(sub.getKey("auth")) },
-              estimateId: currentEstimateId,
+              estimateId: null,
               subscriberName: (senderName || companyName || "").trim() || undefined,
             }),
           });
@@ -259,7 +276,7 @@ export default function ChatPage() {
               p256dh: b64urlToBase64(newSub.getKey("p256dh")),
               auth: b64urlToBase64(newSub.getKey("auth")),
             },
-            estimateId: currentEstimateId,
+            estimateId: null,
             subscriberName: (senderName || companyName || "").trim() || undefined,
           }),
         });
@@ -267,6 +284,18 @@ export default function ChatPage() {
     })();
     return () => { cancelled = true; };
   }, [isValidRoom, notificationPermission, currentEstimateId, senderName, companyName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    const onMessage = (ev: MessageEvent) => {
+      const msg = ev.data;
+      if (msg && msg.type === "CHAT_MESSAGE_WHILE_VIEWING" && !alarmMutedRef.current) {
+        playNotificationSound();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, []);
 
   useEffect(() => {
     const unlock = () => {
@@ -454,10 +483,10 @@ export default function ChatPage() {
               }`}
               title={
                 notificationPermission !== "granted"
-                  ? "알림 허용 (클릭 시 브라우저 알림 권한 요청)"
+                  ? "알림 허용 (클릭 시 브라우저 알림 권한 요청 — 카톡처럼 알림창으로 표시)"
                   : alarmMuted
                     ? "클릭하면 알람 켜짐"
-                    : "클릭하면 알람 끔"
+                    : "카톡처럼 OS 알림창으로 표시됩니다. 클릭하면 알람 끔"
               }
             >
               {notificationPermission !== "granted" ? (
@@ -471,7 +500,7 @@ export default function ChatPage() {
                 ? "알림 허용"
                 : alarmMuted
                   ? "알람 끔"
-                  : "알림 켜짐"}
+                  : "알림창 켜짐"}
             </button>
           )}
         </h1>

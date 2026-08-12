@@ -49,6 +49,7 @@ export async function sendChatPush(params: SendChatPushParams): Promise<void> {
           `;
     const payload = JSON.stringify({
       title: "erp메세지",
+      senderName: params.senderName.trim() || "",
       body: params.body.slice(0, 80) + (params.body.length > 80 ? "…" : ""),
       tag: `chat-${params.estimateId ?? "all"}`,
       url: params.estimateId != null ? `/chat?estimateId=${params.estimateId}` : "/chat",
