@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { ResizableTh } from "@/components/table/ResizableTh";
+import { useResizableTableColumns } from "@/lib/useResizableTableColumns";
 
 /** 오늘 날짜 00:00 기준 (datetime-local 형식). 오늘·이후만 선택 가능하게 min에 사용 */
 function getTodayDatetimeLocal(): string {
@@ -916,6 +918,20 @@ function getDatePresetRange(preset: "금일" | "작일" | "당월"): { from: str
   return { from: first, to: lastStr };
 }
 
+const CONSULTING_LIST_COLUMN_WIDTHS_KEY = "consulting-list-column-widths";
+const CONSULTING_LIST_COLUMN_DEFAULTS = {
+  mobileTitle: 168,
+  no: 56,
+  title: 160,
+  status: 88,
+  date: 110,
+  customer: 88,
+  contact: 100,
+  address: 180,
+  pyung: 56,
+} as const;
+const CONSULTING_CHECKBOX_COL_WIDTH = 40;
+
 export default function ConsultingPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [active, setActive] = useState<Consultation | null>(null);
@@ -938,6 +954,9 @@ export default function ConsultingPage() {
     materialContract: true,
     construction: true,
   });
+
+  const { widths: colWidths, startResize: startColumnResize, resetWidths: resetColumnWidths, tableMinWidth } =
+    useResizableTableColumns(CONSULTING_LIST_COLUMN_WIDTHS_KEY, { ...CONSULTING_LIST_COLUMN_DEFAULTS });
 
   const filteredConsultations = React.useMemo(() => {
     const activeStageStatuses = LIST_STAGE_FILTERS.filter((f) => stageFilters[f.id]).flatMap((f) => f.statuses);
@@ -1328,22 +1347,59 @@ export default function ConsultingPage() {
       </div>
 
       <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full min-w-[640px] text-center text-sm">
+        <p className="border-b border-gray-100 px-3 py-1.5 text-right text-[11px] text-gray-400">
+          헤더 오른쪽 끝을 드래그하면 칸 너비를 조절할 수 있습니다.{" "}
+          <button
+            type="button"
+            onClick={resetColumnWidths}
+            className="text-gray-500 underline-offset-2 hover:text-gray-700 hover:underline"
+          >
+            너비 초기화
+          </button>
+        </p>
+        <table
+          className="w-full text-center text-sm table-fixed"
+          style={{ minWidth: tableMinWidth + CONSULTING_CHECKBOX_COL_WIDTH }}
+        >
+          <colgroup>
+            <col className="sm:hidden" style={{ width: colWidths.mobileTitle }} />
+            <col className="hidden sm:table-column" style={{ width: CONSULTING_CHECKBOX_COL_WIDTH }} />
+            <col style={{ width: colWidths.no }} />
+            <col style={{ width: colWidths.title }} />
+            <col style={{ width: colWidths.status }} />
+            <col style={{ width: colWidths.date }} />
+            <col className="hidden sm:table-column" style={{ width: colWidths.customer }} />
+            <col style={{ width: colWidths.contact }} />
+            <col style={{ width: colWidths.address }} />
+            <col style={{ width: colWidths.pyung }} />
+          </colgroup>
           <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
             <tr>
-              <th className="row-actions-sticky w-40 whitespace-nowrap p-2 text-left sm:hidden">
-                <div className="flex items-center gap-2">
+              <ResizableTh
+                colId="mobileTitle"
+                width={colWidths.mobileTitle}
+                onResizeStart={startColumnResize}
+                className="row-actions-sticky text-left sm:hidden"
+              >
+                <div className="flex items-center gap-2 pr-2">
                   <input
                     type="checkbox"
                     checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
                     onChange={(e) => handleSelectAll(e.target.checked)}
-                    className="cursor-pointer"
+                    className="cursor-pointer shrink-0"
                     aria-label="전체 선택"
                   />
                   <span>프로젝트 제목</span>
                 </div>
-              </th>
-              <th className="hidden w-10 shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">
+              </ResizableTh>
+              <th
+                className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap"
+                style={{
+                  width: CONSULTING_CHECKBOX_COL_WIDTH,
+                  minWidth: CONSULTING_CHECKBOX_COL_WIDTH,
+                  maxWidth: CONSULTING_CHECKBOX_COL_WIDTH,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={filteredConsultations.length > 0 && selectedIds.size === filteredConsultations.length}
@@ -1352,14 +1408,45 @@ export default function ConsultingPage() {
                   aria-label="전체 선택"
                 />
               </th>
-              <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">No.</th>
-              <th className="min-w-[140px] shrink-0 p-2 sm:p-3 text-left">프로젝트 제목</th>
-              <th className="min-w-[72px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행상태</th>
-              <th className="min-w-[100px] shrink-0 p-2 sm:p-3 whitespace-nowrap">진행날짜</th>
-              <th className="hidden min-w-[72px] shrink-0 p-2 sm:table-cell sm:p-3 whitespace-nowrap">고객명</th>
-              <th className="min-w-[90px] shrink-0 p-2 sm:p-3 whitespace-nowrap">연락처</th>
-              <th className="min-w-[120px] p-2 sm:p-3 text-left">주소</th>
-              <th className="w-14 shrink-0 p-2 sm:p-3 whitespace-nowrap">평수</th>
+              <ResizableTh colId="no" width={colWidths.no} onResizeStart={startColumnResize}>
+                No.
+              </ResizableTh>
+              <ResizableTh
+                colId="title"
+                width={colWidths.title}
+                onResizeStart={startColumnResize}
+                className="text-left"
+              >
+                프로젝트 제목
+              </ResizableTh>
+              <ResizableTh colId="status" width={colWidths.status} onResizeStart={startColumnResize}>
+                진행상태
+              </ResizableTh>
+              <ResizableTh colId="date" width={colWidths.date} onResizeStart={startColumnResize}>
+                진행날짜
+              </ResizableTh>
+              <ResizableTh
+                colId="customer"
+                width={colWidths.customer}
+                onResizeStart={startColumnResize}
+                className="hidden sm:table-cell"
+              >
+                고객명
+              </ResizableTh>
+              <ResizableTh colId="contact" width={colWidths.contact} onResizeStart={startColumnResize}>
+                연락처
+              </ResizableTh>
+              <ResizableTh
+                colId="address"
+                width={colWidths.address}
+                onResizeStart={startColumnResize}
+                className="text-left"
+              >
+                주소
+              </ResizableTh>
+              <ResizableTh colId="pyung" width={colWidths.pyung} onResizeStart={startColumnResize}>
+                평수
+              </ResizableTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -1408,8 +1495,8 @@ export default function ConsultingPage() {
                       aria-label={`${item.customerName} 선택`}
                     />
                   </td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{idx + 1}</td>
-                  <td className="min-w-[140px] max-w-[220px] p-2 sm:p-3 text-left font-medium">
+                  <td className="p-2 sm:p-3 whitespace-nowrap truncate">{idx + 1}</td>
+                  <td className="p-2 sm:p-3 text-left font-medium overflow-hidden">
                     <button
                       type="button"
                       onClick={openDetail}
@@ -1419,13 +1506,13 @@ export default function ConsultingPage() {
                       {titleLabel}
                     </button>
                   </td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{displayStatusLabel(item.status) || "-"}</td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{getProgressDateDisplay(item)}</td>
-                  <td className="hidden min-w-[72px] p-2 sm:table-cell sm:p-3 whitespace-nowrap">
+                  <td className="p-2 sm:p-3 whitespace-nowrap truncate">{displayStatusLabel(item.status) || "-"}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap truncate">{getProgressDateDisplay(item)}</td>
+                  <td className="hidden p-2 sm:table-cell sm:p-3 font-medium whitespace-nowrap truncate">
                     {customerNameButton}
                   </td>
-                  <td className="p-2 sm:p-3 whitespace-nowrap">{item.contact}</td>
-                  <td className="min-w-[120px] max-w-[200px] sm:max-w-none p-2 sm:p-3 truncate text-left">{item.address}</td>
+                  <td className="p-2 sm:p-3 whitespace-nowrap truncate">{item.contact}</td>
+                  <td className="p-2 sm:p-3 truncate text-left">{item.address}</td>
                   <td className="p-2 sm:p-3 whitespace-nowrap">{item.pyung}</td>
                 </tr>
               );
