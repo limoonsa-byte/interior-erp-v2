@@ -169,7 +169,6 @@ export default function ChatPage() {
               const n = new Notification(nextLast!.senderName?.trim() || "erp메세지", {
                 body: nextLast!.body.slice(0, 80) + (nextLast!.body.length > 80 ? "…" : ""),
                 tag: `chat-${currentEstimateId ?? "all"}`,
-                renotify: true,
                 icon: "/vercel.svg",
               });
               n.onclick = () => {
