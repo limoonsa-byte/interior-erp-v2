@@ -8,7 +8,14 @@ import { DEFAULT_SCHEDULE_PHASE_BUTTONS } from "@/lib/defaultSchedulePhaseButton
 
 type PicItem = { id: number; name: string; phone?: string; employeeCode?: string; position?: string };
 
-type EstimateTemplateItem = { id: number; title: string; createdAt?: string };
+type EstimateTemplateItem = {
+  id: number;
+  title: string;
+  createdAt?: string;
+  items?: unknown[];
+  processOrder?: string[];
+  note?: string;
+};
 
 type DefaultEstimateTemplate = {
   id: number;
@@ -501,7 +508,16 @@ export default function AdminPage() {
       .then((r) => r.json())
       .then((arr) => {
         if (Array.isArray(arr)) {
-          setEstimateTemplates(arr.map((t: EstimateTemplateItem) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
+          setEstimateTemplates(
+            arr.map((t: EstimateTemplateItem) => ({
+              id: t.id,
+              title: t.title,
+              createdAt: t.createdAt,
+              items: t.items,
+              processOrder: t.processOrder,
+              note: t.note,
+            }))
+          );
         }
       });
   };
@@ -519,6 +535,16 @@ export default function AdminPage() {
     setEstimateTemplateFile(null);
     if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
     setEstimateTemplateError(null);
+  };
+
+  const handleDownloadCompanyTemplateAsExcel = async (t: EstimateTemplateItem) => {
+    await handleDownloadDefaultAsExcel({
+      id: t.id,
+      title: t.title,
+      items: (t.items ?? []) as DefaultEstimateTemplate["items"],
+      processOrder: t.processOrder,
+      note: t.note,
+    });
   };
 
   const handleAddEstimateTemplate = () => {
@@ -1646,7 +1672,10 @@ export default function AdminPage() {
               <h2 className="text-base font-semibold text-gray-800">견적서 관리</h2>
               <button
                 type="button"
-                onClick={() => setModal(null)}
+                onClick={() => {
+                  clearEstimateTemplateForm();
+                  setModal(null);
+                }}
                 className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
                 aria-label="닫기"
               >
@@ -1679,33 +1708,24 @@ export default function AdminPage() {
             <div className="mb-3 flex gap-2">
               <input
                 type="text"
-                value={estimateTemplateTitle}
-                onChange={(e) => setEstimateTemplateTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddEstimateTemplate()}
+                value={estimateTemplateEditId == null ? estimateTemplateTitle : ""}
+                onChange={(e) => {
+                  if (estimateTemplateEditId == null) setEstimateTemplateTitle(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && estimateTemplateEditId == null && handleAddEstimateTemplate()}
                 placeholder="예: 아파트 표준견적, 상가 견적"
                 className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                disabled={estimateTemplateEditId != null}
               />
-              {estimateTemplateEditId != null && (
-                <button
-                  type="button"
-                  onClick={clearEstimateTemplateForm}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  취소
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleAddEstimateTemplate}
-                disabled={estimateTemplateLoading || !estimateTemplateTitle.trim()}
+                disabled={estimateTemplateLoading || estimateTemplateEditId != null || !estimateTemplateTitle.trim()}
                 className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
-                {estimateTemplateEditId != null ? "수정 저장" : "저장"}
+                저장
               </button>
             </div>
-            {estimateTemplateEditId != null && (
-              <p className="mb-2 text-xs text-blue-700">선택한 우리 회사 양식을 수정 중입니다. 제목만 바꾸거나, 엑셀을 선택해 내용까지 바꿀 수 있습니다.</p>
-            )}
             <div className="mb-4 flex flex-wrap items-center gap-2">
               <input
                 ref={estimateTemplateFileInputRef}
@@ -1714,24 +1734,31 @@ export default function AdminPage() {
                 className="hidden"
                 onChange={(e) => setEstimateTemplateFile(e.target.files?.[0] ?? null)}
               />
-              <button
-                type="button"
-                onClick={() => estimateTemplateFileInputRef.current?.click()}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                {estimateTemplateFile ? `선택됨: ${estimateTemplateFile.name}` : "엑셀으로 내용 채우기 (선택)"}
-              </button>
-              {estimateTemplateFile && (
-                <button
-                  type="button"
-                  onClick={() => { setEstimateTemplateFile(null); if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = ""; }}
-                  className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
-                >
-                  취소
-                </button>
+              {estimateTemplateEditId == null && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => estimateTemplateFileInputRef.current?.click()}
+                    className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    {estimateTemplateFile ? `선택됨: ${estimateTemplateFile.name}` : "엑셀으로 내용 채우기 (선택)"}
+                  </button>
+                  {estimateTemplateFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEstimateTemplateFile(null);
+                        if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+                      }}
+                      className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      취소
+                    </button>
+                  )}
+                </>
               )}
             </div>
-            {estimateTemplateError && (
+            {estimateTemplateError && estimateTemplateEditId == null && (
               <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {estimateTemplateError}
               </div>
@@ -1743,9 +1770,7 @@ export default function AdminPage() {
                 {estimateTemplates.map((t) => (
                   <li
                     key={t.id}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-                      estimateTemplateEditId === t.id ? "border-blue-300 bg-blue-50" : "border-gray-200 bg-white"
-                    }`}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
                   >
                     <span className="font-medium text-gray-800">{t.title}</span>
                     <div className="flex items-center gap-1">
@@ -1768,6 +1793,91 @@ export default function AdminPage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 견적 양식 수정 모달 */}
+      {modal === "estimate-templates" && estimateTemplateEditId != null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-gray-800">견적 양식 수정</h2>
+              <button
+                type="button"
+                onClick={clearEstimateTemplateForm}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="mb-4 text-sm text-gray-600">
+              제목을 바꾸거나, 현재 양식을 엑셀로 받은 뒤 수정해 다시 올리면 내용까지 바꿀 수 있습니다.
+            </p>
+            <label className="mb-1 block text-xs font-medium text-gray-500">양식 제목</label>
+            <input
+              type="text"
+              value={estimateTemplateTitle}
+              onChange={(e) => setEstimateTemplateTitle(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddEstimateTemplate()}
+              className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              autoFocus
+            />
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const t = estimateTemplates.find((x) => x.id === estimateTemplateEditId);
+                  if (t) void handleDownloadCompanyTemplateAsExcel(t);
+                }}
+                disabled={downloadDefaultLoadingId === estimateTemplateEditId}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {downloadDefaultLoadingId === estimateTemplateEditId ? "다운로드 중..." : "현재 양식 엑셀 다운"}
+              </button>
+              <button
+                type="button"
+                onClick={() => estimateTemplateFileInputRef.current?.click()}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                {estimateTemplateFile ? `선택됨: ${estimateTemplateFile.name}` : "엑셀로 내용 바꾸기"}
+              </button>
+              {estimateTemplateFile && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEstimateTemplateFile(null);
+                    if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+                  }}
+                  className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                >
+                  파일 취소
+                </button>
+              )}
+            </div>
+            {estimateTemplateError && (
+              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {estimateTemplateError}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={clearEstimateTemplateForm}
+                className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleAddEstimateTemplate}
+                disabled={estimateTemplateLoading || !estimateTemplateTitle.trim()}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {estimateTemplateLoading ? "저장 중..." : "수정 저장"}
+              </button>
+            </div>
           </div>
         </div>
       )}
