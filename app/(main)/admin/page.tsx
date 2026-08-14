@@ -255,14 +255,25 @@ export default function AdminPage() {
       queueMicrotask(() => {
         setEstimateTemplateTitle("");
         setEstimateTemplateEditId(null);
+        setEstimateTemplateEditItems([]);
         setEstimateTemplateFile(null);
         setEstimateTemplateError(null);
       });
       fetch("/api/company/estimate-templates")
         .then((res) => res.json())
         .then((data) => {
-          if (Array.isArray(data)) setEstimateTemplates(data.map((t: { id: number; title: string; createdAt?: string }) => ({ id: t.id, title: t.title, createdAt: t.createdAt })));
-          else setEstimateTemplates([]);
+          if (Array.isArray(data)) {
+            setEstimateTemplates(
+              data.map((t: EstimateTemplateItem) => ({
+                id: t.id,
+                title: t.title,
+                createdAt: t.createdAt,
+                items: t.items,
+                processOrder: t.processOrder,
+                note: t.note,
+              }))
+            );
+          } else setEstimateTemplates([]);
         })
         .catch(() => setEstimateTemplates([]));
       fetch("/api/company/default-estimate-templates")
@@ -571,10 +582,40 @@ export default function AdminPage() {
   const handleStartEditEstimateTemplate = (t: EstimateTemplateItem) => {
     setEstimateTemplateEditId(t.id);
     setEstimateTemplateTitle(t.title);
-    setEstimateTemplateEditItems(normalizeTemplateEditRows(t.items));
     setEstimateTemplateFile(null);
     if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+    if (estimateTemplateEditFileInputRef.current) estimateTemplateEditFileInputRef.current.value = "";
     setEstimateTemplateError(null);
+
+    // 목록에 items가 있으면 바로 채우고, 없으면 API에서 다시 불러옴
+    if (Array.isArray(t.items) && t.items.length > 0) {
+      setEstimateTemplateEditItems(normalizeTemplateEditRows(t.items));
+      return;
+    }
+    setEstimateTemplateEditItems([emptyTemplateEditRow()]);
+    setEstimateTemplateLoading(true);
+    fetch("/api/company/estimate-templates")
+      .then((r) => r.json())
+      .then((arr) => {
+        if (!Array.isArray(arr)) return;
+        const full = arr.find((x: EstimateTemplateItem) => x.id === t.id) as EstimateTemplateItem | undefined;
+        if (full) {
+          setEstimateTemplates(
+            arr.map((row: EstimateTemplateItem) => ({
+              id: row.id,
+              title: row.title,
+              createdAt: row.createdAt,
+              items: row.items,
+              processOrder: row.processOrder,
+              note: row.note,
+            }))
+          );
+          setEstimateTemplateEditItems(normalizeTemplateEditRows(full.items));
+          if (full.title) setEstimateTemplateTitle(full.title);
+        }
+      })
+      .catch(() => setEstimateTemplateError("양식 내용을 불러오지 못했습니다."))
+      .finally(() => setEstimateTemplateLoading(false));
   };
 
   const updateEstimateTemplateEditRow = (index: number, patch: Partial<TemplateEditRow>) => {
