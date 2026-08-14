@@ -17,6 +17,42 @@ type EstimateTemplateItem = {
   note?: string;
 };
 
+type TemplateEditRow = {
+  processGroup: string;
+  category: string;
+  spec: string;
+  unit: string;
+  materialUnitPrice: number;
+  laborUnitPrice: number;
+  note: string;
+};
+
+const emptyTemplateEditRow = (): TemplateEditRow => ({
+  processGroup: "",
+  category: "",
+  spec: "",
+  unit: "식",
+  materialUnitPrice: 0,
+  laborUnitPrice: 0,
+  note: "",
+});
+
+function normalizeTemplateEditRows(items: unknown[] | undefined): TemplateEditRow[] {
+  if (!Array.isArray(items) || items.length === 0) return [emptyTemplateEditRow()];
+  return items.map((raw) => {
+    const it = (raw ?? {}) as Record<string, unknown>;
+    return {
+      processGroup: String(it.processGroup ?? ""),
+      category: String(it.category ?? ""),
+      spec: String(it.spec ?? ""),
+      unit: String(it.unit ?? "식") || "식",
+      materialUnitPrice: Number(it.materialUnitPrice ?? it.unitPrice ?? 0) || 0,
+      laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
+      note: String(it.note ?? ""),
+    };
+  });
+}
+
 type DefaultEstimateTemplate = {
   id: number;
   title: string;
@@ -82,11 +118,13 @@ export default function AdminPage() {
   const [defaultEstimateTemplates, setDefaultEstimateTemplates] = useState<DefaultEstimateTemplate[]>([]);
   const [estimateTemplateTitle, setEstimateTemplateTitle] = useState("");
   const [estimateTemplateEditId, setEstimateTemplateEditId] = useState<number | null>(null);
+  const [estimateTemplateEditItems, setEstimateTemplateEditItems] = useState<TemplateEditRow[]>([]);
   const [estimateTemplateFile, setEstimateTemplateFile] = useState<File | null>(null);
   const [estimateTemplateLoading, setEstimateTemplateLoading] = useState(false);
   const [estimateTemplateError, setEstimateTemplateError] = useState<string | null>(null);
   const [downloadDefaultLoadingId, setDownloadDefaultLoadingId] = useState<number | null>(null);
   const estimateTemplateFileInputRef = useRef<HTMLInputElement>(null);
+  const estimateTemplateEditFileInputRef = useRef<HTMLInputElement>(null);
 
   const [companyLogoPath, setCompanyLogoPath] = useState<string | null>(null);
   const [companyStampPath, setCompanyStampPath] = useState<string | null>(null);
@@ -525,6 +563,7 @@ export default function AdminPage() {
   const clearEstimateTemplateForm = () => {
     setEstimateTemplateTitle("");
     setEstimateTemplateEditId(null);
+    setEstimateTemplateEditItems([]);
     setEstimateTemplateFile(null);
     if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
   };
@@ -532,9 +571,81 @@ export default function AdminPage() {
   const handleStartEditEstimateTemplate = (t: EstimateTemplateItem) => {
     setEstimateTemplateEditId(t.id);
     setEstimateTemplateTitle(t.title);
+    setEstimateTemplateEditItems(normalizeTemplateEditRows(t.items));
     setEstimateTemplateFile(null);
     if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
     setEstimateTemplateError(null);
+  };
+
+  const updateEstimateTemplateEditRow = (index: number, patch: Partial<TemplateEditRow>) => {
+    setEstimateTemplateEditItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const addEstimateTemplateEditRow = () => {
+    setEstimateTemplateEditItems((prev) => {
+      const lastGroup = prev.length > 0 ? prev[prev.length - 1].processGroup : "";
+      return [...prev, { ...emptyTemplateEditRow(), processGroup: lastGroup }];
+    });
+  };
+
+  const removeEstimateTemplateEditRow = (index: number) => {
+    setEstimateTemplateEditItems((prev) => (prev.length <= 1 ? [emptyTemplateEditRow()] : prev.filter((_, i) => i !== index)));
+  };
+
+  const applyExcelToEditItems = async (file: File) => {
+    setEstimateTemplateError(null);
+    setEstimateTemplateLoading(true);
+    try {
+      const XLSX = await import("xlsx");
+      const data = await new Promise<string | ArrayBuffer | null>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => resolve(ev.target?.result ?? null);
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.readAsBinaryString(file);
+      });
+      if (!data) {
+        setEstimateTemplateError("파일을 읽을 수 없습니다.");
+        return;
+      }
+      const wb = XLSX.read(data, { type: "binary" });
+      if (!wb.SheetNames?.length) {
+        setEstimateTemplateError("엑셀에 시트가 없습니다.");
+        return;
+      }
+      let ws = wb.Sheets[wb.SheetNames[0]];
+      sheetLoop: for (const name of wb.SheetNames) {
+        const s = wb.Sheets[name];
+        const preview = XLSX.utils.sheet_to_json(s, { header: 1, defval: "", range: 0 }) as (string | number)[][];
+        for (let r = 0; r < Math.min(15, preview.length); r++) {
+          const a = String(preview[r]?.[0] ?? "").trim().toLowerCase();
+          const b = String(preview[r]?.[1] ?? "").trim();
+          const c = String(preview[r]?.[2] ?? "").trim();
+          if (a === "no" || (b === "품목" && c === "규격")) {
+            ws = s;
+            break sheetLoop;
+          }
+        }
+      }
+      const rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as (string | number)[][];
+      const rows = rawRows.map((row) => {
+        const arr = Array.isArray(row) ? [...row] : [];
+        while (arr.length < 9) arr.push("");
+        return arr;
+      });
+      const parsed = parseEstimateExcelRows(rows);
+      if (parsed && parsed.items.length > 0) {
+        setEstimateTemplateEditItems(normalizeTemplateEditRows(parsed.items));
+        setEstimateTemplateFile(null);
+        if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+        if (estimateTemplateEditFileInputRef.current) estimateTemplateEditFileInputRef.current.value = "";
+      } else {
+        setEstimateTemplateError("엑셀에서 견적 항목을 찾지 못했습니다. 견적서 엑셀 저장 형식으로 올려 주세요.");
+      }
+    } catch {
+      setEstimateTemplateError("엑셀 파싱 중 오류가 발생했습니다.");
+    } finally {
+      setEstimateTemplateLoading(false);
+    }
   };
 
   const handleDownloadCompanyTemplateAsExcel = async (t: EstimateTemplateItem) => {
@@ -582,7 +693,27 @@ export default function AdminPage() {
         .finally(() => setEstimateTemplateLoading(false));
     };
 
-    if (estimateTemplateFile) {
+    if (estimateTemplateEditId != null) {
+      // 수정: 창 표에서 편집한 항목 저장 (엑셀은 표에 미리 채워 둠)
+      const processOrder: string[] = [];
+      for (const row of estimateTemplateEditItems) {
+        const g = row.processGroup.trim();
+        if (g && !processOrder.includes(g)) processOrder.push(g);
+      }
+      doSave(
+        estimateTemplateEditItems.map((row) => ({
+          processGroup: row.processGroup,
+          category: row.category,
+          spec: row.spec,
+          unit: row.unit,
+          qty: "",
+          materialUnitPrice: row.materialUnitPrice,
+          laborUnitPrice: row.laborUnitPrice,
+          note: row.note,
+        })),
+        processOrder
+      );
+    } else if (estimateTemplateFile) {
       const reader = new FileReader();
       reader.onload = async (ev) => {
         try {
@@ -632,9 +763,6 @@ export default function AdminPage() {
         }
       };
       reader.readAsBinaryString(estimateTemplateFile);
-    } else if (estimateTemplateEditId != null) {
-      // 수정: 엑셀 없으면 제목만 변경
-      doSave(undefined, undefined);
     } else {
       doSave([], []);
     }
@@ -1797,11 +1925,11 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* 견적 양식 수정 모달 */}
+      {/* 견적 양식 수정 모달 — 창에서 품목 직접 수정 */}
       {modal === "estimate-templates" && estimateTemplateEditId != null && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
+          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-5 py-4">
               <h2 className="text-base font-semibold text-gray-800">견적 양식 수정</h2>
               <button
                 type="button"
@@ -1812,60 +1940,159 @@ export default function AdminPage() {
                 ✕
               </button>
             </div>
-            <p className="mb-4 text-sm text-gray-600">
-              제목을 바꾸거나, 현재 양식을 엑셀로 받은 뒤 수정해 다시 올리면 내용까지 바꿀 수 있습니다.
-            </p>
-            <label className="mb-1 block text-xs font-medium text-gray-500">양식 제목</label>
-            <input
-              type="text"
-              value={estimateTemplateTitle}
-              onChange={(e) => setEstimateTemplateTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAddEstimateTemplate()}
-              className="mb-4 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              autoFocus
-            />
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const t = estimateTemplates.find((x) => x.id === estimateTemplateEditId);
-                  if (t) void handleDownloadCompanyTemplateAsExcel(t);
-                }}
-                disabled={downloadDefaultLoadingId === estimateTemplateEditId}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {downloadDefaultLoadingId === estimateTemplateEditId ? "다운로드 중..." : "현재 양식 엑셀 다운"}
-              </button>
-              <button
-                type="button"
-                onClick={() => estimateTemplateFileInputRef.current?.click()}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                {estimateTemplateFile ? `선택됨: ${estimateTemplateFile.name}` : "엑셀로 내용 바꾸기"}
-              </button>
-              {estimateTemplateFile && (
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+              <p className="mb-3 text-sm text-gray-600">
+                아래 표에서 품목·단가를 바로 수정한 뒤 「수정 저장」을 누르세요. (엑셀은 선택)
+              </p>
+              <label className="mb-1 block text-xs font-medium text-gray-500">양식 제목</label>
+              <input
+                type="text"
+                value={estimateTemplateTitle}
+                onChange={(e) => setEstimateTemplateTitle(e.target.value)}
+                className="mb-4 w-full max-w-md rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                autoFocus
+              />
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addEstimateTemplateEditRow}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  행 추가
+                </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setEstimateTemplateFile(null);
-                    if (estimateTemplateFileInputRef.current) estimateTemplateFileInputRef.current.value = "";
+                    const t = estimateTemplates.find((x) => x.id === estimateTemplateEditId);
+                    if (t) void handleDownloadCompanyTemplateAsExcel(t);
                   }}
-                  className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                  disabled={downloadDefaultLoadingId === estimateTemplateEditId}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  파일 취소
+                  {downloadDefaultLoadingId === estimateTemplateEditId ? "다운로드 중..." : "엑셀 다운"}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => estimateTemplateEditFileInputRef.current?.click()}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  엑셀 불러와 표에 채우기
+                </button>
+                <input
+                  ref={estimateTemplateEditFileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    if (f) void applyExcelToEditItems(f);
+                  }}
+                />
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                <table className="min-w-[900px] w-full border-collapse text-sm">
+                  <thead className="bg-gray-50 text-left text-xs text-gray-600">
+                    <tr>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">공정</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">품목</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">규격</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">단위</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">재료비단가</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">노무비단가</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium">비고</th>
+                      <th className="border-b border-gray-200 px-2 py-2 font-medium w-14" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {estimateTemplateEditItems.map((row, idx) => (
+                      <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50/60">
+                        <td className="px-1 py-1">
+                          <input
+                            value={row.processGroup}
+                            onChange={(e) => updateEstimateTemplateEditRow(idx, { processGroup: e.target.value })}
+                            className="w-full min-w-[88px] rounded border border-gray-200 px-1.5 py-1 text-sm"
+                            placeholder="공정"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            value={row.category}
+                            onChange={(e) => updateEstimateTemplateEditRow(idx, { category: e.target.value })}
+                            className="w-full min-w-[110px] rounded border border-gray-200 px-1.5 py-1 text-sm"
+                            placeholder="품목"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            value={row.spec}
+                            onChange={(e) => updateEstimateTemplateEditRow(idx, { spec: e.target.value })}
+                            className="w-full min-w-[90px] rounded border border-gray-200 px-1.5 py-1 text-sm"
+                            placeholder="규격"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            value={row.unit}
+                            onChange={(e) => updateEstimateTemplateEditRow(idx, { unit: e.target.value })}
+                            className="w-16 rounded border border-gray-200 px-1.5 py-1 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            type="number"
+                            value={row.materialUnitPrice}
+                            onChange={(e) =>
+                              updateEstimateTemplateEditRow(idx, {
+                                materialUnitPrice: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-24 rounded border border-gray-200 px-1.5 py-1 text-sm text-right"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            type="number"
+                            value={row.laborUnitPrice}
+                            onChange={(e) =>
+                              updateEstimateTemplateEditRow(idx, {
+                                laborUnitPrice: Number(e.target.value) || 0,
+                              })
+                            }
+                            className="w-24 rounded border border-gray-200 px-1.5 py-1 text-sm text-right"
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input
+                            value={row.note}
+                            onChange={(e) => updateEstimateTemplateEditRow(idx, { note: e.target.value })}
+                            className="w-full min-w-[80px] rounded border border-gray-200 px-1.5 py-1 text-sm"
+                          />
+                        </td>
+                        <td className="px-1 py-1 text-center">
+                          <button
+                            type="button"
+                            onClick={() => removeEstimateTemplateEditRow(idx)}
+                            className="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                          >
+                            삭제
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {estimateTemplateError && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {estimateTemplateError}
+                </div>
               )}
             </div>
-            {estimateTemplateError && (
-              <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                {estimateTemplateError}
-              </div>
-            )}
-            <div className="flex gap-2">
+            <div className="flex shrink-0 gap-2 border-t border-gray-200 px-5 py-4">
               <button
                 type="button"
                 onClick={clearEstimateTemplateForm}
-                className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="flex-1 rounded-lg border border-gray-300 bg-white py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 취소
               </button>
@@ -1873,7 +2100,7 @@ export default function AdminPage() {
                 type="button"
                 onClick={handleAddEstimateTemplate}
                 disabled={estimateTemplateLoading || !estimateTemplateTitle.trim()}
-                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 {estimateTemplateLoading ? "저장 중..." : "수정 저장"}
               </button>
