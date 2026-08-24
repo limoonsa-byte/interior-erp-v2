@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Banknote, Copy, Link2, MessageSquare, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, Banknote, ClipboardCheck, Copy, Link2, MessageSquare, RefreshCw, Trash2 } from "lucide-react";
 
 type Estimate = {
   id: number;
@@ -515,6 +515,14 @@ export default function LaborPayDetailPage() {
                             <Trash2 className="h-3.5 w-3.5" />
                             삭제
                           </button>
+                          <Link
+                            href={`/payment/${estimateId}`}
+                            className="inline-flex items-center gap-1 rounded border border-blue-300 bg-white px-2 py-1 text-xs text-blue-700 hover:bg-blue-50"
+                            title="이 현장 결제 승인서로 이동"
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5" />
+                            결제 승인관리
+                          </Link>
                         </div>
                       </td>
                     </tr>
