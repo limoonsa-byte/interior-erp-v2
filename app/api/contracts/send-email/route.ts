@@ -1,7 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
-import { buildContractPdfFromImage, buildContractPdf } from "@/lib/buildContractPdf";
-import { getTransporter } from "@/lib/smtp";
+import { buildContractPdfFromImage } from "@/lib/buildContractPdf";
+import { formatSmtpSendError, getTransporter, isSmtpAuthError } from "@/lib/smtp";
 import { cookies } from "next/headers";
 
 async function getCompanyFromCookie() {
@@ -33,8 +33,16 @@ export async function POST(request: Request) {
     const c = result.rows[0];
     if (c.status !== "signed") return NextResponse.json({ error: "서명 완료된 계약서만 이메일 발송이 가능합니다." }, { status: 400 });
 
-    const smtp = await getTransporter(companyId);
-    if (!smtp) return NextResponse.json({ error: "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리자라면 마스터 관리 → 마스터 메일(OAuth)에서 Gmail 앱 비밀번호로 연결하거나 OAuth로 연결해 주세요." }, { status: 500 });
+    let smtp = await getTransporter(companyId);
+    if (!smtp) {
+      return NextResponse.json(
+        {
+          error:
+            "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리 → 마스터 메일(OAuth)에서 Gmail로 연결하거나, 앱 비밀번호를 설정해 주세요.",
+        },
+        { status: 500 }
+      );
+    }
 
     const documentPath = c.document_path ? String(c.document_path) : null;
     let documentDataB64 =
@@ -42,7 +50,6 @@ export async function POST(request: Request) {
         ? String(c.document_data)
         : null;
 
-    // DB에 본문이 없고 document_path만 있으면 문서 API로 본문 PDF 조회 (서버리스에서 파일 없을 때)
     if (!documentDataB64 && documentPath && contractId) {
       try {
         const base = (await import("@/lib/appUrl")).getAppBaseUrl();
@@ -53,10 +60,11 @@ export async function POST(request: Request) {
           const buf = await docRes.arrayBuffer();
           documentDataB64 = Buffer.from(buf).toString("base64");
         }
-      } catch (_) { /* ignore */ }
+      } catch (_) {
+        /* ignore */
+      }
     }
 
-    // 1페이지는 계약서 작성 인쇄 미리보기와 동일하게 클라이언트 캡처(summaryImage)만 사용. 서버 pdfkit으로 크기/위치 바꾸지 않음.
     let pdfBytes: Uint8Array;
     if (pdfBase64 && typeof pdfBase64 === "string" && pdfBase64.length > 0) {
       pdfBytes = new Uint8Array(Buffer.from(pdfBase64, "base64"));
@@ -64,27 +72,43 @@ export async function POST(request: Request) {
       pdfBytes = await buildContractPdfFromImage(summaryImage, documentPath, undefined, documentDataB64);
     } else {
       return NextResponse.json(
-        { error: "계약서 작성 화면에서 해당 계약서를 열고 [이메일 보내기]로 보내 주세요. (1페이지는 인쇄 미리보기와 동일하게만 사용됩니다.)" },
+        {
+          error:
+            "계약서 작성 화면에서 해당 계약서를 열고 [이메일 보내기]로 보내 주세요. (1페이지는 인쇄 미리보기와 동일하게만 사용됩니다.)",
+        },
         { status: 400 }
       );
     }
 
     const title = String(c.title ?? "계약서");
     const safeFileName = title.replace(/[/\\:*?"<>|]/g, " ").trim() || "계약서";
-
-    await smtp.transporter.sendMail({
+    const mailOptions = {
       from: smtp.from,
       to: String(email).trim(),
       subject: `[계약서 서명 완료] ${title}`,
       text: `계약서 서명이 완료되었습니다.\n\n계약서 제목: ${title}\n\n첨부된 PDF 파일을 확인해 주세요.`,
       html: `<!DOCTYPE html><html><body style="font-family:sans-serif;"><h2 style="color:#1a73e8;">계약서 서명이 완료되었습니다</h2><p><strong>계약서 제목:</strong> ${title}</p><p>첨부된 PDF 파일을 확인해 주세요.</p><p style="color:#666;font-size:12px;">본 메일은 자동 발송된 메일입니다.</p></body></html>`,
       attachments: [{ filename: `${safeFileName}.pdf`, content: Buffer.from(pdfBytes), contentType: "application/pdf" }],
-    });
+    };
+
+    try {
+      await smtp.transporter.sendMail(mailOptions);
+    } catch (sendErr) {
+      // 회사 SMTP 인증 실패 시 마스터 메일로 한 번 더 시도
+      if (isSmtpAuthError(sendErr)) {
+        const masterSmtp = await getTransporter(companyId, { skipCompany: true });
+        if (masterSmtp) {
+          await masterSmtp.transporter.sendMail({ ...mailOptions, from: masterSmtp.from });
+          return NextResponse.json({ message: "이메일이 발송되었습니다." });
+        }
+      }
+      throw sendErr;
+    }
 
     return NextResponse.json({ message: "이메일이 발송되었습니다." });
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
     console.error("계약서 이메일 발송 실패:", detail, error);
-    return NextResponse.json({ error: `이메일 발송에 실패했습니다: ${detail}` }, { status: 500 });
+    return NextResponse.json({ error: formatSmtpSendError(error) }, { status: 500 });
   }
 }
