@@ -65,7 +65,9 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: true });
     }
     const email = typeof body.email === "string" ? body.email.trim() : "";
-    const appPassword = typeof body.appPassword === "string" ? body.appPassword.trim() : "";
+    // Google 앱 비밀번호는 화면에서 띄어쓰기로 보여줌 → 공백 제거 필수
+    const appPassword =
+      typeof body.appPassword === "string" ? body.appPassword.replace(/\s+/g, "").trim() : "";
     if (email && appPassword && email.includes("@")) {
       try {
         await sql`

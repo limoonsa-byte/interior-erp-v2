@@ -143,7 +143,7 @@ export async function getTransporter(
       }
 
       const host = r.smtp_host?.trim();
-      const pass = r.smtp_pass?.trim();
+      const pass = r.smtp_pass?.replace(/\s+/g, "").trim();
       if (host && user && pass) {
         const port = Number(r.smtp_port?.trim()) || 587;
         const transporter = nodemailer.createTransport({
@@ -184,7 +184,7 @@ export async function getTransporter(
     const oauthProvider = m.smtp_oauth_provider?.trim();
     const refreshToken = m.smtp_oauth_refresh_token?.trim();
     const masterUser = m.smtp_user?.trim();
-    const masterPass = m.smtp_pass?.trim();
+    const masterPass = m.smtp_pass?.replace(/\s+/g, "").trim();
     const masterHost = m.smtp_host?.trim() || "smtp.gmail.com";
     const masterPort = Number(m.smtp_port?.trim()) || 587;
 
@@ -239,7 +239,7 @@ export async function getTransporter(
 
   const host = process.env.SMTP_HOST?.trim();
   const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
+  const pass = process.env.SMTP_PASS?.replace(/\s+/g, "").trim();
   if (!host || !user || !pass) return null;
   const port = Number(process.env.SMTP_PORT) || 587;
   const transporter = nodemailer.createTransport({

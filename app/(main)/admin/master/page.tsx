@@ -798,7 +798,10 @@ export default function MasterAdminPage() {
           <p className="mb-3 text-xs text-amber-800">
             Google 계정에서 2단계 인증을 켠 뒤, &quot;앱 비밀번호&quot;를 생성해 아래에 넣으면 팝업 없이 바로 연결됩니다. OAuth 화면이 계속 뜨는 경우 이 방법을 사용하세요.
           </p>
-          <p className="mb-2 text-xs text-gray-600">만드는 방법: Google 계정 → 보안 → 2단계 인증 사용 → 앱 비밀번호 → 앱 선택 &quot;메일&quot; → 생성 후 16자리 비밀번호 복사</p>
+          <p className="mb-2 text-xs text-gray-600">
+            만드는 방법: Google 계정 → 보안 → 2단계 인증 사용 → 앱 비밀번호 → 앱 선택 &quot;메일&quot; → 생성 후 16자리 비밀번호 복사
+            (띄어쓰기는 있어도 되고, 저장 시 자동으로 제거됩니다)
+          </p>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <input
               type="email"

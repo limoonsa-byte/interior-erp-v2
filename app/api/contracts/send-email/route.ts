@@ -1,7 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { buildContractPdfFromImage } from "@/lib/buildContractPdf";
-import { formatSmtpSendError, getTransporter, isSmtpAuthError } from "@/lib/smtp";
+import { formatSmtpSendError, getTransporter, isSmtpAuthError, isSmtpConfigured } from "@/lib/smtp";
 import { cookies } from "next/headers";
 
 async function getCompanyFromCookie() {
@@ -35,10 +35,20 @@ export async function POST(request: Request) {
 
     let smtp = await getTransporter(companyId);
     if (!smtp) {
+      const configured = await isSmtpConfigured(companyId);
+      if (configured) {
+        return NextResponse.json(
+          {
+            error:
+              "메일 계정 인증에 실패했습니다. 마스터 관리 → 마스터 메일에서 「앱 비밀번호로 저장」을 다시 해 주세요. (Google 앱 비밀번호 16자리를 공백 없이 넣어야 합니다. OAuth의 client secret 오류가 나면 앱 비밀번호 방식을 쓰세요.)",
+          },
+          { status: 500 }
+        );
+      }
       return NextResponse.json(
         {
           error:
-            "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리 → 마스터 메일(OAuth)에서 Gmail로 연결하거나, 앱 비밀번호를 설정해 주세요.",
+            "SMTP 설정이 없어 이메일을 보낼 수 없습니다. 마스터 관리 → 마스터 메일(OAuth)에서 「앱 비밀번호로 저장」을 해 주세요. (Gmail로 연결 OAuth는 client secret이 맞을 때만 사용)",
         },
         { status: 500 }
       );
