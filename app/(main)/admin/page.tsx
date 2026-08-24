@@ -1659,15 +1659,18 @@ export default function AdminPage() {
               </button>
             </div>
             <p className="mb-3 text-sm text-gray-600">
-              인부에게 보낸 입력 링크에 표시됩니다. 결제일이나 안내 문구를 적어 주세요.
+              인부 입력 화면에 표시되고, 내역서 요청에서 「링크 복사」「문자」할 때도 함께 들어갑니다.
+              결제일·첨부 안내 등을 회사 기준으로 적어 주세요.
             </p>
             <div className="mb-3">
               <label className="mb-1 block text-xs font-medium text-gray-600">안내 문구</label>
               <textarea
                 value={laborPayNotice}
                 onChange={(e) => setLaborPayNotice(e.target.value)}
-                placeholder={"예: 결제일: 매월 25일\n입금 후 문자 드립니다."}
-                className="min-h-[120px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                placeholder={
+                  "예: 매월 결제일 1일, 15일, 월말일 지급됩니다.\n상기내역 적어주시 수기사진 파일 또는 견적서 첨부 부탁드립니다."
+                }
+                className="min-h-[140px] w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                 disabled={laborPayNoticeLoading || laborPayNoticeSaving}
               />
             </div>

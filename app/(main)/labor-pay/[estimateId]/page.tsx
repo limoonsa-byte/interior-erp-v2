@@ -79,6 +79,8 @@ export default function LaborPayDetailPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  /** 관리 → 내역서 요청 안내에서 회사가 정해 둔 문구 */
+  const [companyNotice, setCompanyNotice] = useState("");
 
   const workerPhoneById = useMemo(() => {
     const map = new Map<number, string>();
@@ -98,14 +100,21 @@ export default function LaborPayDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const [estRes, workersRes, reqRes] = await Promise.all([
+      const [estRes, workersRes, reqRes, companyRes] = await Promise.all([
         fetch("/api/estimates", { credentials: "include" }),
         fetch("/api/workers", { credentials: "include" }),
         fetch(`/api/company/labor-pay?estimateId=${estimateId}`, { credentials: "include" }),
+        fetch("/api/company", { credentials: "include" }),
       ]);
       const estData = await estRes.json();
       const workersData = await workersRes.json();
       const reqData = await reqRes.json();
+      const companyData = await companyRes.json().catch(() => ({}));
+      const notice =
+        typeof (companyData as { laborPayNotice?: string }).laborPayNotice === "string"
+          ? String((companyData as { laborPayNotice: string }).laborPayNotice).trim()
+          : "";
+      setCompanyNotice(notice);
 
       if (Array.isArray(estData)) {
         const found = (estData as Estimate[]).find((e) => e.id === estimateId) ?? null;
@@ -172,13 +181,36 @@ export default function LaborPayDetailPage() {
     }
   };
 
+  const buildShareText = (url: string) => {
+    const site =
+      estimate?.displayTitle?.trim() ||
+      estimate?.title?.trim() ||
+      estimate?.customerName?.trim() ||
+      "현장";
+    const notice = companyNotice.trim();
+    if (notice) {
+      return `[내역서 요청] ${site}\n\n${notice}\n\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+    }
+    return `[내역서 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+  };
+
   const copyLink = async (token: string) => {
     const url = linkForToken(token);
+    const shareText = buildShareText(url);
     try {
-      await navigator.clipboard.writeText(url);
-      setMessage("링크를 복사했습니다.");
+      await navigator.clipboard.writeText(shareText);
+      setMessage(
+        companyNotice.trim()
+          ? `링크를 복사했습니다.\n\n${companyNotice.trim()}`
+          : "링크를 복사했습니다."
+      );
     } catch {
-      window.prompt("링크를 복사하세요", url);
+      window.prompt("아래 내용을 복사하세요", shareText);
+      setMessage(
+        companyNotice.trim()
+          ? `링크를 복사했습니다.\n\n${companyNotice.trim()}`
+          : "링크를 복사했습니다."
+      );
     }
   };
 
@@ -219,15 +251,14 @@ export default function LaborPayDetailPage() {
       );
       return;
     }
-    const site =
-      estimate?.displayTitle?.trim() ||
-      estimate?.title?.trim() ||
-      estimate?.customerName?.trim() ||
-      "현장";
     const url = linkForToken(r.accessToken);
-    const bodyText = `[내역서 요청] ${site}\n아래 링크로 금액과 내용을 입력해 주세요.\n${url}`;
+    const bodyText = buildShareText(url);
     openDeviceSms(phone, bodyText);
-    setMessage("문자앱을 열었습니다. 보내기를 눌러 주세요.");
+    setMessage(
+      companyNotice.trim()
+        ? `문자앱을 열었습니다. 보내기를 눌러 주세요.\n\n${companyNotice.trim()}`
+        : "문자앱을 열었습니다. 보내기를 눌러 주세요."
+    );
   };
 
   const reissue = async (id: number) => {
@@ -301,7 +332,27 @@ export default function LaborPayDetailPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</div>
       )}
       {message && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{message}</div>
+        <div className="whitespace-pre-wrap rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {message}
+        </div>
+      )}
+
+      {companyNotice.trim() ? (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <p className="mb-1 text-xs font-semibold text-sky-800">회사 안내 문구 (링크 복사·문자에 포함)</p>
+          <p className="whitespace-pre-wrap">{companyNotice.trim()}</p>
+          <p className="mt-2 text-xs text-sky-700">
+            관리 → 내역서 요청 안내에서 수정할 수 있습니다.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+          회사 안내 문구가 없습니다.{" "}
+          <Link href="/admin" className="text-blue-600 hover:underline">
+            관리 → 내역서 요청 안내
+          </Link>
+          에서 결제일·첨부 안내 등을 정해 두면, 링크 복사·문자에 함께 들어갑니다.
+        </div>
       )}
 
       <section className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
