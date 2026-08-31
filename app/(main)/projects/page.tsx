@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Calendar, Image } from "lucide-react";
 import { getHolidayName, isKoreanHoliday } from "@/lib/koreanHolidays";
 import { displayProjectTitle } from "@/lib/projectTitle";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -24,6 +25,7 @@ type Consultation = {
   constructionStartAt?: string;
   moveInAt?: string;
   schedulePhases?: { name: string; start: string; end: string }[];
+  isImportant?: boolean;
 };
 
 type Estimate = {
@@ -97,11 +99,17 @@ export default function ProjectsPage() {
 
   /** 일정이 하나라도 저장된 상담 = 진행 중인 프로젝트 */
   const projects = useMemo(() => {
-    return consultations.filter(
-      (c) =>
-        (c.constructionStartAt && c.constructionStartAt.trim()) ||
-        (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
-    );
+    return consultations
+      .filter(
+        (c) =>
+          (c.constructionStartAt && c.constructionStartAt.trim()) ||
+          (Array.isArray(c.schedulePhases) && c.schedulePhases.length > 0)
+      )
+      .sort((a, b) => {
+        const imp = compareImportantFirst(a.isImportant, b.isImportant);
+        if (imp !== 0) return imp;
+        return b.id - a.id;
+      });
   }, [consultations]);
 
   const rows = useMemo((): ProjectRow[] => {

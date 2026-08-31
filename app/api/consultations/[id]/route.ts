@@ -78,6 +78,7 @@ export async function PATCH(
       materialMeetingDone,
       contractMeetingDone,
       designMeetingDone,
+      isImportant,
     } = body;
 
     const hasTitle = bodyHas(body, "title");
@@ -89,6 +90,7 @@ export async function PATCH(
     const hasStatus = bodyHas(body, "status");
     const hasPic = bodyHas(body, "pic");
     const hasNote = bodyHas(body, "note");
+    const hasIsImportant = bodyHas(body, "isImportant");
     const titleStr = hasTitle
       ? title != null
         ? String(title).trim() || null
@@ -182,7 +184,8 @@ export async function PATCH(
           material_meeting_done = CASE WHEN ${hasMaterialMeetingDone} THEN ${materialMeetingDone === true} ELSE material_meeting_done END,
           contract_meeting_done = CASE WHEN ${hasContractMeetingDone} THEN ${contractMeetingDone === true} ELSE contract_meeting_done END,
           design_meeting_done = CASE WHEN ${hasDesignMeetingDone} THEN ${designMeetingDone === true} ELSE design_meeting_done END,
-          schedule_memo = CASE WHEN ${scheduleMemoProvided} THEN ${scheduleMemoVal} ELSE schedule_memo END
+          schedule_memo = CASE WHEN ${scheduleMemoProvided} THEN ${scheduleMemoVal} ELSE schedule_memo END,
+          is_important = CASE WHEN ${hasIsImportant} THEN ${isImportant === true} ELSE is_important END
         WHERE id = ${consultationId} AND company_id = ${company.id}
         RETURNING id
       `;

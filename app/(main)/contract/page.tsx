@@ -12,6 +12,7 @@ import {
 } from "@/lib/contractViewPrint";
 import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 import { resolveContractBodyPdfUrl } from "@/lib/renderPdfUrlToPageImages";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 type Contract = {
   id: number;
@@ -44,6 +45,7 @@ type Consultation = {
   address?: string;
   pyung?: number | string;
   status?: string;
+  isImportant?: boolean;
 };
 
 type Estimate = {
@@ -1303,13 +1305,21 @@ export default function ContractPage() {
 
   /** 견적 선택 모달: 상담이 남아 있는 견적만, 완료 상담 제외 */
   const estimatesToShowInModal = useMemo(() => {
-    return estimates.filter((est) => {
-      if (est.consultationId == null) return false;
-      const c = consultations.find((x) => x.id === est.consultationId);
-      if (!c) return false;
-      const status = c.status ?? "";
-      return status !== "완료및정산" && status !== "완료";
-    });
+    return estimates
+      .filter((est) => {
+        if (est.consultationId == null) return false;
+        const c = consultations.find((x) => x.id === est.consultationId);
+        if (!c) return false;
+        const status = c.status ?? "";
+        return status !== "완료및정산" && status !== "완료";
+      })
+      .sort((a, b) => {
+        const aImp = consultations.find((c) => c.id === a.consultationId)?.isImportant;
+        const bImp = consultations.find((c) => c.id === b.consultationId)?.isImportant;
+        const imp = compareImportantFirst(aImp, bImp);
+        if (imp !== 0) return imp;
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
   }, [estimates, consultations]);
 
   const handleNewClick = () => {

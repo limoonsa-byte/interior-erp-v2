@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CreditCard } from "lucide-react";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 type EstimateItemRow = {
   qty?: number | string;
@@ -27,6 +28,7 @@ type Estimate = {
 type Consultation = {
   id: number;
   status?: string;
+  isImportant?: boolean;
 };
 
 type SettlementSummaryResponse = {
@@ -116,14 +118,22 @@ export default function PaymentListPage() {
 
   /** 상담이 남아 있는 견적만. 완료 건 보기 꺼짐이면 완료 상담 제외 */
   const filteredEstimates = useMemo(() => {
-    return estimates.filter((est) => {
-      if (est.consultationId == null) return false;
-      const c = consultations.find((x) => x.id === est.consultationId);
-      if (!c) return false;
-      if (showCompleted) return true;
-      const status = c.status ?? "";
-      return status !== "완료및정산" && status !== "완료";
-    });
+    return estimates
+      .filter((est) => {
+        if (est.consultationId == null) return false;
+        const c = consultations.find((x) => x.id === est.consultationId);
+        if (!c) return false;
+        if (showCompleted) return true;
+        const status = c.status ?? "";
+        return status !== "완료및정산" && status !== "완료";
+      })
+      .sort((a, b) => {
+        const aImp = consultations.find((c) => c.id === a.consultationId)?.isImportant;
+        const bImp = consultations.find((c) => c.id === b.consultationId)?.isImportant;
+        const imp = compareImportantFirst(aImp, bImp);
+        if (imp !== 0) return imp;
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
   }, [estimates, consultations, showCompleted]);
 
   return (

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ResizableTh } from "@/components/table/ResizableTh";
 import { useResizableTableColumns } from "@/lib/useResizableTableColumns";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 /** 오늘 날짜 00:00 기준 (datetime-local 형식). 오늘·이후만 선택 가능하게 min에 사용 */
 function getTodayDatetimeLocal(): string {
@@ -48,6 +49,8 @@ type Consultation = {
   materialMeetingDone?: boolean;
   contractMeetingDone?: boolean;
   designMeetingDone?: boolean;
+  /** 중요 고정 — 상담·견적·일정 등 전체 목록 상단 */
+  isImportant?: boolean;
 };
 
 /** 시공예산 숫자 → 콤마 포맷 (예: 33000000 → "33,000,000") */
@@ -895,6 +898,7 @@ const emptyConsultation: Consultation = {
   contractMeetingAt: undefined,
   designMeetingAt: undefined,
   date: "",
+  isImportant: false,
 };
 
 /** 접수기간 프리셋: 금일/작일/당월 날짜 범위 */
@@ -931,6 +935,7 @@ const CONSULTING_LIST_COLUMN_DEFAULTS = {
   pyung: 56,
 } as const;
 const CONSULTING_CHECKBOX_COL_WIDTH = 40;
+const CONSULTING_IMPORTANT_COL_WIDTH = 40;
 
 export default function ConsultingPage() {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
@@ -962,7 +967,7 @@ export default function ConsultingPage() {
     const activeStageStatuses = LIST_STAGE_FILTERS.filter((f) => stageFilters[f.id]).flatMap((f) => f.statuses);
     const stageFilterActive = LIST_STAGE_FILTERS.some((f) => stageFilters[f.id]);
 
-    return consultations.filter((item) => {
+    const filtered = consultations.filter((item) => {
       if (!showCompleted && item.status === "완료및정산") return false;
       if (stageFilterActive) {
         // 완료 건은 단계 필터에 없고 showCompleted로만 노출
@@ -988,6 +993,12 @@ export default function ConsultingPage() {
         if (filterDateTo && consultDate > filterDateTo) return false;
       }
       return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const imp = compareImportantFirst(a.isImportant, b.isImportant);
+      if (imp !== 0) return imp;
+      return b.id - a.id;
     });
   }, [
     consultations,
@@ -1044,6 +1055,7 @@ export default function ConsultingPage() {
             materialMeetingDone: Boolean(item.materialMeetingDone),
             contractMeetingDone: Boolean(item.contractMeetingDone),
             designMeetingDone: Boolean(item.designMeetingDone),
+            isImportant: Boolean(item.isImportant),
           }))
         );
       })
@@ -1112,6 +1124,31 @@ export default function ConsultingPage() {
       else next.add(id);
       return next;
     });
+  };
+
+  const handleToggleImportant = (item: Consultation) => {
+    const nextImportant = !item.isImportant;
+    setConsultations((prev) =>
+      prev.map((c) => (c.id === item.id ? { ...c, isImportant: nextImportant } : c))
+    );
+    fetch(`/api/consultations/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ isImportant: nextImportant }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error((data as { error?: string }).error || "중요 설정 저장에 실패했습니다.");
+        }
+      })
+      .catch((err) => {
+        setConsultations((prev) =>
+          prev.map((c) => (c.id === item.id ? { ...c, isImportant: item.isImportant } : c))
+        );
+        alert(err instanceof Error ? err.message : "중요 설정 저장에 실패했습니다.");
+      });
   };
 
   const handleDeleteSelected = () => {
@@ -1359,11 +1396,15 @@ export default function ConsultingPage() {
         </p>
         <table
           className="w-full text-center text-sm table-fixed"
-          style={{ minWidth: tableMinWidth + CONSULTING_CHECKBOX_COL_WIDTH }}
+          style={{
+            minWidth:
+              tableMinWidth + CONSULTING_CHECKBOX_COL_WIDTH + CONSULTING_IMPORTANT_COL_WIDTH,
+          }}
         >
           <colgroup>
             <col className="sm:hidden" style={{ width: colWidths.mobileTitle }} />
             <col className="hidden sm:table-column" style={{ width: CONSULTING_CHECKBOX_COL_WIDTH }} />
+            <col className="hidden sm:table-column" style={{ width: CONSULTING_IMPORTANT_COL_WIDTH }} />
             <col style={{ width: colWidths.no }} />
             <col style={{ width: colWidths.title }} />
             <col style={{ width: colWidths.status }} />
@@ -1407,6 +1448,17 @@ export default function ConsultingPage() {
                   className="cursor-pointer"
                   aria-label="전체 선택"
                 />
+              </th>
+              <th
+                className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap text-xs font-medium"
+                style={{
+                  width: CONSULTING_IMPORTANT_COL_WIDTH,
+                  minWidth: CONSULTING_IMPORTANT_COL_WIDTH,
+                  maxWidth: CONSULTING_IMPORTANT_COL_WIDTH,
+                }}
+                title="중요 고정"
+              >
+                중요
               </th>
               <ResizableTh colId="no" width={colWidths.no} onResizeStart={startColumnResize}>
                 No.
@@ -1466,7 +1518,10 @@ export default function ConsultingPage() {
               );
               const titleLabel = (item.title ?? "").trim() || "-";
               return (
-                <tr key={item.id} className="text-gray-700 hover:bg-gray-50">
+                <tr
+                  key={item.id}
+                  className={`text-gray-700 hover:bg-gray-50 ${item.isImportant ? "bg-amber-50/60" : ""}`}
+                >
                   <td className="row-actions-sticky whitespace-nowrap p-2 align-middle font-medium sm:hidden">
                     <div className="flex min-w-0 items-center gap-2">
                       <input
@@ -1476,6 +1531,17 @@ export default function ConsultingPage() {
                         className="cursor-pointer"
                         aria-label={`${item.customerName} 선택`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => handleToggleImportant(item)}
+                        className={`shrink-0 text-base leading-none ${
+                          item.isImportant ? "text-amber-500" : "text-gray-300 hover:text-amber-400"
+                        }`}
+                        aria-label={item.isImportant ? "중요 해제" : "중요로 상단 고정"}
+                        title={item.isImportant ? "중요 해제" : "중요로 상단 고정"}
+                      >
+                        ★
+                      </button>
                       <button
                         type="button"
                         onClick={openDetail}
@@ -1494,6 +1560,19 @@ export default function ConsultingPage() {
                       className="cursor-pointer"
                       aria-label={`${item.customerName} 선택`}
                     />
+                  </td>
+                  <td className="hidden p-2 sm:table-cell sm:p-3 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleImportant(item)}
+                      className={`text-base leading-none ${
+                        item.isImportant ? "text-amber-500" : "text-gray-300 hover:text-amber-400"
+                      }`}
+                      aria-label={item.isImportant ? "중요 해제" : "중요로 상단 고정"}
+                      title={item.isImportant ? "중요 해제" : "중요로 상단 고정"}
+                    >
+                      ★
+                    </button>
                   </td>
                   <td className="p-2 sm:p-3 whitespace-nowrap truncate">{idx + 1}</td>
                   <td className="p-2 sm:p-3 text-left font-medium overflow-hidden">
