@@ -32,7 +32,7 @@ export async function GET() {
     }
 
     const result =
-      await sql`SELECT * FROM consultations WHERE company_id = ${company.id} ORDER BY id DESC`;
+      await sql`SELECT * FROM consultations WHERE company_id = ${company.id} ORDER BY is_important DESC NULLS LAST, id DESC`;
 
     const formatted = result.rows.map((row) => {
       let scope: string[] | undefined;
@@ -57,6 +57,7 @@ export async function GET() {
         status: row.status,
         pic: row.pic,
         note: row.note,
+        isImportant: Boolean((row as { is_important?: boolean }).is_important),
         consultedAt: row.consulted_at != null ? String(row.consulted_at) : undefined,
         scope,
         budget: row.budget != null ? String(row.budget) : undefined,

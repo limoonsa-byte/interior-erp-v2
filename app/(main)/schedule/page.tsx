@@ -11,6 +11,7 @@ import {
 import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
 import { chunkDaysForPrint, padChunkToWeekRows } from "@/lib/schedule-print-chunk";
 import { displayProjectTitle } from "@/lib/projectTitle";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 /** 완료 상태값 (체크박스로 보기/숨기기) */
 const COMPLETED_STATUS = "완료및정산";
@@ -64,6 +65,7 @@ type Consultation = {
   schedulePhases?: { name: string; start: string; end: string; color?: string }[];
   /** 일정 목록·캘린더 막대 표시색 (#RRGGBB), 없으면 상담 ID 기준 자동색 */
   scheduleListColor?: string;
+  isImportant?: boolean;
 };
 
 type Estimate = {
@@ -374,7 +376,12 @@ export default function SchedulePage() {
           hasEstimate: !!est,
         };
       })
-      .filter((item) => item.hasEstimate);
+      .filter((item) => item.hasEstimate)
+      .sort((a, b) => {
+        const imp = compareImportantFirst(a.consultation.isImportant, b.consultation.isImportant);
+        if (imp !== 0) return imp;
+        return b.consultation.id - a.consultation.id;
+      });
   }, [consultations, estimates, showCompleted]);
 
   const totalListPages = Math.max(1, Math.ceil(scheduleList.length / LIST_PAGE_SIZE));

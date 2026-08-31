@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation";
 import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 import { vatLabelText } from "@/lib/contractPaymentSchedule";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 const SETTLEMENT_VAT_PREF_KEY = "settlement-vat-included";
 
@@ -54,6 +55,7 @@ type Consultation = {
   id: number;
   title?: string;
   status?: string;
+  isImportant?: boolean;
 };
 
 type PhaseSubItem = {
@@ -278,6 +280,14 @@ export default function SettlementPage() {
     });
 
     return sorted.sort((a, b) => {
+      const aConsultId = a.items.find((x) => x.consultationId != null)?.consultationId;
+      const bConsultId = b.items.find((x) => x.consultationId != null)?.consultationId;
+      const aImp =
+        aConsultId != null ? consultations.find((c) => c.id === aConsultId)?.isImportant : false;
+      const bImp =
+        bConsultId != null ? consultations.find((c) => c.id === bConsultId)?.isImportant : false;
+      const impCmp = compareImportantFirst(aImp, bImp);
+      if (impCmp !== 0) return impCmp;
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });

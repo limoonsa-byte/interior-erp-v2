@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { resolveGroupProjectTitle } from "@/lib/projectTitle";
+import { compareImportantFirst } from "@/lib/importantSort";
 
 /** 도면 보관함 API에서 한 행 형식 (ERP에서 목록 불러올 때) */
 type DrawingListRow = {
@@ -2246,6 +2247,7 @@ type Consultation = {
   pic?: string;
   estimateMeetingAt?: string;
   status?: string;
+  isImportant?: boolean;
 };
 
 export default function EstimatePage() {
@@ -2362,6 +2364,18 @@ export default function EstimatePage() {
     });
 
     return sorted.sort((a, b) => {
+      const aConsultId = a.items.find((x) => x.consultationId != null)?.consultationId;
+      const bConsultId = b.items.find((x) => x.consultationId != null)?.consultationId;
+      const aImp =
+        aConsultId != null
+          ? consultationsForList.find((c) => c.id === aConsultId)?.isImportant
+          : false;
+      const bImp =
+        bConsultId != null
+          ? consultationsForList.find((c) => c.id === bConsultId)?.isImportant
+          : false;
+      const impCmp = compareImportantFirst(aImp, bImp);
+      if (impCmp !== 0) return impCmp;
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });
@@ -2431,11 +2445,18 @@ export default function EstimatePage() {
 
   /** 모달에 표시할 상담 목록 (이미 견적 연결된 상담 제외, 완료 건 보기 꺼짐이면 완료/완료및정산 제외) */
   const consultationsToShow = React.useMemo(
-    () => consultations.filter((c) => {
-      if (linkedConsultationIds.has(c.id)) return false;
-      if (!showCompletedInModal && (c.status === "완료" || c.status === "완료및정산")) return false;
-      return true;
-    }),
+    () =>
+      consultations
+        .filter((c) => {
+          if (linkedConsultationIds.has(c.id)) return false;
+          if (!showCompletedInModal && (c.status === "완료" || c.status === "완료및정산")) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const imp = compareImportantFirst(a.isImportant, b.isImportant);
+          if (imp !== 0) return imp;
+          return b.id - a.id;
+        }),
     [consultations, showCompletedInModal, linkedConsultationIds]
   );
 
