@@ -34,8 +34,8 @@ type MenuItem = {
 const baseMenuItems: MenuItem[] = [
   { href: "/mobile/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/mobile/estimate", label: "견적서 작성", icon: FileText },
-  { href: "/mobile/schedule", label: "일정작성", icon: Calendar },
   { href: "/mobile/contract", label: "계약서 작성", icon: Signature },
+  { href: "/mobile/schedule", label: "일정작성", icon: Calendar },
   { href: "/mobile/projects", label: "프로젝트", icon: Briefcase },
   { href: "/mobile/workers", label: "현장 인부 DB", icon: Users },
   { href: "/mobile/material-order", label: "자재 발주", icon: Package },

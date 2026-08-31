@@ -10,8 +10,8 @@ import { clsx } from "clsx";
 const defaultMenuItems = [
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
   { href: "/estimate", label: "견적서 작성", icon: FileText },
-  { href: "/schedule", label: "일정작성", icon: Calendar },
   { href: "/contract", label: "계약서 작성", icon: Signature },
+  { href: "/schedule", label: "일정작성", icon: Calendar },
   { href: "/workers", label: "현장 인부 DB", icon: Users },
   { href: "/material-order", label: "자재발주페이지", icon: Package },
   { href: "/work-log", label: "작업일지", icon: ClipboardList },
