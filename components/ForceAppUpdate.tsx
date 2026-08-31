@@ -6,7 +6,7 @@ import { useEffect } from "react";
  * 예전 PWA(sw.js) 캐시 때문에 배포 후에도 옛 JS가 남는 문제를 끊는다.
  * 한 번만 서비스워커/캐시를 비우고 최신 번들을 받게 한다.
  */
-const CACHE_BUST_KEY = "erp-cache-bust-v20260824-smtp-app-password";
+const CACHE_BUST_KEY = "erp-cache-bust-v20260831-labor-pay-amount-comma";
 
 export function ForceAppUpdate() {
   useEffect(() => {

@@ -32,6 +32,22 @@ type PendingAttachment = {
   note?: string;
 };
 
+/** 입력값을 숫자만 남김 */
+function amountDigitsOnly(value: string): string {
+  return String(value ?? "").replace(/[^\d]/g, "");
+}
+
+/** 금액 표시용 천단위 쉼표 (예: 150000 → 150,000) */
+function formatAmountWithComma(value: string | number | null | undefined): string {
+  const digits = amountDigitsOnly(String(value ?? ""));
+  if (!digits) return "";
+  try {
+    return Number(digits).toLocaleString("ko-KR");
+  } catch {
+    return digits;
+  }
+}
+
 export default function LaborPayPublicFormPage() {
   const params = useParams();
   const token = String(params?.token ?? "").trim();
@@ -65,7 +81,7 @@ export default function LaborPayPublicFormPage() {
         setData(payload);
         if (payload.status === "submitted") {
           setDone(true);
-          if (payload.amount != null) setAmount(String(payload.amount));
+          if (payload.amount != null) setAmount(formatAmountWithComma(payload.amount));
           if (payload.content) setContent(String(payload.content));
           setSubmittedAttachments(Array.isArray(payload.attachments) ? payload.attachments : []);
         }
@@ -170,10 +186,11 @@ export default function LaborPayPublicFormPage() {
         mime,
         data,
       }));
+      const amountRaw = amountDigitsOnly(amount);
       const res = await fetch(`/api/labor-pay/${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount, content, attachments }),
+        body: JSON.stringify({ amount: amountRaw, content, attachments }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((json as { error?: string }).error || "제출에 실패했습니다.");
@@ -245,7 +262,7 @@ export default function LaborPayPublicFormPage() {
         {done ? (
           <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900">
             <p className="font-medium">제출이 완료되었습니다. 감사합니다.</p>
-            {amount ? <p className="mt-2">금액: {Number(amount).toLocaleString("ko-KR")}원</p> : null}
+            {amount ? <p className="mt-2">금액: {formatAmountWithComma(amount)}원</p> : null}
             {content ? <p className="mt-1 whitespace-pre-wrap">내용: {content}</p> : null}
             {submittedAttachments.length > 0 ? (
               <div className="mt-3 space-y-2">
@@ -275,11 +292,12 @@ export default function LaborPayPublicFormPage() {
                 type="text"
                 inputMode="numeric"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value.replace(/[^\d-]/g, ""))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base"
-                placeholder="예: 150000"
+                onChange={(e) => setAmount(formatAmountWithComma(e.target.value))}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base tabular-nums"
+                placeholder="예: 150,000"
                 required
               />
+              <p className="mt-1 text-xs text-gray-500">숫자가 입력되면 자동으로 천 단위 쉼표(,)가 표시됩니다.</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">내용</label>
