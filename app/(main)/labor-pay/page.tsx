@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Banknote } from "lucide-react";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 
 type Estimate = {
   id: number;
@@ -61,9 +62,7 @@ export default function LaborPayListPage() {
         if (est.consultationId == null) return false;
         const c = consultations.find((x) => x.id === est.consultationId);
         if (!c) return false;
-        if (showCompleted) return true;
-        const status = c.status ?? "";
-        return status !== "완료및정산" && status !== "완료";
+        return isVisibleInConstructionMenus(c.status, showCompleted);
       })
       .sort((a, b) => {
         const aImp = consultations.find((c) => c.id === a.consultationId)?.isImportant;

@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 
 type EstimateItem = {
   id: number;
@@ -129,15 +130,13 @@ export default function WorkLogPage() {
 
   const expenseLabelOptions = useMemo(() => [...selectedEstimatePhases], [selectedEstimatePhases]);
 
-  /** 프로젝트(견적) 선택 목록: 상담이 남아 있는 견적만. 완료된 목록 보기 꺼짐이면 완료 상담 제외 */
+  /** 프로젝트(견적) 선택 목록: 공사진행만(완료된 목록 보기 켜면 완료 포함) */
   const filteredEstimatesForProject = useMemo(() => {
     return estimates.filter((est) => {
       if (est.consultationId == null) return false;
       const c = consultations.find((x) => x.id === est.consultationId);
       if (!c) return false;
-      if (showCompletedForProject) return true;
-      const status = c.status ?? "";
-      return status !== "완료및정산" && status !== "완료";
+      return isVisibleInConstructionMenus(c.status, showCompletedForProject);
     });
   }, [estimates, consultations, showCompletedForProject]);
 

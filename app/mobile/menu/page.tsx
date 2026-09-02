@@ -23,6 +23,8 @@ import {
   ChevronRight,
   Banknote,
 } from "lucide-react";
+import { useHasConstructionPhase } from "@/hooks/useHasConstructionPhase";
+import { isConstructionGatedHref } from "@/lib/constructionPhase";
 
 type MenuItem = {
   href: string;
@@ -52,6 +54,7 @@ const baseMenuItems: MenuItem[] = [
 
 export default function MobileMenuPage() {
   const [isMaster, setIsMaster] = useState(false);
+  const hasConstructionPhase = useHasConstructionPhase();
 
   useEffect(() => {
     fetch("/api/company/me")
@@ -62,7 +65,7 @@ export default function MobileMenuPage() {
 
   const menuItems = useMemo(() => {
     return [
-      ...baseMenuItems,
+      ...baseMenuItems.filter((item) => hasConstructionPhase || !isConstructionGatedHref(item.href)),
       ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
         ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink, external: true as const }]
         : []),
@@ -73,7 +76,7 @@ export default function MobileMenuPage() {
           ]
         : []),
     ];
-  }, [isMaster]);
+  }, [isMaster, hasConstructionPhase]);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
