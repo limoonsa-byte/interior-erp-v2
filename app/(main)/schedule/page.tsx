@@ -12,6 +12,7 @@ import { printScheduleCalendarContent } from "@/lib/print-schedule-calendar";
 import { chunkDaysForPrint, padChunkToWeekRows } from "@/lib/schedule-print-chunk";
 import { displayProjectTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 
 /** 완료 상태값 (체크박스로 보기/숨기기) */
 const COMPLETED_STATUS = "완료및정산";
@@ -360,10 +361,7 @@ export default function SchedulePage() {
 
   const scheduleList = useMemo(() => {
     return consultations
-      .filter((c) => {
-        if (!showCompleted && c.status === COMPLETED_STATUS) return false;
-        return true;
-      })
+      .filter((c) => isVisibleInConstructionMenus(c.status, showCompleted))
       .map((consultation) => {
         const est = estimates.find((e) => e.consultationId === consultation.id);
         return {

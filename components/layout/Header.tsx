@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, CreditCard, BarChart3, Settings, Shield, Link2, MessageCircle, ExternalLink, Signature, Calculator, Banknote } from "lucide-react";
 import { clsx } from "clsx";
+import { useHasConstructionPhase } from "@/hooks/useHasConstructionPhase";
+import { isConstructionGatedHref } from "@/lib/constructionPhase";
 
 /** 기본 메뉴 - 대시보드 제거, 왼쪽 사이드바가 항시 메뉴 역할 */
 const defaultMenuItems = [
@@ -31,6 +33,7 @@ export function Header() {
   const [customMenu, setCustomMenu] = useState<{ id: number; label: string; href: string }[]>([]);
   const [isMaster, setIsMaster] = useState(false);
   const pathname = usePathname();
+  const hasConstructionPhase = useHasConstructionPhase();
 
   useEffect(() => {
     fetch("/api/company/custom-menu")
@@ -46,7 +49,9 @@ export function Header() {
   }, []);
 
   const baseItems: MenuEntry[] = [
-    ...defaultMenuItems.map((m) => ({ ...m, id: undefined })),
+    ...defaultMenuItems
+      .filter((m) => hasConstructionPhase || !isConstructionGatedHref(m.href))
+      .map((m) => ({ ...m, id: undefined })),
     ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
       ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink, id: undefined as number | undefined, external: true }]
       : []),
@@ -54,13 +59,15 @@ export function Header() {
   ];
   const menuItems: MenuEntry[] = [
     ...baseItems,
-    ...customMenu.map((m) => ({
-      id: m.id,
-      href: m.href,
-      label: m.label,
-      icon: Link2,
-      external: /^https?:\/\//i.test(m.href),
-    })),
+    ...customMenu
+      .filter((m) => hasConstructionPhase || !isConstructionGatedHref(m.href))
+      .map((m) => ({
+        id: m.id,
+        href: m.href,
+        label: m.label,
+        icon: Link2,
+        external: /^https?:\/\//i.test(m.href),
+      })),
   ];
 
   return (

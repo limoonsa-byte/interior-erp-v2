@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toPng } from "html-to-image";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 
 type EstimateItem = {
   processGroup?: string;
@@ -292,16 +293,14 @@ export function MaterialOrderPage() {
     [estimates, selectedEstimateId]
   );
 
-  /** 프로젝트 선택 목록: 상담이 남아 있는 견적만. 완료 건 보기 꺼짐이면 완료 상담 제외 */
+  /** 프로젝트 선택 목록: 공사진행 상담만(완료 건 보기 켜면 완료 포함) */
   const filteredEstimates = useMemo(() => {
     return estimates
       .filter((est) => {
         if (est.consultationId == null) return false;
         const c = consultations.find((x) => x.id === est.consultationId);
         if (!c) return false;
-        if (showCompleted) return true;
-        const status = c.status ?? "";
-        return status !== "완료및정산" && status !== "완료";
+        return isVisibleInConstructionMenus(c.status, showCompleted);
       })
       .sort((a, b) => {
         const aImp = consultations.find((c) => c.id === a.consultationId)?.isImportant;

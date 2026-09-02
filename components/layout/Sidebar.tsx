@@ -26,6 +26,8 @@ import {
   Banknote,
 } from "lucide-react";
 import { useSidebar } from "./SidebarContext";
+import { useHasConstructionPhase } from "@/hooks/useHasConstructionPhase";
+import { isConstructionGatedHref } from "@/lib/constructionPhase";
 
 const baseMenuItems: { href: string; label: string; icon: React.ComponentType<{ className?: string }>; external?: boolean }[] = [
   { href: "/consulting", label: "상담 및 미팅관리", icon: MessageSquare },
@@ -50,6 +52,7 @@ export function Sidebar() {
   const { collapsed, setCollapsed } = useSidebar();
   const [companyLabel, setCompanyLabel] = useState("로그인 회사");
   const [isMaster, setIsMaster] = useState(false);
+  const hasConstructionPhase = useHasConstructionPhase();
 
   useEffect(() => {
     fetch("/api/company/me")
@@ -72,7 +75,7 @@ export function Sidebar() {
   }, []);
 
   const menuItems = [
-    ...baseMenuItems,
+    ...baseMenuItems.filter((item) => hasConstructionPhase || !isConstructionGatedHref(item.href)),
     ...(typeof process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL === "string" && process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL
       ? [{ href: process.env.NEXT_PUBLIC_KAKAO_CHANNEL_URL, label: "카카오톡 문의", icon: ExternalLink as React.ComponentType<{ className?: string }>, external: true as const }]
       : []),
