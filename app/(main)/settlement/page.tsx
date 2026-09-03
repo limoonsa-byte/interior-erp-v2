@@ -6,6 +6,8 @@ import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 import { vatLabelText } from "@/lib/contractPaymentSchedule";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
 const SETTLEMENT_VAT_PREF_KEY = "settlement-vat-included";
 
@@ -525,43 +527,57 @@ export default function SettlementPage() {
     });
   }, []);
 
-  const handleSave = useCallback(() => {
-    if (selectedId == null) return;
-    setSaveLoading(true);
-    setError(null);
-    const items = phaseRows.map((r) => {
-      const raw =
-        r.subItems && r.subItems.length > 0 ? stripEmptyManualSubItems(r.subItems) : [];
-      const subItems = raw.length > 0 ? raw : undefined;
-      const amount = subItems ? subItems.reduce((s, x) => s + (Number(x.amount) || 0), 0) : r.usedAmount;
-      return { amount, memo: r.memo, ...(subItems ? { subItems } : {}) };
-    });
-    const payload = {
-      items,
-      settledAt: settledAt?.trim() || null,
-      customerPayment: JSON.stringify(customerPaymentRows),
-    };
-    fetch(`/api/company/settlements/${selectedId}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then(async (r) => {
+  const handleSave = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (selectedId == null) return false;
+      const silent = Boolean(opts?.silent);
+      setSaveLoading(true);
+      setError(null);
+      const items = phaseRows.map((r) => {
+        const raw =
+          r.subItems && r.subItems.length > 0 ? stripEmptyManualSubItems(r.subItems) : [];
+        const subItems = raw.length > 0 ? raw : undefined;
+        const amount = subItems ? subItems.reduce((s, x) => s + (Number(x.amount) || 0), 0) : r.usedAmount;
+        return { amount, memo: r.memo, ...(subItems ? { subItems } : {}) };
+      });
+      const payload = {
+        items,
+        settledAt: settledAt?.trim() || null,
+        customerPayment: JSON.stringify(customerPaymentRows),
+      };
+      try {
+        const r = await fetch(`/api/company/settlements/${selectedId}`, {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
         const data = await r.json().catch(() => ({}));
         if (r.ok) {
-          alert("저장되었습니다.");
+          if (!silent) alert("저장되었습니다.");
           fetch("/api/company/settlement-summaries", { credentials: "include" })
             .then((res) => (res.ok ? res.json().catch(() => ({})) : {}))
             .then((sumData) => setCustomerPaymentTotalsByEstimate(parseSettlementSummariesResponse(sumData)))
             .catch(() => {});
-        } else {
-          setError((data as { error?: string }).error || "저장에 실패했습니다.");
+          return true;
         }
-      })
-      .catch(() => setError("저장 중 오류가 발생했습니다."))
-      .finally(() => setSaveLoading(false));
-  }, [selectedId, phaseRows, settledAt, customerPaymentRows]);
+        if (!silent) setError((data as { error?: string }).error || "저장에 실패했습니다.");
+        return false;
+      } catch {
+        if (!silent) setError("저장 중 오류가 발생했습니다.");
+        return false;
+      } finally {
+        setSaveLoading(false);
+      }
+    },
+    [selectedId, phaseRows, settledAt, customerPaymentRows]
+  );
+
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: selectedId != null,
+    saving: saveLoading,
+    onSave: () => handleSave({ silent: true }),
+  });
 
   const totalEstimate = phaseRows.reduce((s, r) => s + r.estimateAmount, 0);
   const estWithRates = estimate as (Estimate & { overheadPercent?: number; profitPercent?: number }) | null;
@@ -642,7 +658,12 @@ export default function SettlementPage() {
   }, []);
 
   return (
-    <div className="p-4 sm:p-6" id="settlement-print-root">
+    <div
+      className="p-4 sm:p-6"
+      id="settlement-print-root"
+      onInput={() => markDirty()}
+      onChange={() => markDirty()}
+    >
       <div className="settlement-screen-only">
       <h1 className="text-xl font-semibold text-gray-900 mb-2">정산</h1>
       <p className="text-sm text-gray-600 mb-4 no-print">
@@ -1103,12 +1124,17 @@ export default function SettlementPage() {
             )}
             <button
               type="button"
-              onClick={handleSave}
+              onClick={() => {
+                void handleSave().then((ok) => {
+                  if (ok) markClean();
+                });
+              }}
               disabled={saveLoading}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 no-print"
             >
               {saveLoading ? "저장 중…" : "저장"}
             </button>
+            <AutoSaveStatus label={autoSaveLabel} />
             {estimate && phaseRows.length > 0 && (
               <>
                 <button

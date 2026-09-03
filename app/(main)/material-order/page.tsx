@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toPng } from "html-to-image";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
 type EstimateItem = {
   processGroup?: string;
@@ -779,50 +781,62 @@ export function MaterialOrderPage() {
   }, [selectedConsultation, requiredFilled]);
 
   /** 자재 발주 초안 저장 (현장명·배송지·담당자·발주 유형별 항목·입하예정일 등) */
-  const saveDraft = useCallback(async () => {
-    if (selectedEstimateId == null) {
-      alert("프로젝트(견적)를 선택해 주세요.");
-      return;
-    }
-    setSaveDraftLoading(true);
-    try {
-      const res = await fetch("/api/company/material-order", {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          estimateId: selectedEstimateId,
-          requiredSiteName,
-          requiredDeliveryAddress,
-          requiredContactName,
-          requiredContactPhone,
-          deliveryDateByLabel,
-          addedRowsByLabel,
-          memoByKey,
-          visibleOrderLabels,
-          displayTitleByLabel,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
-      alert("저장되었습니다.");
-    } catch (e) {
-      alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
-    } finally {
-      setSaveDraftLoading(false);
-    }
-  }, [
-    selectedEstimateId,
-    requiredSiteName,
-    requiredDeliveryAddress,
-    requiredContactName,
-    requiredContactPhone,
-    deliveryDateByLabel,
-    addedRowsByLabel,
-    memoByKey,
-    visibleOrderLabels,
-    displayTitleByLabel,
-  ]);
+  const saveDraft = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (selectedEstimateId == null) {
+        if (!opts?.silent) alert("프로젝트(견적)를 선택해 주세요.");
+        return false;
+      }
+      const silent = Boolean(opts?.silent);
+      setSaveDraftLoading(true);
+      try {
+        const res = await fetch("/api/company/material-order", {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            estimateId: selectedEstimateId,
+            requiredSiteName,
+            requiredDeliveryAddress,
+            requiredContactName,
+            requiredContactPhone,
+            deliveryDateByLabel,
+            addedRowsByLabel,
+            memoByKey,
+            visibleOrderLabels,
+            displayTitleByLabel,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
+        if (!silent) alert("저장되었습니다.");
+        return true;
+      } catch (e) {
+        if (!silent) alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
+        return false;
+      } finally {
+        setSaveDraftLoading(false);
+      }
+    },
+    [
+      selectedEstimateId,
+      requiredSiteName,
+      requiredDeliveryAddress,
+      requiredContactName,
+      requiredContactPhone,
+      deliveryDateByLabel,
+      addedRowsByLabel,
+      memoByKey,
+      visibleOrderLabels,
+      displayTitleByLabel,
+    ]
+  );
+
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: selectedEstimateId != null,
+    saving: saveDraftLoading,
+    onSave: () => saveDraft({ silent: true }),
+  });
 
   /** 해당 발주 섹션을 이미지(PNG)로 저장 — 사용자가 준 표 양식 그대로(삭제 열 없음) */
   const saveOrderSectionAsImage = useCallback(
@@ -867,7 +881,11 @@ export function MaterialOrderPage() {
   }
 
   return (
-    <div className="p-4 md:p-6">
+    <div
+      className="p-4 md:p-6"
+      onInput={() => markDirty()}
+      onChange={() => markDirty()}
+    >
       <h1 className="mb-1 text-xl font-semibold text-gray-900">자재 발주</h1>
       <p className="mb-6 text-sm text-gray-600">견적을 선택하면 자재 항목만 필터해 표시합니다. 엑셀 내보내기 후 발주에 활용하세요.</p>
 
@@ -1704,12 +1722,17 @@ export function MaterialOrderPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={saveDraft}
+                      onClick={() => {
+                        void saveDraft().then((ok) => {
+                          if (ok) markClean();
+                        });
+                      }}
                       disabled={saveDraftLoading || selectedEstimateId == null}
                       className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                     >
                       {saveDraftLoading ? "저장 중…" : "저장"}
                     </button>
+                    <AutoSaveStatus label={autoSaveLabel} />
                     <button
                       type="button"
                       onClick={exportToExcel}

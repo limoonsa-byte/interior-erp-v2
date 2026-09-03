@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
 /** 도면 보관함 API에서 한 행 형식 (ERP에서 목록 불러올 때) */
 type DrawingListRow = {
@@ -1086,47 +1088,91 @@ function EstimateForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-    try {
-      const payload = {
-        consultationId: estimate?.consultationId ?? consultationPreFill?.consultationId ?? (typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("consultationId") : null),
-        customerName: customerName.trim(),
-        contact: contact.trim(),
-        address: address.trim(),
-        title: title.trim(),
-        estimateDate: estimateDate || undefined,
-        note: note.trim(),
-        picName: consultationPic.trim() || undefined,
-        processOrder: processOrder.length > 0 ? processOrder : undefined,
-        overheadPercent: Math.min(100, Math.max(0, Math.round(Number(overheadPercent) || 0))),
-        profitPercent: Math.min(100, Math.max(0, Math.round(Number(profitPercent) || 0))),
-        items: items.map((it) => ({
-          processGroup: it.processGroup ?? "",
-          category: it.category,
-          spec: it.spec,
-          unit: it.unit,
-          qty: serializeQty(it.qty),
-          materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
-          laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
-          note: it.note,
-        })),
-      };
-      const url = isEdit ? `/api/estimates/${estimate.id}` : "/api/estimates";
-      const method = isEdit ? "PATCH" : "POST";
-      const res = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert(data.error || "저장에 실패했습니다.");
-        return;
-      }
-      alert(isEdit ? "수정되었습니다." : "저장되었습니다.");
-      onSave();
-    } catch {
-      alert("저장 중 오류가 발생했습니다.");
-    } finally {
-      setSaving(false);
-    }
+    const ok = await persistEstimate({ silent: false });
+    if (ok) markClean();
   };
+
+  const persistEstimate = useCallback(
+    async (opts: { silent: boolean }) => {
+      setSaving(true);
+      try {
+        const payload = {
+          consultationId:
+            estimate?.consultationId ??
+            consultationPreFill?.consultationId ??
+            (typeof window !== "undefined"
+              ? new URLSearchParams(window.location.search).get("consultationId")
+              : null),
+          customerName: customerName.trim(),
+          contact: contact.trim(),
+          address: address.trim(),
+          title: title.trim(),
+          estimateDate: estimateDate || undefined,
+          note: note.trim(),
+          picName: consultationPic.trim() || undefined,
+          processOrder: processOrder.length > 0 ? processOrder : undefined,
+          overheadPercent: Math.min(100, Math.max(0, Math.round(Number(overheadPercent) || 0))),
+          profitPercent: Math.min(100, Math.max(0, Math.round(Number(profitPercent) || 0))),
+          items: items.map((it) => ({
+            processGroup: it.processGroup ?? "",
+            category: it.category,
+            spec: it.spec,
+            unit: it.unit,
+            qty: serializeQty(it.qty),
+            materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
+            laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
+            note: it.note,
+          })),
+        };
+        const url = isEdit ? `/api/estimates/${estimate.id}` : "/api/estimates";
+        const method = isEdit ? "PATCH" : "POST";
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (!opts.silent) alert(data.error || "저장에 실패했습니다.");
+          return false;
+        }
+        if (!opts.silent) {
+          alert(isEdit ? "수정되었습니다." : "저장되었습니다.");
+          onSave();
+        }
+        // 자동저장은 폼을 닫지 않고 DB만 반영
+        return true;
+      } catch {
+        if (!opts.silent) alert("저장 중 오류가 발생했습니다.");
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [
+      estimate,
+      consultationPreFill,
+      customerName,
+      contact,
+      address,
+      title,
+      estimateDate,
+      note,
+      consultationPic,
+      processOrder,
+      overheadPercent,
+      profitPercent,
+      items,
+      isEdit,
+      onSave,
+    ]
+  );
+
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: isEdit,
+    saving,
+    onSave: () => persistEstimate({ silent: true }),
+  });
 
   return (
     <>
@@ -1134,6 +1180,8 @@ function EstimateForm({
       ref={estimateFormRef}
       onSubmit={handleSubmit}
       onKeyDown={handleEstimateFormKeyDown}
+      onInput={() => markDirty()}
+      onChange={() => markDirty()}
       className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm"
     >
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
@@ -1829,6 +1877,7 @@ function EstimateForm({
         <button type="button" onClick={onCancel} className="min-h-[44px] rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 active:bg-gray-100">
           취소
         </button>
+        <AutoSaveStatus label={autoSaveLabel} />
         <button type="submit" disabled={saving} className="min-h-[44px] rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 active:bg-blue-800 disabled:opacity-60">
           {saving ? "저장 중..." : "저장"}
         </button>
