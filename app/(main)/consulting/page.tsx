@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ResizableTh } from "@/components/table/ResizableTh";
 import { useResizableTableColumns } from "@/lib/useResizableTableColumns";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
 /** 오늘 날짜 00:00 기준 (datetime-local 형식). 오늘·이후만 선택 가능하게 min에 사용 */
 function getTodayDatetimeLocal(): string {
@@ -177,6 +179,7 @@ function DetailModal({
   const [materialMeetingDone, setMaterialMeetingDone] = useState(!!data.materialMeetingDone);
   const [contractMeetingDone, setContractMeetingDone] = useState(!!data.contractMeetingDone);
   const [designMeetingDone, setDesignMeetingDone] = useState(!!data.designMeetingDone);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (data.consultedDone || data.siteMeasurementDone) {
@@ -205,6 +208,7 @@ function DetailModal({
             result.buildingName ? `${road} ${result.buildingName}` : road
           );
           setDetailAddress("");
+          markDirty();
         },
       }).open();
     };
@@ -271,35 +275,55 @@ function DetailModal({
     };
   };
 
-  const handleAction = (mode: "save" | "estimate") => {
-    if (!formRef.current) return;
+  const persistConsultation = async (opts: { silent: boolean; closeOnSuccess: boolean }) => {
     const payload = buildPayload();
-    if (!payload) return;
-
-    if (mode === "save") {
-      // editId가 있으면 무조건 수정(PATCH), 없으면 신규(POST)
-      const isEdit = editId !== null && editId > 0;
-      const url = isEdit
-        ? `/api/consultations/${editId}`
-        : "/api/consultations";
-      const method = isEdit ? "PATCH" : "POST";
-
-      fetch(url, {
+    if (!payload) return false;
+    const isEdit = editId !== null && editId > 0;
+    const url = isEdit ? `/api/consultations/${editId}` : "/api/consultations";
+    const method = isEdit ? "PATCH" : "POST";
+    setSaving(true);
+    try {
+      const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      })
-        .then(async (res) => {
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
-          alert(isEdit ? "상담이 수정되었습니다." : "상담이 등록되었습니다.");
-          const saved = onSaved();
-          if (saved && typeof (saved as Promise<unknown>).then === "function") await saved;
-          onClose();
-        })
-        .catch((e) => {
-          alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
-        });
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error || "저장 실패");
+      if (!opts.silent) {
+        alert(isEdit ? "상담이 수정되었습니다." : "상담이 등록되었습니다.");
+      }
+      const saved = onSaved();
+      if (saved && typeof (saved as Promise<unknown>).then === "function") await saved;
+      if (opts.closeOnSuccess) onClose();
+      return true;
+    } catch (e) {
+      if (!opts.silent) {
+        alert(e instanceof Error ? e.message : "저장 중 오류가 발생했습니다.");
+      }
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const autoSaveEnabled = editId !== null && editId > 0;
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: autoSaveEnabled,
+    saving,
+    onSave: async () => {
+      const ok = await persistConsultation({ silent: true, closeOnSuccess: false });
+      return ok;
+    },
+  });
+
+  const handleAction = (mode: "save" | "estimate") => {
+    if (!formRef.current) return;
+
+    if (mode === "save") {
+      void persistConsultation({ silent: false, closeOnSuccess: true }).then((ok) => {
+        if (ok) markClean();
+      });
       return;
     }
 
@@ -324,6 +348,8 @@ function DetailModal({
             e.preventDefault();
             handleAction("save");
           }}
+          onInput={() => markDirty()}
+          onChange={() => markDirty()}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
             if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
@@ -365,7 +391,11 @@ function DetailModal({
                         key={label}
                         htmlFor={`status-${label}`}
                         className={`inline-flex cursor-pointer items-center rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${disabled ? "cursor-not-allowed opacity-50" : ""} ${selected ? "bg-blue-600 text-white" : "border border-gray-300 bg-white text-gray-700 hover:border-gray-400 hover:bg-gray-50"}`}
-                        onClick={() => !disabled && setStatusSelection(label)}
+                        onClick={() => {
+                          if (disabled) return;
+                          setStatusSelection(label);
+                          markDirty();
+                        }}
                       >
                         <input
                           id={`status-${label}`}
@@ -834,6 +864,7 @@ function DetailModal({
             >
               견적작성
             </button>
+            <AutoSaveStatus label={autoSaveLabel} />
             <button
               type="submit"
               className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"

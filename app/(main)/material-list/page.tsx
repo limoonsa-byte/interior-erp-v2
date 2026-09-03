@@ -4,6 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 import {
   ListChecks,
   Plus,
@@ -521,53 +523,73 @@ export default function MaterialListPage() {
     [setItem]
   );
 
-  const handleSave = useCallback(() => {
-    if (selectedId == null) return;
-    setSaveLoading(true);
-    setError(null);
-    const payload = {
-      estimateId: selectedId,
-      sections: sections.map((sec) => ({
-        id: sec.id,
-        title: sec.title,
-        items: sec.items.map((it) => ({
-          itemName: it.itemName,
-          imageUrl: it.imageUrl,
-          productNameCode: it.productNameCode,
-          size: it.size,
-          remarks: it.remarks,
-          shoppingLink: it.shoppingLink,
+  const handleSave = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      if (selectedId == null) return false;
+      const silent = Boolean(opts?.silent);
+      setSaveLoading(true);
+      setError(null);
+      const payload = {
+        estimateId: selectedId,
+        sections: sections.map((sec) => ({
+          id: sec.id,
+          title: sec.title,
+          items: sec.items.map((it) => ({
+            itemName: it.itemName,
+            imageUrl: it.imageUrl,
+            productNameCode: it.productNameCode,
+            size: it.size,
+            remarks: it.remarks,
+            shoppingLink: it.shoppingLink,
+          })),
         })),
-      })),
-    };
-    fetch("/api/company/material-list", {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    })
-      .then(async (r) => {
+      };
+      try {
+        const r = await fetch("/api/company/material-list", {
+          method: "PUT",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
         const data = await r.json().catch(() => ({}));
         if (r.ok) {
-          alert("저장되었습니다.");
-          loadItems(selectedId);
-        } else {
-          const msg = (data as { error?: string }).error || "저장에 실패했습니다.";
+          if (!silent) {
+            alert("저장되었습니다.");
+            loadItems(selectedId);
+          }
+          return true;
+        }
+        const msg = (data as { error?: string }).error || "저장에 실패했습니다.";
+        if (!silent) {
           if (r.status === 413 || /payload|body|too large|용량|크기/i.test(msg)) {
             setError("사진이 너무 많거나 커서 저장이 제한되었습니다. 사진 개수를 줄이거나, 각 사진을 더 작게 찍어서 다시 넣어 주세요.");
           } else {
             setError(msg);
           }
         }
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.");
-      })
-      .finally(() => setSaveLoading(false));
-  }, [selectedId, sections, loadItems]);
+        return false;
+      } catch (err) {
+        if (!silent) setError(err instanceof Error ? err.message : "저장 중 오류가 발생했습니다.");
+        return false;
+      } finally {
+        setSaveLoading(false);
+      }
+    },
+    [selectedId, sections, loadItems]
+  );
+
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: selectedId != null,
+    saving: saveLoading,
+    onSave: () => handleSave({ silent: true }),
+  });
 
   return (
-    <div className="flex flex-col gap-4 p-4 sm:p-6">
+    <div
+      className="flex flex-col gap-4 p-4 sm:p-6"
+      onInput={() => markDirty()}
+      onChange={() => markDirty()}
+    >
       <h1 className="flex items-center gap-2 text-xl font-semibold text-gray-900">
         <ListChecks className="h-6 w-6 text-slate-600" />
         현장용 자재리스트
@@ -693,12 +715,17 @@ export default function MaterialListPage() {
             </button>
             <button
               type="button"
-              onClick={handleSave}
+              onClick={() => {
+                void handleSave().then((ok) => {
+                  if (ok) markClean();
+                });
+              }}
               disabled={saveLoading}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {saveLoading ? "저장 중…" : "저장"}
             </button>
+            <AutoSaveStatus label={autoSaveLabel} />
             <button
               type="button"
               onClick={() => {

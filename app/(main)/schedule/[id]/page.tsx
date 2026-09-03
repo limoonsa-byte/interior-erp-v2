@@ -17,6 +17,8 @@ import {
   SCHEDULE_PRINT_WEEKS_PER_PAGE,
 } from "@/lib/schedule-print-chunk";
 import { DEFAULT_SCHEDULE_PHASE_BUTTONS } from "@/lib/defaultSchedulePhaseButtons";
+import { useAutoSave } from "@/hooks/useAutoSave";
+import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -340,8 +342,9 @@ export default function ScheduleDetailPage() {
     }
   };
 
-  const save = async () => {
-    if (!consultation) return;
+  const save = async (opts?: { silent?: boolean }) => {
+    if (!consultation) return false;
+    const silent = Boolean(opts?.silent);
     setSaving(true);
     try {
       const res = await fetch(`/api/consultations/${consultation.id}`, {
@@ -356,8 +359,8 @@ export default function ScheduleDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || "저장에 실패했습니다.");
-        return;
+        if (!silent) alert(data.error || "저장에 실패했습니다.");
+        return false;
       }
       setConsultation((prev) =>
         prev
@@ -370,13 +373,21 @@ export default function ScheduleDetailPage() {
             }
           : null
       );
-      alert("저장되었습니다.");
+      if (!silent) alert("저장되었습니다.");
+      return true;
     } catch {
-      alert("저장 중 오류가 발생했습니다.");
+      if (!silent) alert("저장 중 오류가 발생했습니다.");
+      return false;
     } finally {
       setSaving(false);
     }
   };
+
+  const { markDirty, markClean, autoSaveLabel } = useAutoSave({
+    enabled: Boolean(consultation),
+    saving,
+    onSave: () => save({ silent: true }),
+  });
 
   const addPhase = () => {
     setPhases((prev) => [...prev, { name: "", start: "", end: "", color: PHASE_COLORS[prev.length % PHASE_COLORS.length] }]);
@@ -790,7 +801,11 @@ export default function ScheduleDetailPage() {
   const printRest = printPages.slice(1);
 
   return (
-    <div className="p-4 sm:p-6">
+    <div
+      className="p-4 sm:p-6"
+      onInput={() => markDirty()}
+      onChange={() => markDirty()}
+    >
       <div className="mb-6 flex items-center justify-between no-print">
         <Link href="/schedule" className="text-sm text-blue-600 hover:underline">
           ← 일정 목록
@@ -1147,15 +1162,20 @@ export default function ScheduleDetailPage() {
         </div>
       </section>
 
-      <div className="flex gap-2 no-print">
+      <div className="flex flex-wrap items-center gap-2 no-print">
         <button
           type="button"
-          onClick={save}
+          onClick={() => {
+            void save().then((ok) => {
+              if (ok) markClean();
+            });
+          }}
           disabled={saving}
           className="rounded bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? "저장 중..." : "저장"}
         </button>
+        <AutoSaveStatus label={autoSaveLabel} />
         <Link
           href="/consulting"
           className="rounded border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
