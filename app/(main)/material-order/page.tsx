@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { toPng } from "html-to-image";
+import { GripVertical } from "lucide-react";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -138,6 +139,20 @@ function createEmptyAddedRow(): AddedOrderRow {
   };
 }
 
+/** 배열에서 fromIndex 항목을 toFinal(제거 전 기준 삽입 위치)로 이동 */
+function moveRowInArray<T>(arr: T[], fromIndex: number, toFinal: number): T[] {
+  if (fromIndex < 0 || fromIndex >= arr.length) return arr;
+  let to = toFinal;
+  if (to < 0) to = 0;
+  if (to > arr.length) to = arr.length;
+  if (fromIndex === to || fromIndex + 1 === to) return arr;
+  const next = [...arr];
+  const [item] = next.splice(fromIndex, 1);
+  const insertAt = fromIndex < to ? to - 1 : to;
+  next.splice(insertAt, 0, item);
+  return next;
+}
+
 export function MaterialOrderPage() {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
@@ -161,6 +176,13 @@ export function MaterialOrderPage() {
   const [collapsedByLabel, setCollapsedByLabel] = useState<Record<string, boolean>>({});
   /** 발주 유형별 사용자 추가 행 */
   const [addedRowsByLabel, setAddedRowsByLabel] = useState<Record<string, AddedOrderRow[]>>({});
+  /** 추가 행 드래그 순서 변경 */
+  const [draggingAddedRow, setDraggingAddedRow] = useState<{ label: string; index: number } | null>(null);
+  const [dragOverAddedRow, setDragOverAddedRow] = useState<{
+    label: string;
+    index: number;
+    before: boolean;
+  } | null>(null);
   const [requiredContactName, setRequiredContactName] = useState("");
   const [requiredContactPhone, setRequiredContactPhone] = useState("");
   const [requiredDeliveryAddress, setRequiredDeliveryAddress] = useState("");
@@ -838,6 +860,46 @@ export function MaterialOrderPage() {
     onSave: () => saveDraft({ silent: true }),
   });
 
+  const moveAddedRow = useCallback(
+    (label: string, fromIndex: number, toFinal: number) => {
+      setAddedRowsByLabel((prev) => {
+        const list = prev[label] ?? [];
+        const next = moveRowInArray(list, fromIndex, toFinal);
+        if (next === list) return prev;
+        return { ...prev, [label]: next };
+      });
+      markDirty();
+    },
+    [markDirty]
+  );
+
+  const handleAddedRowDrop = useCallback(
+    (e: React.DragEvent, label: string, itemIndex: number, itemCount: number) => {
+      const raw = e.dataTransfer.getData("application/x-material-order-row");
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const p = JSON.parse(raw) as { label: string; index: number };
+        if (p.label !== label) return;
+        const tr = (e.currentTarget as HTMLElement).closest("tr");
+        if (!tr) return;
+        const rect = tr.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+        let toFinal = insertBefore ? itemIndex : itemIndex + 1;
+        if (toFinal < 0) toFinal = 0;
+        if (toFinal > itemCount) toFinal = itemCount;
+        moveAddedRow(label, p.index, toFinal);
+      } catch {
+        /* ignore */
+      } finally {
+        setDraggingAddedRow(null);
+        setDragOverAddedRow(null);
+      }
+    },
+    [moveAddedRow]
+  );
+
   /** 해당 발주 섹션을 이미지(PNG)로 저장 — 사용자가 준 표 양식 그대로(삭제 열 없음) */
   const saveOrderSectionAsImage = useCallback(
     async (label: string) => {
@@ -1239,6 +1301,13 @@ export function MaterialOrderPage() {
                           >
                             <thead>
                               <tr className="bg-gray-200 text-gray-800">
+                                <th
+                                  className="w-9 whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium"
+                                  style={{ border: "1px solid #374151" }}
+                                  title="끌어서 순서 변경"
+                                >
+                                  <span className="sr-only">순서</span>
+                                </th>
                                 <th className="w-56 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
                                 <th className="w-48 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
                                 <th className="w-12 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>단위</th>
@@ -1257,6 +1326,9 @@ export function MaterialOrderPage() {
                                 const selectedSku = shopSkuByRowKey[rowKey] ?? (candidates[0]?.sku ?? "");
                                 return (
                                   <tr key={`est-${idx}`} className="bg-white hover:bg-gray-50/80">
+                                    <td className="border border-gray-300 px-1 py-1 text-center text-gray-300" style={{ border: "1px solid #d1d5db" }}>
+                                      <span className="inline-block w-4" aria-hidden />
+                                    </td>
                                     <td className="min-w-[220px] border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
                                     <td className="min-w-[180px] border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
                                     <td className="border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
@@ -1318,8 +1390,69 @@ export function MaterialOrderPage() {
                                 const unitNum = Number(row.materialUnitPrice) || 0;
                                 const amount = qtyNum * unitNum;
                                 const addedRowIndex = catItems.length + idx;
+                                const addedCount = (addedRowsByLabel[label] ?? []).length;
+                                const isDragging =
+                                  draggingAddedRow?.label === label && draggingAddedRow?.index === idx;
+                                const isDragOver =
+                                  dragOverAddedRow?.label === label && dragOverAddedRow?.index === idx;
                                 return (
-                                  <tr key={`added-${idx}`} className="bg-white hover:bg-gray-50/80">
+                                  <tr
+                                    key={row.id}
+                                    className={`bg-white hover:bg-gray-50/80 ${isDragging ? "opacity-50" : ""} ${
+                                      isDragOver
+                                        ? dragOverAddedRow?.before
+                                          ? "border-t-2 border-t-blue-500"
+                                          : "border-b-2 border-b-blue-500"
+                                        : ""
+                                    }`}
+                                    onDragOver={(e) => {
+                                      if (e.dataTransfer.types.includes("application/x-material-order-row")) {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = "move";
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        const before = e.clientY < rect.top + rect.height / 2;
+                                        setDragOverAddedRow({ label, index: idx, before });
+                                      }
+                                    }}
+                                    onDrop={(e) => handleAddedRowDrop(e, label, idx, addedCount)}
+                                    onDragEnter={(e) => {
+                                      if (e.dataTransfer.types.includes("application/x-material-order-row")) {
+                                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                        const before = e.clientY < rect.top + rect.height / 2;
+                                        setDragOverAddedRow({ label, index: idx, before });
+                                      }
+                                    }}
+                                    onDragLeave={(e) => {
+                                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                        setDragOverAddedRow((prev) =>
+                                          prev?.label === label && prev?.index === idx ? null : prev
+                                        );
+                                      }
+                                    }}
+                                  >
+                                    <td className="border border-gray-300 px-0.5 py-1 text-center align-middle">
+                                      <button
+                                        type="button"
+                                        draggable
+                                        onDragStart={(e) => {
+                                          e.dataTransfer.setData(
+                                            "application/x-material-order-row",
+                                            JSON.stringify({ label, index: idx })
+                                          );
+                                          e.dataTransfer.effectAllowed = "move";
+                                          setDraggingAddedRow({ label, index: idx });
+                                        }}
+                                        onDragEnd={() => {
+                                          setDraggingAddedRow(null);
+                                          setDragOverAddedRow(null);
+                                        }}
+                                        className="inline-flex cursor-grab rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 active:cursor-grabbing"
+                                        title="끌어서 순서 변경"
+                                        aria-label="행 순서 변경"
+                                      >
+                                        <GripVertical className="h-4 w-4" />
+                                      </button>
+                                    </td>
                                     <td className="border border-gray-300 p-0">
                                       <input
                                         type="text"
@@ -1482,7 +1615,7 @@ export function MaterialOrderPage() {
                               <tfoot>
                                 <tr className="bg-amber-50/90 font-semibold text-gray-900">
                                   <td
-                                    colSpan={5}
+                                    colSpan={6}
                                     className="border border-gray-300 px-2 py-2 text-right text-sm"
                                     style={{ border: "1px solid #374151" }}
                                   >
