@@ -1219,25 +1219,26 @@ export default function ConsultingPage() {
       </h2>
 
       <div className="mb-4 sm:mb-6 rounded-lg border border-gray-200 bg-white p-4 sm:p-5 shadow-sm">
-        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">검색</label>
+        {/* 우측 진행상황 패널이 열려 본문이 좁아져도 칸이 서로 침범하지 않도록 min-w-0 + 3열 */}
+        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <label className="w-16 shrink-0 text-sm font-bold text-gray-600 sm:w-20">검색</label>
             <input
               type="text"
               value={filterCustomerName}
               onChange={(e) => setFilterCustomerName(e.target.value)}
               placeholder="고객명·프로젝트 제목"
-              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
+          <div className="flex min-w-0 items-center gap-2">
+            <label className="w-16 shrink-0 text-sm font-bold text-gray-600 sm:w-20">
               진행상태
             </label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
             >
               <option value="">선택</option>
               {STATUS_OPTIONS.map((opt) => (
@@ -1245,14 +1246,14 @@ export default function ConsultingPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="w-20 shrink-0 text-sm font-bold text-gray-600">
+          <div className="flex min-w-0 items-center gap-2 sm:col-span-2 xl:col-span-1">
+            <label className="w-16 shrink-0 text-sm font-bold text-gray-600 sm:w-20">
               담당자명
             </label>
             <select
               value={filterPic}
               onChange={(e) => setFilterPic(e.target.value)}
-              className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
             >
               <option value="">전체</option>
               {picList.map((p) => (
