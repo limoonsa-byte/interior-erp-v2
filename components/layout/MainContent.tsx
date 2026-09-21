@@ -11,7 +11,7 @@ export function MainContent({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={clsx(
-        "min-w-0 flex-1 transition-[margin] duration-200",
+        "min-w-0 flex-1 overflow-x-clip transition-[padding] duration-200",
         collapsed ? "pl-[72px]" : "pl-64",
         rightPanelOpen ? "pr-72" : "pr-12"
       )}
