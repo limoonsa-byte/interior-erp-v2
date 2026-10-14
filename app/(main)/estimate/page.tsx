@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { GripVertical } from "lucide-react";
 import { resolveGroupProjectTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { useAutoSave } from "@/hooks/useAutoSave";
@@ -179,6 +180,72 @@ const emptyItem: EstimateItem = {
   laborUnitPrice: 0,
   note: "",
 };
+
+const ESTIMATE_ITEM_DND_MIME = "application/x-estimate-item-row";
+
+/** 공정 순서 + 배열 인덱스 기준 화면 표시 순서 */
+function getSortedItemIndices(items: EstimateItem[], processOrder: string[]): number[] {
+  const orderMap = new Map(processOrder.map((name, idx) => [name, idx]));
+  return items
+    .map((_, i) => i)
+    .sort((a, b) => {
+      const pa = items[a].processGroup ?? "";
+      const pb = items[b].processGroup ?? "";
+      const ia = orderMap.get(pa) ?? processOrder.length;
+      const ib = orderMap.get(pb) ?? processOrder.length;
+      if (ia !== ib) return ia - ib;
+      return a - b;
+    });
+}
+
+/**
+ * fromIndex 항목을 시각적 순서상 toTargetIndex의 앞/뒤로 이동.
+ * 다른 공정 행에 놓으면 processGroup도 그 공정으로 맞춘다.
+ */
+function reorderEstimateItems(
+  items: EstimateItem[],
+  processOrder: string[],
+  fromIndex: number,
+  toTargetIndex: number,
+  insertBefore: boolean
+): EstimateItem[] {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= items.length ||
+    toTargetIndex < 0 ||
+    toTargetIndex >= items.length
+  ) {
+    return items;
+  }
+  const sorted = getSortedItemIndices(items, processOrder);
+  const fromPos = sorted.indexOf(fromIndex);
+  const toPos = sorted.indexOf(toTargetIndex);
+  if (fromPos < 0 || toPos < 0) return items;
+
+  let insertPos = insertBefore ? toPos : toPos + 1;
+  if (fromPos === insertPos || fromPos + 1 === insertPos) {
+    // 위치는 같고 공정만 다른 경우(드롭 대상 공정으로 맞춤)
+    const targetGroup = items[toTargetIndex].processGroup ?? "";
+    if ((items[fromIndex].processGroup ?? "") === targetGroup) return items;
+    return items.map((it, i) =>
+      i === fromIndex ? { ...it, processGroup: targetGroup } : it
+    );
+  }
+
+  const nextSorted = [...sorted];
+  nextSorted.splice(fromPos, 1);
+  if (fromPos < insertPos) insertPos -= 1;
+  nextSorted.splice(insertPos, 0, fromIndex);
+
+  const newGroup = items[toTargetIndex].processGroup ?? "";
+  return nextSorted.map((idx) => {
+    const it = items[idx];
+    if (idx === fromIndex && (it.processGroup ?? "") !== newGroup) {
+      return { ...it, processGroup: newGroup };
+    }
+    return it;
+  });
+}
 
 function materialAmount(item: EstimateItem): number {
   const q = Number(item.qty) || 0;
@@ -396,6 +463,9 @@ function EstimateForm({
   itemsRef.current = items;
   /** 공정 섹션 접기 상태: key = processGroup 이름, true면 접힌 상태 */
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  /** 항목 행 드래그 순서 변경 */
+  const [draggingItemIndex, setDraggingItemIndex] = useState<number | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{ index: number; before: boolean } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   /** 정산에서 입력한 공정 금액 (견적서 미리보기용, 저장된 견적만 해당) */
   const [settlementPhaseAmount, setSettlementPhaseAmount] = useState<number | null>(null);
@@ -1174,6 +1244,41 @@ function EstimateForm({
     onSave: () => persistEstimate({ silent: true }),
   });
 
+  const moveEstimateItem = useCallback(
+    (fromIndex: number, toTargetIndex: number, insertBefore: boolean) => {
+      setItems((prev) => {
+        const next = reorderEstimateItems(prev, processOrder, fromIndex, toTargetIndex, insertBefore);
+        if (next === prev) return prev;
+        return next;
+      });
+      markDirty();
+    },
+    [processOrder, markDirty]
+  );
+
+  const handleEstimateItemDrop = useCallback(
+    (e: React.DragEvent, targetIndex: number) => {
+      const raw = e.dataTransfer.getData(ESTIMATE_ITEM_DND_MIME);
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const p = JSON.parse(raw) as { index: number };
+        const tr = (e.currentTarget as HTMLElement).closest("tr");
+        if (!tr) return;
+        const rect = tr.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+        moveEstimateItem(p.index, targetIndex, insertBefore);
+      } catch {
+        /* ignore */
+      } finally {
+        setDraggingItemIndex(null);
+        setDragOverItem(null);
+      }
+    },
+    [moveEstimateItem]
+  );
+
   return (
     <>
     <form
@@ -1348,6 +1453,9 @@ function EstimateForm({
       <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-gray-800">견적 항목</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            항목 왼쪽 ⋮⋮ 를 끌어서 같은 공정 안·다른 공정으로 순서를 바꿀 수 있습니다.
+          </p>
           <p className="mt-1 text-xs font-semibold text-amber-700">
             ※도면보관함 불러오기는 스마트현장관리 앱설치필수
           </p>
@@ -1540,7 +1648,7 @@ function EstimateForm({
         <table className="estimate-edit-table w-full min-w-[860px] md:min-w-[980px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-700">
-              <th className="p-2 w-14 whitespace-nowrap">No</th>
+              <th className="p-2 w-16 whitespace-nowrap" title="끌어서 항목 순서 변경">No</th>
               <th className="p-2 whitespace-nowrap">품목</th>
               <th className="p-2 whitespace-nowrap">규격</th>
               <th className="p-2 w-24 whitespace-nowrap text-center">단위</th>
@@ -1661,9 +1769,67 @@ function EstimateForm({
                   const item = items[origIdx];
                   const noLabel = `${subNo + 1}.`;
                   const currentDataRow = dataRowIndex++;
+                  const isDragging = draggingItemIndex === origIdx;
+                  const isDragOver = dragOverItem?.index === origIdx;
                   rows.push(
-                    <tr key={origIdx} className="border-b border-gray-100">
-                      <td className="p-2 font-mono text-gray-600">{noLabel}</td>
+                    <tr
+                      key={`item-${origIdx}-${item.category}-${item.spec}-${subNo}`}
+                      className={`border-b border-gray-100 ${isDragging ? "opacity-50" : ""} ${
+                        isDragOver
+                          ? dragOverItem?.before
+                            ? "border-t-2 border-t-blue-500"
+                            : "border-b-2 border-b-blue-500"
+                          : ""
+                      }`}
+                      onDragOver={(e) => {
+                        if (e.dataTransfer.types.includes(ESTIMATE_ITEM_DND_MIME)) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const before = e.clientY < rect.top + rect.height / 2;
+                          setDragOverItem({ index: origIdx, before });
+                        }
+                      }}
+                      onDrop={(e) => handleEstimateItemDrop(e, origIdx)}
+                      onDragEnter={(e) => {
+                        if (e.dataTransfer.types.includes(ESTIMATE_ITEM_DND_MIME)) {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const before = e.clientY < rect.top + rect.height / 2;
+                          setDragOverItem({ index: origIdx, before });
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDragOverItem((prev) => (prev?.index === origIdx ? null : prev));
+                        }
+                      }}
+                    >
+                      <td className="p-2 font-mono text-gray-600">
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(
+                                ESTIMATE_ITEM_DND_MIME,
+                                JSON.stringify({ index: origIdx })
+                              );
+                              e.dataTransfer.effectAllowed = "move";
+                              setDraggingItemIndex(origIdx);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingItemIndex(null);
+                              setDragOverItem(null);
+                            }}
+                            className="inline-flex cursor-grab rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 active:cursor-grabbing"
+                            title="끌어서 항목 순서 변경"
+                            aria-label="항목 순서 변경"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </button>
+                          <span>{noLabel}</span>
+                        </div>
+                      </td>
                       <td className="p-2">
                         <input
                           type="text"
