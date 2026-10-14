@@ -658,7 +658,11 @@ function DetailModal({
                 type="date"
                 name="constructionStartAt"
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={data.constructionStartAt?.slice(0, 10) || getTodayDateLocal()}
+                defaultValue={
+                  (data.constructionStartAt && String(data.constructionStartAt).slice(0, 10)) ||
+                  getTodayDateLocal()
+                }
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
           </div>
@@ -688,7 +692,10 @@ function DetailModal({
                 type="date"
                 name="moveInAt"
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={data.moveInAt?.slice(0, 10) || getTodayDateLocal()}
+                defaultValue={
+                  (data.moveInAt && String(data.moveInAt).slice(0, 10)) || getTodayDateLocal()
+                }
+                onClick={(e) => e.stopPropagation()}
               />
             </div>
           </div>
@@ -1076,6 +1083,9 @@ export default function ConsultingPage() {
             materialMeetingAt: item.materialMeetingAt != null ? String(item.materialMeetingAt) : undefined,
             contractMeetingAt: item.contractMeetingAt != null ? String(item.contractMeetingAt) : undefined,
             designMeetingAt: item.designMeetingAt != null ? String(item.designMeetingAt) : undefined,
+            constructionStartAt:
+              item.constructionStartAt != null ? String(item.constructionStartAt) : undefined,
+            moveInAt: item.moveInAt != null ? String(item.moveInAt) : undefined,
             scope: Array.isArray(item.scope) ? (item.scope as string[]) : undefined,
             budget: item.budget != null ? String(item.budget) : undefined,
             completionYear: item.completionYear != null ? String(item.completionYear) : undefined,
