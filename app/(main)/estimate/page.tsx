@@ -1092,6 +1092,8 @@ function EstimateForm({
 
   /** 방향키로 입력 칸 이동 (견적서 작성 시 적기 편하게). 테이블 안에서는 위/아래는 같은 열 다음·이전 행으로 이동 */
   const handleEstimateFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    // 한글 조합 중에는 방향키/Enter 처리하지 않음
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     const target = e.target as HTMLElement;
     if (target.tagName !== "INPUT" && target.tagName !== "TEXTAREA") return;
     const form = estimateFormRef.current;

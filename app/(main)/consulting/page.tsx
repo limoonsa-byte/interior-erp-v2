@@ -369,7 +369,24 @@ function DetailModal({
           onChange={() => markDirty()}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return;
-            if ((e.target as HTMLElement).tagName === "TEXTAREA") return;
+            // 한글 조합 중 Enter는 저장하지 않음
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+            const el = e.target as HTMLElement;
+            if (el.tagName === "TEXTAREA") return;
+            // 날짜 입력·버튼·체크는 Enter로 저장하지 않음
+            if (el instanceof HTMLInputElement) {
+              const t = el.type;
+              if (
+                t === "date" ||
+                t === "datetime-local" ||
+                t === "checkbox" ||
+                t === "radio" ||
+                t === "button" ||
+                t === "submit"
+              ) {
+                return;
+              }
+            }
             e.preventDefault();
             handleAction("save");
           }}
