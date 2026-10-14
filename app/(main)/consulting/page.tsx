@@ -21,6 +21,13 @@ function getTodayDateLocal(): string {
   return getTodayDatetimeLocal().slice(0, 10);
 }
 
+/** date input용 YYYY-MM-DD만 추출 */
+function toDateInputValue(value: string | undefined | null): string {
+  if (value == null) return "";
+  const s = String(value).trim().slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+}
+
 type Consultation = {
   id: number;
   /** 프로젝트 제목 (고객이름 위) */
@@ -180,6 +187,15 @@ function DetailModal({
   const [contractMeetingDone, setContractMeetingDone] = useState(!!data.contractMeetingDone);
   const [designMeetingDone, setDesignMeetingDone] = useState(!!data.designMeetingDone);
   const [saving, setSaving] = useState(false);
+  /** 입주·공사시작일은 제어 컴포넌트로 두어 저장/재오픈 시 값이 유지되게 함 */
+  const [constructionStartAt, setConstructionStartAt] = useState(() => {
+    const fromData = toDateInputValue(data.constructionStartAt);
+    return fromData || getTodayDateLocal();
+  });
+  const [moveInAt, setMoveInAt] = useState(() => {
+    const fromData = toDateInputValue(data.moveInAt);
+    return fromData || getTodayDateLocal();
+  });
 
   useEffect(() => {
     if (data.consultedDone || data.siteMeasurementDone) {
@@ -257,8 +273,9 @@ function DetailModal({
       materialMeetingAt: materialMeetingDone ? ((materialMeetingInputRef.current?.value?.trim() || data.materialMeetingAt) ?? undefined) : ((fd.get("materialMeetingAt") as string)?.trim() || undefined),
       contractMeetingAt: contractMeetingDone ? ((contractMeetingInputRef.current?.value?.trim() || data.contractMeetingAt) ?? undefined) : ((fd.get("contractMeetingAt") as string)?.trim() || undefined),
       designMeetingAt: designMeetingDone ? ((designMeetingInputRef.current?.value?.trim() || data.designMeetingAt) ?? undefined) : ((fd.get("designMeetingAt") as string)?.trim() || undefined),
-      constructionStartAt: (fd.get("constructionStartAt") as string)?.trim() || undefined,
-      moveInAt: (fd.get("moveInAt") as string)?.trim() || undefined,
+      // FormData가 아니라 state를 써서 날짜 변경이 항상 PATCH에 포함되게 함
+      constructionStartAt: constructionStartAt.trim() || null,
+      moveInAt: moveInAt.trim() || null,
       scope,
       budget: budget || undefined,
       completionYear: (fd.get("completionYear") as string)?.trim() || undefined,
@@ -657,12 +674,20 @@ function DetailModal({
               <input
                 type="date"
                 name="constructionStartAt"
+                value={constructionStartAt}
+                onChange={(e) => {
+                  setConstructionStartAt(e.target.value);
+                  markDirty();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    (e.currentTarget as HTMLInputElement).showPicker?.();
+                  } catch {
+                    /* 브라우저 미지원 시 무시 */
+                  }
+                }}
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={
-                  (data.constructionStartAt && String(data.constructionStartAt).slice(0, 10)) ||
-                  getTodayDateLocal()
-                }
-                onClick={(e) => e.stopPropagation()}
               />
             </div>
           </div>
@@ -691,11 +716,20 @@ function DetailModal({
               <input
                 type="date"
                 name="moveInAt"
+                value={moveInAt}
+                onChange={(e) => {
+                  setMoveInAt(e.target.value);
+                  markDirty();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    (e.currentTarget as HTMLInputElement).showPicker?.();
+                  } catch {
+                    /* 브라우저 미지원 시 무시 */
+                  }
+                }}
                 className="w-full cursor-pointer rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                defaultValue={
-                  (data.moveInAt && String(data.moveInAt).slice(0, 10)) || getTodayDateLocal()
-                }
-                onClick={(e) => e.stopPropagation()}
               />
             </div>
           </div>
