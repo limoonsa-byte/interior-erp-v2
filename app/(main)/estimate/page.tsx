@@ -1773,7 +1773,7 @@ function EstimateForm({
                   const isDragOver = dragOverItem?.index === origIdx;
                   rows.push(
                     <tr
-                      key={`item-${origIdx}-${item.category}-${item.spec}-${subNo}`}
+                      key={`item-${origIdx}`}
                       className={`border-b border-gray-100 ${isDragging ? "opacity-50" : ""} ${
                         isDragOver
                           ? dragOverItem?.before
