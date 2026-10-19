@@ -17,29 +17,24 @@ export default function WallStudioPage() {
   const url = getWallStudioUrl();
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] min-h-[480px] flex-col bg-white">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-3 py-2 sm:px-4">
-        <div>
-          <h1 className="text-base font-semibold text-gray-900">Wall Studio</h1>
-          <p className="text-xs text-gray-500">도면 그리기 웹앱</p>
-        </div>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900"
-        >
-          <ExternalLink className="h-4 w-4" />
-          새 창에서 열기
-        </a>
-      </div>
+    <div className="relative h-[calc(100dvh-3.5rem)] min-h-[480px] bg-white">
       <iframe
         title="Wall Studio"
         src={url}
-        className="min-h-0 w-full flex-1 border-0 bg-white"
+        className="h-full w-full border-0 bg-white"
         allow="clipboard-read; clipboard-write; fullscreen"
         referrerPolicy="no-referrer-when-downgrade"
       />
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="새 창에서 열기"
+        className="absolute right-2 top-2 z-10 inline-flex h-8 items-center gap-1 rounded-md bg-slate-900/80 px-2 text-xs font-medium text-white shadow-sm backdrop-blur hover:bg-slate-900"
+      >
+        <ExternalLink className="h-3.5 w-3.5" />
+        새 창
+      </a>
     </div>
   );
 }
