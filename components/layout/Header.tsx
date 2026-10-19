@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, CreditCard, BarChart3, Settings, Shield, Link2, MessageCircle, ExternalLink, Signature, Calculator, Banknote } from "lucide-react";
+import { Menu, X, MessageSquare, FileText, Users, Package, Wallet, Calendar, ClipboardList, CreditCard, BarChart3, Settings, Shield, Link2, MessageCircle, ExternalLink, Signature, Calculator, Banknote, PenTool } from "lucide-react";
 import { clsx } from "clsx";
 import { useHasConstructionPhase } from "@/hooks/useHasConstructionPhase";
 import { isConstructionGatedHref } from "@/lib/constructionPhase";
@@ -22,6 +22,7 @@ const defaultMenuItems = [
   { href: "/settlement", label: "정산", icon: Wallet },
   { href: "/statistics", label: "통계", icon: BarChart3 },
   { href: "/chat", label: "채팅", icon: MessageCircle },
+  { href: "/wall-studio", label: "Wall Studio", icon: PenTool },
   { href: "/calculator", label: "편의 계산기", icon: Calculator },
   { href: "/admin", label: "관리", icon: Settings },
 ];

@@ -18,6 +18,7 @@ const mobileTargets = new Set([
   "/settlement",
   "/statistics",
   "/chat",
+  "/wall-studio",
   "/calculator",
   "/admin",
   "/dashboard",

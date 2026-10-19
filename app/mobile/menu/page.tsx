@@ -22,6 +22,7 @@ import {
   Briefcase,
   ChevronRight,
   Banknote,
+  PenTool,
 } from "lucide-react";
 import { useHasConstructionPhase } from "@/hooks/useHasConstructionPhase";
 import { isConstructionGatedHref } from "@/lib/constructionPhase";
@@ -48,6 +49,7 @@ const baseMenuItems: MenuItem[] = [
   { href: "/mobile/settlement", label: "정산", icon: Wallet },
   { href: "/mobile/statistics", label: "통계", icon: BarChart3 },
   { href: "/mobile/chat", label: "채팅", icon: MessageCircle },
+  { href: "/mobile/wall-studio", label: "Wall Studio", icon: PenTool },
   { href: "/mobile/calculator", label: "편의 계산기", icon: Calculator },
   { href: "/mobile/admin", label: "관리", icon: Settings },
 ];
