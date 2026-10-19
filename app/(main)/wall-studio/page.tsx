@@ -3,7 +3,7 @@
 import { ExternalLink } from "lucide-react";
 
 /** Wall Studio 도면 웹앱. 환경변수 NEXT_PUBLIC_WALL_STUDIO_URL 로 덮어쓸 수 있음 */
-const DEFAULT_WALL_STUDIO_URL = "https://wall-studio-chihun.limusqchi.chatgpt.site/";
+const DEFAULT_WALL_STUDIO_URL = "https://wall-studio.vercel.app";
 
 function getWallStudioUrl(): string {
   const fromEnv =
