@@ -28,6 +28,37 @@ function toDateInputValue(value: string | undefined | null): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** 인쇄용 일시 표시 */
+function formatPrintDateTime(value: string | undefined | null): string {
+  if (!value?.trim()) return "-";
+  const raw = value.trim();
+  const d = new Date(raw.length === 10 ? `${raw}T00:00:00` : raw);
+  if (Number.isNaN(d.getTime())) return raw;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  if (raw.length <= 10 || (!raw.includes("T") && !raw.includes(":"))) {
+    return `${y}.${m}.${day}`;
+  }
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}.${m}.${day} ${h}:${min}`;
+}
+
+function resizeNoteTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = "auto";
+  el.style.height = `${Math.max(120, el.scrollHeight)}px`;
+}
+
 type Consultation = {
   id: number;
   /** 프로젝트 제목 (고객이름 위) */
@@ -334,6 +365,79 @@ function DetailModal({
     },
   });
 
+  const printConsultingDetail = () => {
+    const payload = buildPayload();
+    if (!payload) return;
+
+    const row = (label: string, value: string) =>
+      `<tr><th>${escapeHtml(label)}</th><td>${value || "-"}</td></tr>`;
+
+    const noteText = (payload.note ?? "").trim() || "-";
+    const scopeText =
+      payload.scope?.length > 0
+        ? escapeHtml(payload.scope.join(", "))
+        : "-";
+    const budgetText = payload.budget
+      ? `${Number(payload.budget).toLocaleString("ko-KR")} 원`
+      : "-";
+
+    const printRootId = "consulting-detail-print-only";
+    document.getElementById(printRootId)?.remove();
+
+    const wrap = document.createElement("div");
+    wrap.id = printRootId;
+    wrap.className = "consulting-detail-print-only-root";
+    wrap.innerHTML = `
+      <h1>상담 상세</h1>
+      <table class="consulting-detail-print-table">
+        <tbody>
+          ${row("프로젝트 제목", escapeHtml(payload.title || "-"))}
+          ${row("고객이름", escapeHtml(payload.customerName || "-"))}
+          ${row("연락처", escapeHtml(payload.contact || "-"))}
+          ${row("이메일", escapeHtml(payload.email || "-"))}
+          ${row("주소", escapeHtml(payload.address || "-"))}
+          ${row("평형", payload.pyung ? `${payload.pyung}평` : "-")}
+          ${row("진행상태", escapeHtml(payload.status || "-"))}
+          ${row("담당자", escapeHtml(payload.pic || "-"))}
+          ${row("시공예산", escapeHtml(budgetText))}
+          ${row("시공범위", scopeText)}
+          ${row("준공년도", payload.completionYear ? `${escapeHtml(payload.completionYear)}년` : "-")}
+          ${row("공사시작일", escapeHtml(formatPrintDateTime(payload.constructionStartAt)))}
+          ${row("입주일자", escapeHtml(formatPrintDateTime(payload.moveInAt)))}
+          ${row("현장상담실측", escapeHtml(formatPrintDateTime(payload.siteMeasurementAt)))}
+          ${row("견적서작성", escapeHtml(formatPrintDateTime(payload.estimateMeetingAt)))}
+          ${row("자재리스트", escapeHtml(formatPrintDateTime(payload.materialMeetingAt)))}
+          ${row("계약서작성", escapeHtml(formatPrintDateTime(payload.contractMeetingAt)))}
+          ${row("디자인", escapeHtml(formatPrintDateTime(payload.designMeetingAt)))}
+        </tbody>
+      </table>
+      <section class="consulting-detail-print-note">
+        <h2>요청사항</h2>
+        <pre>${escapeHtml(noteText)}</pre>
+      </section>
+    `;
+    document.body.appendChild(wrap);
+    document.body.classList.add("consulting-detail-print");
+
+    const prevTitle = document.title;
+    const safeName = (payload.title || payload.customerName || "상담상세")
+      .trim()
+      .replace(/[/\\:*?"<>|]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "상담상세";
+    document.title = `상담상세 ${safeName}`;
+    window.print();
+
+    const cleanup = () => {
+      document.title = prevTitle;
+      document.body.classList.remove("consulting-detail-print");
+      document.getElementById(printRootId)?.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    setTimeout(cleanup, 2000);
+  };
+
   const handleAction = (mode: "save" | "estimate") => {
     if (!formRef.current) return;
 
@@ -392,16 +496,25 @@ function DetailModal({
           }}
         >
           {/* 상단 제목/닫기 */}
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-lg font-semibold text-gray-900">상담 상세</h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
-              aria-label="닫기"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={printConsultingDetail}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                인쇄
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
         {/* 진행상태 (칩 스타일 + 단계별 그룹) */}
@@ -900,20 +1013,29 @@ function DetailModal({
             </label>
             <textarea
               name="note"
-              className="h-24 w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              className="min-h-[7.5rem] w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm leading-relaxed"
               defaultValue={data.note ?? "빠른시공"}
+              ref={(el) => resizeNoteTextarea(el)}
+              onInput={(e) => resizeNoteTextarea(e.currentTarget)}
             />
           </div>
         </section>
 
           {/* 하단 버튼 */}
-          <div className="mt-6 flex justify-end gap-3">
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
               className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               닫기
+            </button>
+            <button
+              type="button"
+              onClick={printConsultingDetail}
+              className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              인쇄
             </button>
             <button
               type="button"
