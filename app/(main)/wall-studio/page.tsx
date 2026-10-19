@@ -2,7 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 
-/** Wall Studio 도면 웹앱 (Vercel). 환경변수로 덮어쓸 수 있음 */
+/** Wall Studio 도면 웹앱. 환경변수 NEXT_PUBLIC_WALL_STUDIO_URL 로 덮어쓸 수 있음 */
 const DEFAULT_WALL_STUDIO_URL = "https://wall-studio-chihun.limusqchi.chatgpt.site/";
 
 function getWallStudioUrl(): string {
@@ -27,7 +27,7 @@ export default function WallStudioPage() {
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-900"
         >
           <ExternalLink className="h-4 w-4" />
           새 창에서 열기
@@ -38,6 +38,7 @@ export default function WallStudioPage() {
         src={url}
         className="min-h-0 w-full flex-1 border-0 bg-white"
         allow="clipboard-read; clipboard-write; fullscreen"
+        referrerPolicy="no-referrer-when-downgrade"
       />
     </div>
   );
