@@ -27,7 +27,7 @@ export type EstimateStat = {
 };
 
 export type StatsFilters = {
-  period: "thisMonth" | "lastMonth" | "custom";
+  period: "thisMonth" | "lastMonth" | "thisYear" | "threeMonths" | "custom";
   startDate: string;
   endDate: string;
   pic: string;
