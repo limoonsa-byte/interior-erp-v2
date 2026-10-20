@@ -170,7 +170,7 @@ export default function StatisticsPage() {
           const baseDate = dateOnly(e.estimateDate) || consultationDateById.get(e.consultationId ?? -1) || "";
           if (!isInRange(baseDate, filters.startDate, filters.endDate)) return false;
           const status = normalizeStatusLabel(meta?.status);
-          if (!filters.includeCompleted && (status === "완료" || status === "완료및정산")) return false;
+          if (!filters.includeCompleted && (status === "완료" || status === "완료및정산" || status === "보류")) return false;
           if (filters.status && status !== normalizeStatusLabel(filters.status)) return false;
           const pic = (meta?.pic || e.picName || "").trim();
           if (filters.pic && pic !== filters.pic) return false;

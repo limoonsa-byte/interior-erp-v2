@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, useRef, useCallback } from "react"
 import { GripVertical } from "lucide-react";
 import { estimateListTitle, orderEstimateGroup, resolveGroupProjectTitle, isAdditionalEstimateTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { isCompletedConsultationStatus } from "@/lib/constructionPhase";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveStatus } from "@/components/AutoSaveStatus";
 
@@ -2536,7 +2537,7 @@ export default function EstimatePage() {
       const c = consultationsForList.find((x) => x.id === est.consultationId);
       if (!c) return false;
       if (showCompletedInList) return true;
-      const completed = c.status === "완료" || c.status === "완료및정산";
+      const completed = isCompletedConsultationStatus(c.status);
       return !completed;
     });
   }, [estimates, consultationsForList, showCompletedInList]);
@@ -2670,7 +2671,7 @@ export default function EstimatePage() {
       consultations
         .filter((c) => {
           if (linkedConsultationIds.has(c.id)) return false;
-          if (!showCompletedInModal && (c.status === "완료" || c.status === "완료및정산")) return false;
+          if (!showCompletedInModal && isCompletedConsultationStatus(c.status)) return false;
           return true;
         })
         .sort((a, b) => {

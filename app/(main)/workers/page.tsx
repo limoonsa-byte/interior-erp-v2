@@ -31,7 +31,7 @@ type ConsultationSchedule = {
 /** 일정 공유 선택 목록에서 제외할 종료 상태 */
 function isCompletedForScheduleShare(status?: string): boolean {
   const s = (status ?? "").trim();
-  return s === "완료" || s === "완료및정산" || s === "취소" || s === "취소/보류";
+  return s === "완료" || s === "완료및정산" || s === "보류" || s === "취소" || s === "취소/보류";
 }
 
 /** 전화번호 → 숫자만 (문자앱 수신자용) */

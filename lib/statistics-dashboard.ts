@@ -72,7 +72,7 @@ export type StatisticsResult = {
   filteredEstimateIds: Set<number>;
 };
 
-const COMPLETED_STATUSES = new Set(["완료", "완료및정산"]);
+const COMPLETED_STATUSES = new Set(["완료", "완료및정산", "보류"]);
 const STATUS_ALIAS: Record<string, string> = {
   공사진행: "진행중",
   "진행 중": "진행중",

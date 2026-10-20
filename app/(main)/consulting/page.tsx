@@ -109,13 +109,13 @@ function parseBudgetToSave(display: string): string {
 type PicItem = { id: number; name: string };
 
 /** 진행상태 옵션 */
-const STATUS_OPTIONS = ["접수", "현장상담실측", "견적서작성", "자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산"] as const;
+const STATUS_OPTIONS = ["접수", "현장상담실측", "견적서작성", "자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산", "보류"] as const;
 
 /** 진행상태 단계별 그룹 (칩 UI용) */
 const STATUS_GROUPS: { label: string; options: readonly string[] }[] = [
   { label: "접수 ~ 견적", options: ["접수", "현장상담실측", "견적서작성"] },
   { label: "자재 ~ 계약", options: ["자재리스트", "계약서작성", "디자인", "계약"] },
-  { label: "종료", options: ["공사진행", "완료및정산"] },
+  { label: "종료", options: ["공사진행", "완료및정산", "보류"] },
 ];
 
 /** 목록 단계 필터 (완료 건 보기 옆 체크란) */
@@ -127,7 +127,7 @@ const LIST_STAGE_FILTERS = [
 type ListStageFilterId = (typeof LIST_STAGE_FILTERS)[number]["id"];
 
 /** 자재리스트 이상이면 접수/현장상담실측/견적서작성 선택 비활성화 */
-const STATUS_LOCKED_AFTER = ["자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산"] as const;
+const STATUS_LOCKED_AFTER = ["자재리스트", "계약서작성", "디자인", "계약", "공사진행", "완료및정산", "보류"] as const;
 function isStatusLockedEarly(savedStatus: string): boolean {
   return (STATUS_LOCKED_AFTER as readonly string[]).includes(savedStatus);
 }
@@ -1060,8 +1060,8 @@ function DetailModal({
 
 /** 진행상태에 맞는 진행날짜 값 선택 (목록 표시용) */
 function getProgressDateDisplay(item: Consultation): string {
-  // 계약, 완료및정산은 진행날짜 표기 없음
-  if (["계약", "완료및정산"].includes(item.status)) return "-";
+  // 계약, 완료및정산, 보류는 진행날짜 표기 없음
+  if (["계약", "완료및정산", "보류"].includes(item.status)) return "-";
   const raw =
     item.status === "자재리스트" && item.materialMeetingAt
       ? item.materialMeetingAt
@@ -1179,10 +1179,11 @@ export default function ConsultingPage() {
     const stageFilterActive = LIST_STAGE_FILTERS.some((f) => stageFilters[f.id]);
 
     const filtered = consultations.filter((item) => {
-      if (!showCompleted && item.status === "완료및정산") return false;
+      const closed = item.status === "완료및정산" || item.status === "보류";
+      if (!showCompleted && closed) return false;
       if (stageFilterActive) {
-        // 완료 건은 단계 필터에 없고 showCompleted로만 노출
-        if (item.status !== "완료및정산" && !activeStageStatuses.includes(item.status)) return false;
+        // 완료·보류 건은 단계 필터에 없고 showCompleted로만 노출
+        if (!closed && !activeStageStatuses.includes(item.status)) return false;
       }
       if (filterCustomerName.trim()) {
         const q = filterCustomerName.trim().toLowerCase();
@@ -1223,9 +1224,9 @@ export default function ConsultingPage() {
     filterDateTo,
   ]);
 
-  /** 완료 및 정산된 건이 있을 때만 '완료 건 보기' 활성화 */
+  /** 완료및정산 또는 보류 건이 있을 때만 '완료 건 보기' 활성화 */
   const hasCompletedSettled = useMemo(
-    () => consultations.some((c) => c.status === "완료및정산"),
+    () => consultations.some((c) => c.status === "완료및정산" || c.status === "보류"),
     [consultations]
   );
 
@@ -1566,7 +1567,7 @@ export default function ConsultingPage() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label
           className={`inline-flex items-center gap-1.5 rounded border px-3 py-1.5 text-sm ${hasCompletedSettled ? "cursor-pointer border-gray-300 bg-white" : "cursor-not-allowed border-gray-200 bg-gray-100"}`}
-          title={hasCompletedSettled ? undefined : "완료 및 정산된 건이 있을 때만 사용할 수 있습니다"}
+          title={hasCompletedSettled ? undefined : "완료및정산 또는 보류 건이 있을 때만 사용할 수 있습니다"}
         >
           <input
             type="checkbox"
