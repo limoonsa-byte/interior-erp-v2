@@ -19,7 +19,10 @@ function formatNum(n: number): string {
 }
 
 function toDate(val: Date): string {
-  return val.toISOString().slice(0, 10);
+  const y = val.getFullYear();
+  const m = String(val.getMonth() + 1).padStart(2, "0");
+  const d = String(val.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function defaultRange() {
@@ -33,6 +36,21 @@ function prevMonthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const end = new Date(now.getFullYear(), now.getMonth(), 0);
+  return { startDate: toDate(start), endDate: toDate(end) };
+}
+
+function thisYearRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  const end = new Date(now.getFullYear(), 11, 31);
+  return { startDate: toDate(start), endDate: toDate(end) };
+}
+
+/** 이번 달을 포함한 최근 3개월 (예: 10월이면 8월 1일~10월 31일) */
+function threeMonthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   return { startDate: toDate(start), endDate: toDate(end) };
 }
 
@@ -211,13 +229,17 @@ export default function StatisticsPage() {
           value={filters.period}
           onChange={(e) => {
             const v = e.target.value as StatsFilters["period"];
-            if (v === "thisMonth") {
-              const range = defaultRange();
-              setFilters((prev) => ({ ...prev, period: v, ...range }));
-              return;
-            }
-            if (v === "lastMonth") {
-              const range = prevMonthRange();
+            const range =
+              v === "thisMonth"
+                ? defaultRange()
+                : v === "lastMonth"
+                  ? prevMonthRange()
+                  : v === "thisYear"
+                    ? thisYearRange()
+                    : v === "threeMonths"
+                      ? threeMonthRange()
+                      : null;
+            if (range) {
               setFilters((prev) => ({ ...prev, period: v, ...range }));
               return;
             }
@@ -227,6 +249,8 @@ export default function StatisticsPage() {
         >
           <option value="thisMonth">이번 달</option>
           <option value="lastMonth">지난 달</option>
+          <option value="thisYear">이번 해</option>
+          <option value="threeMonths">3개월</option>
           <option value="custom">직접 선택</option>
         </select>
         <input
