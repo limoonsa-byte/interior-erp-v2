@@ -2,6 +2,7 @@ import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { cleanupOrphanEstimates } from "@/lib/cleanupOrphanEstimates";
+import { additionalEstimateIdSet, withAdditionalPrefix } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -128,6 +129,30 @@ export async function GET(request: Request) {
         picName: (row as { pic_name: string | null }).pic_name ?? null,
       };
     });
+
+    try {
+      const siblings = await sql`
+        SELECT id, consultation_id, customer_name, address, title
+        FROM estimates
+        WHERE company_id = ${company.id}
+      `;
+      const additionalIds = additionalEstimateIdSet(
+        siblings.rows.map((row) => ({
+          id: Number(row.id),
+          consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+          customerName: row.customer_name != null ? String(row.customer_name) : "",
+          address: row.address != null ? String(row.address) : "",
+          title: row.title != null ? String(row.title) : "",
+        }))
+      );
+      for (const log of list) {
+        if (log.estimateId != null && additionalIds.has(log.estimateId) && log.estimateTitle) {
+          log.estimateTitle = withAdditionalPrefix(log.estimateTitle, true);
+        }
+      }
+    } catch (markErr) {
+      console.error("work-logs additional mark error:", markErr);
+    }
 
     return NextResponse.json(list);
   } catch (error) {
