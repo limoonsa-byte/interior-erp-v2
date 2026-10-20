@@ -2,7 +2,12 @@
 
 export const CONSTRUCTION_IN_PROGRESS_STATUS = "공사진행";
 
-export const COMPLETED_CONSULTATION_STATUSES = new Set(["완료및정산", "완료"]);
+export const COMPLETED_CONSULTATION_STATUSES = new Set(["완료및정산", "완료", "보류"]);
+
+/** 완료·보류처럼 기본 목록에서 숨기는 상태 */
+export function isCompletedConsultationStatus(status: string | undefined | null): boolean {
+  return COMPLETED_CONSULTATION_STATUSES.has(String(status ?? "").trim());
+}
 
 /** 공사진행 중 */
 export function isConstructionInProgressStatus(status: string | undefined | null): boolean {
@@ -24,7 +29,7 @@ export function companyHasConstructionPhase(
 
 /**
  * 일정·정산 등 공사 메뉴 목록 노출 여부.
- * 기본: 공사진행만. 완료 건 보기 ON: 완료및정산/완료 포함.
+ * 기본: 공사진행만. 완료 건 보기 ON: 완료및정산/완료/보류 포함.
  * 견적서작성 등 사전 단계는 숨김.
  */
 export function isVisibleInConstructionMenus(

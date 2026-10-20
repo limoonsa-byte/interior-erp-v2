@@ -13,7 +13,7 @@ import {
 import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 import { resolveContractBodyPdfUrl } from "@/lib/renderPdfUrlToPageImages";
 import { compareImportantFirst } from "@/lib/importantSort";
-import { COMPLETED_CONSULTATION_STATUSES } from "@/lib/constructionPhase";
+import { isCompletedConsultationStatus } from "@/lib/constructionPhase";
 
 type Contract = {
   id: number;
@@ -1319,7 +1319,7 @@ export default function ContractPage() {
       if (consultationId == null) return true;
       const consultation = consultations.find((c) => c.id === consultationId);
       if (!consultation) return true;
-      return !COMPLETED_CONSULTATION_STATUSES.has(String(consultation.status ?? "").trim());
+      return !isCompletedConsultationStatus(consultation.status);
     });
   }, [contracts, consultations, estimates, showCompletedInList]);
 
@@ -1330,8 +1330,7 @@ export default function ContractPage() {
         if (est.consultationId == null) return false;
         const c = consultations.find((x) => x.id === est.consultationId);
         if (!c) return false;
-        const status = c.status ?? "";
-        return status !== "완료및정산" && status !== "완료";
+        return !isCompletedConsultationStatus(c.status);
       })
       .sort((a, b) => {
         const aImp = consultations.find((c) => c.id === a.consultationId)?.isImportant;

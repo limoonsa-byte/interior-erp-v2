@@ -13,6 +13,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { useRightPanel } from "./RightPanelContext";
+import { isCompletedConsultationStatus } from "@/lib/constructionPhase";
 
 const LABOR_PAY_SEEN_KEY = "labor-pay-last-seen-submitted-id";
 
@@ -207,19 +208,19 @@ export function ProgressPanel() {
 
   const receptionConsultCount = consultations.filter((c) => {
     const s = normalizeConsultationStatus(c.status);
-    if (s === "완료및정산") return false;
+    if (isCompletedConsultationStatus(s)) return false;
     return STATUS_RECEPTION_AND_CONSULT.has(s);
   }).length;
 
   const materialDesignContractCount = consultations.filter((c) => {
     const s = normalizeConsultationStatus(c.status);
-    if (s === "완료및정산") return false;
+    if (isCompletedConsultationStatus(s)) return false;
     return STATUS_MATERIAL_DESIGN_CONTRACT.has(s);
   }).length;
 
   const constructionCount = consultations.filter((c) => {
     const s = normalizeConsultationStatus(c.status);
-    if (s === "완료및정산") return false;
+    if (isCompletedConsultationStatus(s)) return false;
     return STATUS_CONSTRUCTION.has(s);
   }).length;
 
@@ -230,7 +231,7 @@ export function ProgressPanel() {
       estimates.filter((e) => e.consultationId != null).map((e) => e.consultationId as number)
     );
     return consultations.reduce((sum, c) => {
-      if (normalizeConsultationStatus(c.status) === "완료및정산") return sum;
+      if (isCompletedConsultationStatus(normalizeConsultationStatus(c.status))) return sum;
       if (!consultationIdsWithEstimate.has(c.id)) return sum;
       return sum + countSchedulePhasesOverlappingWeek(c, thisWeek.start, thisWeek.end);
     }, 0);
