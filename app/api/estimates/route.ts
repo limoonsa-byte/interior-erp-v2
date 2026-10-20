@@ -6,7 +6,7 @@ import {
   ensureConsultationsColumns,
   syncEstimateTitlesFromConsultations,
 } from "@/lib/consultations-migrate";
-import { displayProjectTitle } from "@/lib/projectTitle";
+import { additionalEstimateIdSet, displayProjectTitle, withAdditionalPrefix } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -125,7 +125,24 @@ export async function GET() {
         createdAt: row.created_at != null ? String(row.created_at) : undefined,
       };
     });
-    return NextResponse.json(rows);
+    const additionalIds = additionalEstimateIdSet(
+      rows.map((row) => ({
+        id: Number(row.id),
+        consultationId: row.consultationId != null ? Number(row.consultationId) : null,
+        customerName: String(row.customerName ?? ""),
+        address: String(row.address ?? ""),
+        title: String(row.title ?? ""),
+      }))
+    );
+    const marked = rows.map((row) => {
+      const isAdditional = additionalIds.has(Number(row.id));
+      return {
+        ...row,
+        isAdditional,
+        displayTitle: withAdditionalPrefix(String(row.displayTitle ?? ""), isAdditional),
+      };
+    });
+    return NextResponse.json(marked);
   } catch (error) {
     console.error("estimates GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

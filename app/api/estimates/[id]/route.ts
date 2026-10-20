@@ -1,7 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { displayProjectTitle } from "@/lib/projectTitle";
+import { additionalEstimateIdSet, displayProjectTitle, withAdditionalPrefix } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -129,7 +129,32 @@ export async function GET(
     if (result.rows.length === 0) {
       return NextResponse.json({ error: "견적을 찾을 수 없습니다." }, { status: 404 });
     }
-    return NextResponse.json(rowToEstimate(result.rows[0] as Record<string, unknown>));
+    const estimate = rowToEstimate(result.rows[0] as Record<string, unknown>);
+    let isAdditional = false;
+    try {
+      const siblings = await sql`
+        SELECT id, consultation_id, customer_name, address, title
+        FROM estimates
+        WHERE company_id = ${company.id}
+      `;
+      const additionalIds = additionalEstimateIdSet(
+        siblings.rows.map((row) => ({
+          id: Number(row.id),
+          consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+          customerName: row.customer_name != null ? String(row.customer_name) : "",
+          address: row.address != null ? String(row.address) : "",
+          title: row.title != null ? String(row.title) : "",
+        }))
+      );
+      isAdditional = additionalIds.has(estimateId);
+    } catch (markErr) {
+      console.error("estimates [id] additional mark error:", markErr);
+    }
+    return NextResponse.json({
+      ...estimate,
+      isAdditional,
+      displayTitle: withAdditionalPrefix(String(estimate.displayTitle ?? ""), isAdditional),
+    });
   } catch (error) {
     console.error("estimates [id] GET error:", error);
     return NextResponse.json({ error: "Server Error" }, { status: 500 });

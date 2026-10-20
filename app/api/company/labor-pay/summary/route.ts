@@ -1,7 +1,7 @@
 import { sql } from "@vercel/postgres";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { displayProjectTitle } from "@/lib/projectTitle";
+import { additionalEstimateIdSet, displayProjectTitle, withAdditionalPrefix } from "@/lib/projectTitle";
 
 async function getCompanyFromCookie() {
   const cookieStore = await cookies();
@@ -80,13 +80,36 @@ export async function GET() {
     }
 
     const submittedCount = Number(countRes.rows[0]?.cnt ?? 0) || 0;
+    let additionalIds = new Set<number>();
+    try {
+      const siblings = await sql`
+        SELECT id, consultation_id, customer_name, address, title
+        FROM estimates
+        WHERE company_id = ${company.id}
+      `;
+      additionalIds = additionalEstimateIdSet(
+        siblings.rows.map((row) => ({
+          id: Number(row.id),
+          consultationId: row.consultation_id != null ? Number(row.consultation_id) : null,
+          customerName: row.customer_name != null ? String(row.customer_name) : "",
+          address: row.address != null ? String(row.address) : "",
+          title: row.title != null ? String(row.title) : "",
+        }))
+      );
+    } catch (markErr) {
+      console.error("labor-pay summary additional mark error:", markErr);
+    }
     const recent = (recentRes.rows as Record<string, unknown>[]).map((r) => {
-      const siteTitle = displayProjectTitle({
-        consultationTitle: r.consultation_title != null ? String(r.consultation_title) : undefined,
-        estimateTitle: r.estimate_title != null ? String(r.estimate_title) : undefined,
-        customerName: r.customer_name != null ? String(r.customer_name) : undefined,
-        fallback: "현장",
-      });
+      const estimateId = Number(r.estimate_id);
+      const siteTitle = withAdditionalPrefix(
+        displayProjectTitle({
+          consultationTitle: r.consultation_title != null ? String(r.consultation_title) : undefined,
+          estimateTitle: r.estimate_title != null ? String(r.estimate_title) : undefined,
+          customerName: r.customer_name != null ? String(r.customer_name) : undefined,
+          fallback: "현장",
+        }),
+        additionalIds.has(estimateId)
+      );
       return {
         id: Number(r.id),
         estimateId: Number(r.estimate_id),

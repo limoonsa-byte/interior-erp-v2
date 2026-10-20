@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { estimateListTitle, isAdditionalEstimateTitle, orderEstimateGroup, resolveGroupProjectTitle } from "@/lib/projectTitle";
+import { estimateListTitle, isAdditionalEstimateTitle, orderEstimateGroup, resolveGroupProjectTitle, withAdditionalPrefix } from "@/lib/projectTitle";
 import { vatLabelText } from "@/lib/contractPaymentSchedule";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
@@ -291,7 +291,7 @@ export default function SettlementPage() {
   }) => {
     const base = (est.displayTitle || est.consultationTitle || est.title || "").trim() || "제목 없음";
     const additional = groupedEstimates.some((g) => g.items.slice(1).some((item) => item.id === est.id));
-    return additional ? `(추가) ${base}` : base;
+    return withAdditionalPrefix(base, additional);
   };
 
   /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */

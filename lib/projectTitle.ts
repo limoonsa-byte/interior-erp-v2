@@ -98,7 +98,49 @@ export function orderEstimateGroup<T extends EstimateGroupItem>(items: T[]): T[]
 /** 목록 제목. 추가 견적은 앞에 (추가)를 붙여 메인과 구분한다. */
 export function estimateListTitle(projectTitle: string, isChild: boolean): string {
   const name = projectTitle.trim() || "-";
-  return isChild ? `ㄴ (추가) ${name}` : name;
+  return isChild ? `ㄴ ${withAdditionalPrefix(name, true)}` : name;
+}
+
+export type EstimateIdentity = {
+  id: number;
+  consultationId?: number | null;
+  customerName?: string | null;
+  address?: string | null;
+  title?: string | null;
+};
+
+/** 같은 현장끼리 묶는 키. 상담이 있으면 상담 기준, 없으면 고객+주소. */
+export function estimateGroupKey(item: EstimateIdentity): string {
+  if (item.consultationId != null && String(item.consultationId).trim() !== "") {
+    return `consult-${item.consultationId}`;
+  }
+  return `site-${String(item.customerName ?? "").trim()}|${String(item.address ?? "").trim()}`;
+}
+
+/** 그룹에서 메인이 아닌 견적 id. 작업일지·자재·결제 등 다른 화면에서도 같은 기준으로 구분한다. */
+export function additionalEstimateIdSet(items: EstimateIdentity[]): Set<number> {
+  const groups = new Map<string, EstimateIdentity[]>();
+  for (const item of items) {
+    const key = estimateGroupKey(item);
+    const list = groups.get(key);
+    if (list) list.push(item);
+    else groups.set(key, [item]);
+  }
+  const ids = new Set<number>();
+  for (const group of groups.values()) {
+    const ordered = orderEstimateGroup(group);
+    for (const child of ordered.slice(1)) ids.add(child.id);
+  }
+  return ids;
+}
+
+/** 추가 견적 제목 앞에 (추가)를 붙인다. 이미 있으면 한 번만 둔다. */
+export function withAdditionalPrefix(title: string, isAdditional: boolean): string {
+  const name = title.trim();
+  if (!isAdditional) return name;
+  if (!name) return "(추가)";
+  if (name.startsWith("(추가)") || name.startsWith("（추가）") || name.startsWith("ㄴ (추가)")) return name;
+  return `(추가) ${name}`;
 }
 
 /** 선택 목록용: "프로젝트 제목 · 고객명" (제목 없으면 고객명만) */
