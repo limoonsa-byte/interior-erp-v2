@@ -240,6 +240,8 @@ export async function PATCH(
               OR (
                 title NOT ILIKE ${"%추가견적%"}
                 AND title NOT ILIKE ${"%추가 견적%"}
+                AND title NOT ILIKE ${"(추가)%"}
+                AND title NOT ILIKE ${"（추가）%"}
               )
             )
         `;

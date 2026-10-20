@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { GripVertical } from "lucide-react";
-import { resolveGroupProjectTitle } from "@/lib/projectTitle";
+import { estimateListTitle, orderEstimateGroup, resolveGroupProjectTitle, isAdditionalEstimateTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveStatus } from "@/components/AutoSaveStatus";
@@ -168,6 +168,8 @@ type ConsultationPreFill = {
   consultationId?: number;
   pic?: string;
   titleSuggestion?: string;
+  /** + 추가 견적서 작성으로 연 경우 */
+  additional?: boolean;
 };
 
 const emptyItem: EstimateItem = {
@@ -344,23 +346,30 @@ function smartFieldPayloadToItems(payload: SmartFieldEstimatePayload): EstimateI
 function EstimateForm({
   estimate,
   consultationPreFill,
+  isAdditional = false,
   onCreateAdditional,
   onSave,
   onCancel,
 }: {
   estimate: Estimate | null;
   consultationPreFill: ConsultationPreFill | null;
+  /** 메인 아래 추가 견적. 프로젝트 제목은 공유하고, 화면에는 (추가)만 붙인다. */
+  isAdditional?: boolean;
   onCreateAdditional?: (prefill: ConsultationPreFill) => void;
   onSave: () => void;
   onCancel: () => void;
 }) {
   const isEdit = estimate !== null;
+  const showAdditionalMark = isAdditional || (!isEdit && !!consultationPreFill?.additional);
   const [customerName, setCustomerName] = useState(estimate?.customerName ?? consultationPreFill?.customerName ?? "");
   const [contact, setContact] = useState(estimate?.contact ?? consultationPreFill?.contact ?? "");
   const [address, setAddress] = useState(estimate?.address ?? consultationPreFill?.address ?? "");
   const [title, setTitle] = useState(
     estimate?.consultationTitle || estimate?.title || consultationPreFill?.titleSuggestion || ""
   );
+  const labeledProjectTitle = showAdditionalMark
+    ? `(추가) ${title.trim() || "-"}`
+    : title.trim() || "-";
   const [estimateDate, setEstimateDate] = useState(() => {
     const from = estimate?.estimateDate;
     return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
@@ -489,7 +498,7 @@ function EstimateForm({
       document.body.classList.add("printing");
     }
     const prevTitle = document.title;
-    const safeName = (title || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
+    const safeName = (labeledProjectTitle || "제목없음").trim().replace(/[/\\:*?"<>|]/g, " ").replace(/\s+/g, " ").trim() || "제목없음";
     document.title = `견적서 ${safeName}`;
     window.print();
     const cleanup = () => {
@@ -1308,7 +1317,8 @@ function EstimateForm({
                     address: address.trim(),
                     consultationId: estimate?.consultationId,
                     pic: consultationPic || undefined,
-                    titleSuggestion: `${(estimate?.consultationTitle || title || "추가").trim()} 추가견적`,
+                    titleSuggestion: (estimate?.consultationTitle || title || "").trim() || undefined,
+                    additional: true,
                   })
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
@@ -1317,13 +1327,18 @@ function EstimateForm({
               </button>
             ) : null}
           </div>
-          <input
-            type="text"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="예: OO아파트 31평 전체 리모델링"
-          />
+          <div className="flex items-center gap-2">
+            {showAdditionalMark ? (
+              <span className="shrink-0 rounded bg-sky-100 px-2 py-2 text-sm font-semibold text-sky-800">(추가)</span>
+            ) : null}
+            <input
+              type="text"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="예: OO아파트 31평 전체 리모델링"
+            />
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">고객명</label>
@@ -2120,7 +2135,7 @@ function EstimateForm({
                       <div className="mb-3 bg-gray-200 py-2 text-center text-base font-bold text-gray-800">견 적 서</div>
                       <div className="mb-3 flex flex-wrap justify-between gap-x-8 gap-y-2">
                         <div className="min-w-0 flex-1 space-y-1">
-                          <p className="text-gray-800">공 사 명 : {title || "-"}</p>
+                          <p className="text-gray-800">공 사 명 : {labeledProjectTitle}</p>
                           <p className="text-gray-800">공 사 금 액: (VAT 별도) ₩{formatNumber(adjustedAmount)}</p>
                           <p className="text-gray-800">견 적 일 시: {formatDateYMD(estimateDate)}</p>
                         </div>
@@ -2526,11 +2541,8 @@ export default function EstimatePage() {
     });
   }, [estimates, consultationsForList, showCompletedInList]);
 
-  const isAdditionalEstimateTitle = React.useCallback((title?: string | null) => {
-    const t = String(title ?? "").trim();
-    if (!t) return false;
-    return t.includes("추가견적") || t.includes("추가 견적");
-  }, []);
+  /** 추가 견적 행을 접은 그룹 */
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Record<string, boolean>>({});
 
   /** 같은 현장(상담ID 우선, 없으면 고객+주소)끼리 묶고, 그룹 순서는 메인 견적 날짜 기준 */
   const groupedEstimates = React.useMemo(() => {
@@ -2551,16 +2563,8 @@ export default function EstimatePage() {
     });
 
     const sorted = groups.map((group) => {
-      const ordered = [...group.items].sort((a, b) => {
-        const aAdditional = isAdditionalEstimateTitle(a.title);
-        const bAdditional = isAdditionalEstimateTitle(b.title);
-        if (aAdditional !== bAdditional) return aAdditional ? 1 : -1; // 추가견적은 항상 하위로
-        const aDate = String(a.estimateDate ?? "");
-        const bDate = String(b.estimateDate ?? "");
-        if (aDate !== bDate) return bDate.localeCompare(aDate);
-        return (b.id ?? 0) - (a.id ?? 0);
-      });
-      const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      const ordered = orderEstimateGroup(group.items);
+      const main = ordered[0];
       const consultId = ordered.find((x) => x.consultationId != null)?.consultationId;
       const consultTitle =
         consultId != null
@@ -2596,7 +2600,7 @@ export default function EstimatePage() {
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });
-  }, [filteredEstimates, isAdditionalEstimateTitle, consultationsForList]);
+  }, [filteredEstimates, consultationsForList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2781,6 +2785,11 @@ export default function EstimatePage() {
         <EstimateForm
           key={`estimate-form-${String(formOpen)}-${formResetToken}`}
           estimate={editingEstimate ?? null}
+          isAdditional={
+            formOpen === "new"
+              ? !!consultationPreFill?.additional
+              : groupedEstimates.some((g) => g.items.slice(1).some((item) => item.id === formOpen))
+          }
           consultationPreFill={formOpen === "new" ? consultationPreFill : null}
           onCreateAdditional={(prefill) => {
             setConsultationPreFill(prefill);
@@ -2830,9 +2839,13 @@ export default function EstimatePage() {
                     </td>
                   </tr>
                 ) : (
-                  groupedEstimates.map((group) => (
+                  groupedEstimates.map((group) => {
+                    const childCount = Math.max(0, group.items.length - 1);
+                    const collapsed = !!collapsedGroupKeys[group.key];
+                    return (
                     <React.Fragment key={group.key}>
                       {group.items.map((est, idxInGroup) => {
+                        if (idxInGroup > 0 && collapsed) return null;
                         const subtotal = (est.items || []).reduce(
                           (s, i) =>
                             s +
@@ -2867,15 +2880,40 @@ export default function EstimatePage() {
                             </button>
                           </div>
                         );
-                        const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
+                        const isChild = idxInGroup > 0;
                         const projectTitle = group.projectTitle || "-";
-                        const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
+                        const shownTitle = estimateListTitle(projectTitle, isChild);
                         return (
                           <tr key={est.id} className={`text-gray-700 hover:bg-gray-50 ${isChild ? "bg-sky-50" : ""}`}>
                             <td className="row-actions-sticky whitespace-nowrap p-2 align-middle sm:hidden">{actions}</td>
                             <td className="p-2 sm:p-3 font-medium">
-                              <div className="max-w-[18rem] truncate" title={shownTitle}>
-                                {shownTitle}
+                              <div className="flex items-center gap-1">
+                                {childCount > 0 ? (
+                                  isChild ? (
+                                    <span className="inline-block w-6 shrink-0" aria-hidden />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCollapsedGroupKeys((prev) => ({
+                                          ...prev,
+                                          [group.key]: !prev[group.key],
+                                        }))
+                                      }
+                                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs text-gray-500 hover:bg-gray-200"
+                                      aria-expanded={!collapsed}
+                                      aria-label={collapsed ? "추가 견적 펼치기" : "추가 견적 접기"}
+                                    >
+                                      {collapsed ? "▶" : "▼"}
+                                    </button>
+                                  )
+                                ) : null}
+                                <div className="max-w-[18rem] truncate" title={shownTitle}>
+                                  {shownTitle}
+                                  {!isChild && collapsed && childCount > 0 ? (
+                                    <span className="ml-2 text-xs font-normal text-sky-700">추가 {childCount}건</span>
+                                  ) : null}
+                                </div>
                               </div>
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
@@ -2887,7 +2925,8 @@ export default function EstimatePage() {
                         );
                       })}
                     </React.Fragment>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

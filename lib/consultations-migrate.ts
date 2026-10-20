@@ -56,6 +56,8 @@ export async function syncEstimateTitlesFromConsultations(companyId: number) {
           AND TRIM(e.title) <> ''
           AND e.title NOT ILIKE ${"%추가견적%"}
           AND e.title NOT ILIKE ${"%추가 견적%"}
+          AND e.title NOT ILIKE ${"(추가)%"}
+          AND e.title NOT ILIKE ${"（추가）%"}
         ORDER BY e.consultation_id, e.id ASC
       ) sub
       WHERE c.id = sub.consultation_id
@@ -80,6 +82,8 @@ export async function syncEstimateTitlesFromConsultations(companyId: number) {
           OR (
             e.title NOT ILIKE ${"%추가견적%"}
             AND e.title NOT ILIKE ${"%추가 견적%"}
+            AND e.title NOT ILIKE ${"(추가)%"}
+            AND e.title NOT ILIKE ${"（추가）%"}
           )
         )
     `;
@@ -100,7 +104,14 @@ export async function syncProjectTitleFromEstimate(opts: {
 }) {
   const titleStr = opts.title != null ? String(opts.title).trim() : "";
   if (!titleStr) return;
-  if (titleStr.includes("추가견적") || titleStr.includes("추가 견적")) return;
+  if (
+    titleStr.includes("추가견적") ||
+    titleStr.includes("추가 견적") ||
+    titleStr.startsWith("(추가)") ||
+    titleStr.startsWith("（추가）")
+  ) {
+    return;
+  }
 
   try {
     let consultationId =
@@ -136,6 +147,8 @@ export async function syncProjectTitleFromEstimate(opts: {
           OR (
             title NOT ILIKE ${"%추가견적%"}
             AND title NOT ILIKE ${"%추가 견적%"}
+            AND title NOT ILIKE ${"(추가)%"}
+            AND title NOT ILIKE ${"（추가）%"}
           )
         )
     `;
