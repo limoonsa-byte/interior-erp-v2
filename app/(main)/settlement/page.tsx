@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { resolveGroupProjectTitle } from "@/lib/projectTitle";
+import { estimateListTitle, isAdditionalEstimateTitle, orderEstimateGroup, resolveGroupProjectTitle } from "@/lib/projectTitle";
 import { vatLabelText } from "@/lib/contractPaymentSchedule";
 import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
@@ -226,11 +226,8 @@ export default function SettlementPage() {
     });
   }, [estimates, consultations, showCompleted]);
 
-  const isAdditionalEstimateTitle = useCallback((title?: string | null) => {
-    const t = String(title ?? "").trim();
-    if (!t) return false;
-    return t.includes("추가견적") || t.includes("추가 견적");
-  }, []);
+  /** 추가 견적 행을 접은 그룹 */
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Record<string, boolean>>({});
 
   /** 같은 현장끼리 묶고, 그룹 순서는 메인 견적 날짜 기준으로 정렬 */
   const groupedEstimates = useMemo(() => {
@@ -251,16 +248,8 @@ export default function SettlementPage() {
     });
 
     const sorted = groups.map((group) => {
-      const ordered = [...group.items].sort((a, b) => {
-        const aAdditional = isAdditionalEstimateTitle(a.title);
-        const bAdditional = isAdditionalEstimateTitle(b.title);
-        if (aAdditional !== bAdditional) return aAdditional ? 1 : -1; // 추가견적은 하위
-        const aDate = String(a.estimateDate ?? "");
-        const bDate = String(b.estimateDate ?? "");
-        if (aDate !== bDate) return bDate.localeCompare(aDate);
-        return (b.id ?? 0) - (a.id ?? 0);
-      });
-      const main = ordered.find((x) => !isAdditionalEstimateTitle(x.title)) ?? ordered[0];
+      const ordered = orderEstimateGroup(group.items);
+      const main = ordered[0];
       const consultId = ordered.find((x) => x.consultationId != null)?.consultationId;
       const consultTitle =
         consultId != null
@@ -292,7 +281,18 @@ export default function SettlementPage() {
       if (a.mainDate !== b.mainDate) return b.mainDate.localeCompare(a.mainDate);
       return b.mainId - a.mainId;
     });
-  }, [filteredEstimates, isAdditionalEstimateTitle, consultations]);
+  }, [filteredEstimates, consultations]);
+
+  const titleWithAdditionalMark = (est: {
+    id: number;
+    displayTitle?: string;
+    consultationTitle?: string;
+    title?: string;
+  }) => {
+    const base = (est.displayTitle || est.consultationTitle || est.title || "").trim() || "제목 없음";
+    const additional = groupedEstimates.some((g) => g.items.slice(1).some((item) => item.id === est.id));
+    return additional ? `(추가) ${base}` : base;
+  };
 
   /** 선택된 견적이 필터 목록에 없으면 목록에 포함 (드롭다운 표시용) */
   const estimatesForSelect = useMemo(() => {
@@ -730,9 +730,13 @@ export default function SettlementPage() {
                     </td>
                   </tr>
                 ) : (
-                  groupedEstimates.map((group) => (
+                  groupedEstimates.map((group) => {
+                    const childCount = Math.max(0, group.items.length - 1);
+                    const collapsed = !!collapsedGroupKeys[group.key];
+                    return (
                     <React.Fragment key={group.key}>
                       {group.items.map((est, idxInGroup) => {
+                        if (idxInGroup > 0 && collapsed) return null;
                         const subtotal = (est.items || []).reduce(
                           (s, itm) =>
                             s +
@@ -747,9 +751,9 @@ export default function SettlementPage() {
                             (subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate)) / 10000
                           ) * 10000;
                         const total = vatIncluded ? toVatInclusiveManwon(exclusiveTotal) : exclusiveTotal;
-                        const isChild = idxInGroup > 0 || isAdditionalEstimateTitle(est.title);
+                        const isChild = idxInGroup > 0;
                         const projectTitle = group.projectTitle || "-";
-                        const shownTitle = isChild ? `ㄴ ${projectTitle}` : projectTitle;
+                        const shownTitle = estimateListTitle(projectTitle, isChild);
                         const titleSpan = <span className="text-blue-600 hover:underline">{shownTitle}</span>;
                         return (
                           <tr
@@ -758,7 +762,35 @@ export default function SettlementPage() {
                             className={`text-gray-700 hover:bg-gray-50 cursor-pointer ${isChild ? "bg-sky-50" : ""}`}
                           >
                             <td className="row-actions-sticky p-2 align-middle font-medium sm:p-3">
-                              <div className="max-w-[18rem] truncate" title={shownTitle}>{titleSpan}</div>
+                              <div className="flex items-center gap-1">
+                                {childCount > 0 ? (
+                                  isChild ? (
+                                    <span className="inline-block w-6 shrink-0" aria-hidden />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCollapsedGroupKeys((prev) => ({
+                                          ...prev,
+                                          [group.key]: !prev[group.key],
+                                        }));
+                                      }}
+                                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs text-gray-500 hover:bg-gray-200"
+                                      aria-expanded={!collapsed}
+                                      aria-label={collapsed ? "추가 견적 펼치기" : "추가 견적 접기"}
+                                    >
+                                      {collapsed ? "▶" : "▼"}
+                                    </button>
+                                  )
+                                ) : null}
+                                <div className="max-w-[18rem] truncate" title={shownTitle}>
+                                  {titleSpan}
+                                  {!isChild && collapsed && childCount > 0 ? (
+                                    <span className="ml-2 text-xs font-normal text-sky-700">추가 {childCount}건</span>
+                                  ) : null}
+                                </div>
+                              </div>
                             </td>
                             <td className="p-2 sm:p-3">{formatDateYMD(est.estimateDate)}</td>
                             <td className="p-2 sm:p-3">{est.customerName || "-"}</td>
@@ -773,7 +805,8 @@ export default function SettlementPage() {
                         );
                       })}
                     </React.Fragment>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -797,7 +830,7 @@ export default function SettlementPage() {
         <div className="space-y-4">
           <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm">
             <p className="font-medium text-gray-900">
-              {(estimate.displayTitle || estimate.consultationTitle || estimate.title || "").trim() || "제목 없음"}
+              {titleWithAdditionalMark(estimate)}
             </p>
             <p className="mt-1 text-gray-600">
               {estimate.customerName && <span>고객: {estimate.customerName}</span>}
@@ -1184,7 +1217,7 @@ export default function SettlementPage() {
           <header className="settlement-print-header">
             <h1 className="settlement-print-title">정산서</h1>
             <p className="settlement-print-subtitle">
-              {(estimate.displayTitle || estimate.consultationTitle || estimate.title || "").trim() || "제목 없음"}
+              {titleWithAdditionalMark(estimate)}
             </p>
             <table className="settlement-print-customer">
               <tbody>
