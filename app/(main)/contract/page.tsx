@@ -13,6 +13,7 @@ import {
 import { computePaymentScheduleForDisplay, parseInterimLinesFromDetails, isVatIncluded, vatLabelText } from "@/lib/contractPaymentSchedule";
 import { resolveContractBodyPdfUrl } from "@/lib/renderPdfUrlToPageImages";
 import { compareImportantFirst } from "@/lib/importantSort";
+import { COMPLETED_CONSULTATION_STATUSES } from "@/lib/constructionPhase";
 
 type Contract = {
   id: number;
@@ -1139,6 +1140,8 @@ function ContractForm({
 
 export default function ContractPage() {
   const [contracts, setContracts] = useState<Contract[]>([]);
+  /** 목록에서 완료 건 보기: 기본 꺼짐 (연결된 상담이 완료/완료및정산인 계약 숨김) */
+  const [showCompletedInList, setShowCompletedInList] = useState(false);
   const [formOpen, setFormOpen] = useState<"new" | number | null>(null);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [sourceType, setSourceType] = useState<"consultation" | "estimate">("consultation");
@@ -1293,6 +1296,14 @@ export default function ContractPage() {
       .then((res) => res.json())
       .then((data) => (Array.isArray(data) ? setContracts(data) : setContracts([])))
       .catch(() => setContracts([]));
+    fetch("/api/consultations")
+      .then((res) => res.json())
+      .then((list) => setConsultations(Array.isArray(list) ? list : []))
+      .catch(() => setConsultations([]));
+    fetch("/api/estimates")
+      .then((res) => res.json())
+      .then((list) => setEstimates(Array.isArray(list) ? list : []))
+      .catch(() => setEstimates([]));
   };
 
   useEffect(() => {
@@ -1300,8 +1311,17 @@ export default function ContractPage() {
   }, []);
 
   const filteredContracts = useMemo(() => {
-    return contracts;
-  }, [contracts]);
+    return contracts.filter((contract) => {
+      if (showCompletedInList) return true;
+      const consultationId =
+        contract.consultationId ??
+        estimates.find((e) => e.id === contract.estimateId)?.consultationId;
+      if (consultationId == null) return true;
+      const consultation = consultations.find((c) => c.id === consultationId);
+      if (!consultation) return true;
+      return !COMPLETED_CONSULTATION_STATUSES.has(String(consultation.status ?? "").trim());
+    });
+  }, [contracts, consultations, estimates, showCompletedInList]);
 
   /** 견적 선택 모달: 상담이 남아 있는 견적만, 완료 상담 제외 */
   const estimatesToShowInModal = useMemo(() => {
@@ -1538,6 +1558,17 @@ export default function ContractPage() {
       ) : (
         <>
           <p className="text-sm text-gray-500">저장된 계약 목록입니다. 서명 요청 링크를 발송하거나 완료 건을 확인할 수 있습니다.</p>
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showCompletedInList}
+                onChange={(e) => setShowCompletedInList(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              완료 건 보기
+            </label>
+          </div>
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full min-w-[640px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
@@ -1555,7 +1586,9 @@ export default function ContractPage() {
                 {filteredContracts.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="p-8 text-center text-gray-500">
-                      저장된 계약이 없습니다. &quot;신규 계약&quot;으로 작성해 보세요.
+                      {contracts.length === 0
+                        ? "저장된 계약이 없습니다. \"신규 계약\"으로 작성해 보세요."
+                        : "표시할 계약이 없습니다. '완료 건 보기'를 켜 보세요."}
                     </td>
                   </tr>
                 ) : (
