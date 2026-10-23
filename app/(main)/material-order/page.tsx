@@ -1296,7 +1296,7 @@ export function MaterialOrderPage() {
                                 ) : (
                                 <div className="material-order-edit-table-wrap overflow-x-auto">
                           <table
-                            className="material-order-edit-table w-full min-w-[980px] border-collapse text-left text-sm"
+                            className="material-order-edit-table w-full min-w-[1080px] border-collapse text-left text-sm"
                             style={{ border: "1px solid #374151" }}
                           >
                             <thead>
@@ -1310,10 +1310,10 @@ export function MaterialOrderPage() {
                                 </th>
                                 <th className="w-56 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
                                 <th className="w-48 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
-                                <th className="w-12 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>단위</th>
-                                <th className="w-16 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>수량</th>
-                                <th className="w-24 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>단가</th>
-                                <th className="w-24 whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>자재 금액</th>
+                                <th className="w-14 min-w-[3.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>단위</th>
+                                <th className="w-28 min-w-[5.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>수량</th>
+                                <th className="w-32 min-w-[6.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>단가</th>
+                                <th className="w-28 min-w-[6rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>자재 금액</th>
                                 <th className="min-w-[140px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비고</th>
                                 <th className="material-order-link-col hidden md:table-cell min-w-[220px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비밀몰 링크</th>
                                 <th className="w-14 whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium" style={{ border: "1px solid #374151" }}>삭제</th>
@@ -1331,12 +1331,12 @@ export function MaterialOrderPage() {
                                     </td>
                                     <td className="min-w-[220px] border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
                                     <td className="min-w-[180px] border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
-                                    <td className="border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
-                                    <td className="border border-gray-300 px-2 py-1 text-right text-gray-800">{formatNum(Number(it.qty) || 0)}</td>
-                                    <td className="border border-gray-300 px-2 py-1 text-right text-gray-800">
+                                    <td className="min-w-[3.5rem] border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
+                                    <td className="min-w-[5.5rem] border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">{formatNum(Number(it.qty) || 0)}</td>
+                                    <td className="min-w-[6.5rem] border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">
                                       {formatNum(Number(it.materialUnitPrice ?? it.unitPrice ?? 0) || 0)}
                                     </td>
-                                    <td className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-900">
+                                    <td className="min-w-[6rem] border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
                                       {formatNum(materialAmount(it))}
                                     </td>
                                     <td className="border border-gray-300 p-0">
@@ -1492,7 +1492,7 @@ export function MaterialOrderPage() {
                                         className="h-full min-h-[28px] w-full min-w-[180px] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 p-0">
+                                    <td className="min-w-[3.5rem] border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         value={row.unit}
@@ -1508,10 +1508,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={2}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full min-w-[3rem] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 p-0">
+                                    <td className="min-w-[5.5rem] border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         inputMode="decimal"
@@ -1528,10 +1528,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={3}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-right text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full min-w-[4.5rem] border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 p-0">
+                                    <td className="min-w-[6.5rem] border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         inputMode="decimal"
@@ -1548,10 +1548,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={4}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-right text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full min-w-[5.5rem] border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="border border-gray-300 px-2 py-1 text-right font-medium text-gray-900">
+                                    <td className="min-w-[6rem] border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
                                       {formatNum(amount)}
                                     </td>
                                     <td className="border border-gray-300 p-0">

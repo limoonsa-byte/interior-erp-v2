@@ -2492,7 +2492,7 @@ body {
     position: relative;
   }
   .material-order-edit-table {
-    min-width: 860px !important;
+    min-width: 1080px !important;
   }
   .material-order-edit-table th,
   .material-order-edit-table td {
