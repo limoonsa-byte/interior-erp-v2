@@ -7,6 +7,22 @@ import { compareImportantFirst } from "@/lib/importantSort";
 import { isVisibleInConstructionMenus } from "@/lib/constructionPhase";
 import { useAutoSave } from "@/hooks/useAutoSave";
 import { AutoSaveStatus } from "@/components/AutoSaveStatus";
+import { ResizableTh } from "@/components/table/ResizableTh";
+import { useResizableTableColumns } from "@/lib/useResizableTableColumns";
+
+const MATERIAL_ORDER_COLUMN_WIDTHS_KEY = "material-order-edit-column-widths-v1";
+const MATERIAL_ORDER_COLUMN_DEFAULTS = {
+  category: 224,
+  spec: 192,
+  unit: 56,
+  qty: 88,
+  price: 112,
+  amount: 104,
+  note: 140,
+  shopLink: 220,
+} as const;
+const MATERIAL_ORDER_GRIP_COL = 36;
+const MATERIAL_ORDER_DELETE_COL = 56;
 
 type EstimateItem = {
   processGroup?: string;
@@ -154,6 +170,17 @@ function moveRowInArray<T>(arr: T[], fromIndex: number, toFinal: number): T[] {
 }
 
 export function MaterialOrderPage() {
+  const {
+    widths: colWidths,
+    startResize: startColumnResize,
+    resetWidths: resetColumnWidths,
+    tableMinWidth,
+  } = useResizableTableColumns(MATERIAL_ORDER_COLUMN_WIDTHS_KEY, {
+    ...MATERIAL_ORDER_COLUMN_DEFAULTS,
+  });
+  const orderTableMinWidth =
+    tableMinWidth + MATERIAL_ORDER_GRIP_COL + MATERIAL_ORDER_DELETE_COL;
+
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [picList, setPicList] = useState<PicItem[]>([]);
@@ -1199,7 +1226,17 @@ export function MaterialOrderPage() {
                     >
                       전체 펼치기
                     </button>
+                    <span className="text-gray-400">|</span>
+                    <button
+                      type="button"
+                      onClick={resetColumnWidths}
+                      className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                      title="표 헤더 사이 경계를 드래그해 칸 너비를 조절할 수 있습니다"
+                    >
+                      칸 너비 초기화
+                    </button>
                   </div>
+                  <p className="mt-1 text-xs text-gray-500">표 헤더 사이(품목·규격·수량 등) 경계를 드래그하면 칸을 넓히거나 줄일 수 있습니다.</p>
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-blue-50/80 px-4 py-2.5 text-sm">
                   <span className="font-medium text-gray-700">발주 금액 합계 (모든 유형)</span>
@@ -1296,27 +1333,110 @@ export function MaterialOrderPage() {
                                 ) : (
                                 <div className="material-order-edit-table-wrap overflow-x-auto">
                           <table
-                            className="material-order-edit-table w-full min-w-[1080px] border-collapse text-left text-sm"
-                            style={{ border: "1px solid #374151" }}
+                            className="material-order-edit-table w-full table-fixed border-collapse text-left text-sm"
+                            style={{ border: "1px solid #374151", minWidth: orderTableMinWidth }}
                           >
+                            <colgroup>
+                              <col style={{ width: MATERIAL_ORDER_GRIP_COL }} />
+                              <col style={{ width: colWidths.category }} />
+                              <col style={{ width: colWidths.spec }} />
+                              <col style={{ width: colWidths.unit }} />
+                              <col style={{ width: colWidths.qty }} />
+                              <col style={{ width: colWidths.price }} />
+                              <col style={{ width: colWidths.amount }} />
+                              <col style={{ width: colWidths.note }} />
+                              <col className="hidden md:table-column" style={{ width: colWidths.shopLink }} />
+                              <col style={{ width: MATERIAL_ORDER_DELETE_COL }} />
+                            </colgroup>
                             <thead>
                               <tr className="bg-gray-200 text-gray-800">
                                 <th
-                                  className="w-9 whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium"
-                                  style={{ border: "1px solid #374151" }}
+                                  className="whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium"
+                                  style={{
+                                    border: "1px solid #374151",
+                                    width: MATERIAL_ORDER_GRIP_COL,
+                                    minWidth: MATERIAL_ORDER_GRIP_COL,
+                                    maxWidth: MATERIAL_ORDER_GRIP_COL,
+                                  }}
                                   title="끌어서 순서 변경"
                                 >
                                   <span className="sr-only">순서</span>
                                 </th>
-                                <th className="w-56 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>품목</th>
-                                <th className="w-48 whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>규격</th>
-                                <th className="w-14 min-w-[3.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>단위</th>
-                                <th className="w-28 min-w-[5.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>수량</th>
-                                <th className="w-32 min-w-[6.5rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>단가</th>
-                                <th className="w-28 min-w-[6rem] whitespace-nowrap border border-gray-500 px-2 py-1.5 text-right font-medium" style={{ border: "1px solid #374151" }}>자재 금액</th>
-                                <th className="min-w-[140px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비고</th>
-                                <th className="material-order-link-col hidden md:table-cell min-w-[220px] whitespace-nowrap border border-gray-500 px-2 py-1.5 font-medium" style={{ border: "1px solid #374151" }}>비밀몰 링크</th>
-                                <th className="w-14 whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium" style={{ border: "1px solid #374151" }}>삭제</th>
+                                <ResizableTh
+                                  colId="category"
+                                  width={colWidths.category}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-left font-medium"
+                                >
+                                  품목
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="spec"
+                                  width={colWidths.spec}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-left font-medium"
+                                >
+                                  규격
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="unit"
+                                  width={colWidths.unit}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-left font-medium"
+                                >
+                                  단위
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="qty"
+                                  width={colWidths.qty}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-right font-medium"
+                                >
+                                  수량
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="price"
+                                  width={colWidths.price}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-right font-medium"
+                                >
+                                  단가
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="amount"
+                                  width={colWidths.amount}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-right font-medium"
+                                >
+                                  자재 금액
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="note"
+                                  width={colWidths.note}
+                                  onResizeStart={startColumnResize}
+                                  className="border border-gray-500 px-2 py-1.5 text-left font-medium"
+                                >
+                                  비고
+                                </ResizableTh>
+                                <ResizableTh
+                                  colId="shopLink"
+                                  width={colWidths.shopLink}
+                                  onResizeStart={startColumnResize}
+                                  className="material-order-link-col hidden border border-gray-500 px-2 py-1.5 text-left font-medium md:table-cell"
+                                >
+                                  비밀몰 링크
+                                </ResizableTh>
+                                <th
+                                  className="whitespace-nowrap border border-gray-500 px-1 py-1.5 text-center font-medium"
+                                  style={{
+                                    border: "1px solid #374151",
+                                    width: MATERIAL_ORDER_DELETE_COL,
+                                    minWidth: MATERIAL_ORDER_DELETE_COL,
+                                    maxWidth: MATERIAL_ORDER_DELETE_COL,
+                                  }}
+                                >
+                                  삭제
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1329,14 +1449,14 @@ export function MaterialOrderPage() {
                                     <td className="border border-gray-300 px-1 py-1 text-center text-gray-300" style={{ border: "1px solid #d1d5db" }}>
                                       <span className="inline-block w-4" aria-hidden />
                                     </td>
-                                    <td className="min-w-[220px] border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
-                                    <td className="min-w-[180px] border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
-                                    <td className="min-w-[3.5rem] border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
-                                    <td className="min-w-[5.5rem] border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">{formatNum(Number(it.qty) || 0)}</td>
-                                    <td className="min-w-[6.5rem] border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-gray-800">{it.category ?? ""}</td>
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-gray-700">{it.spec ?? ""}</td>
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-gray-700">{it.unit ?? ""}</td>
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">{formatNum(Number(it.qty) || 0)}</td>
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-right tabular-nums text-gray-800">
                                       {formatNum(Number(it.materialUnitPrice ?? it.unitPrice ?? 0) || 0)}
                                     </td>
-                                    <td className="min-w-[6rem] border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
                                       {formatNum(materialAmount(it))}
                                     </td>
                                     <td className="border border-gray-300 p-0">
@@ -1351,7 +1471,7 @@ export function MaterialOrderPage() {
                                         data-order-row={idx}
                                         data-order-col={6}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[120px] border-0 bg-transparent px-2 py-1 text-sm text-gray-700 focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm text-gray-700 focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
                                     <td className="material-order-link-col hidden md:table-cell border border-gray-300 px-2 py-1">
@@ -1469,7 +1589,7 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={0}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[220px] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                         title="마스터관리에서 등록한 품목 목록에서 선택하거나 직접 입력할 수 있습니다."
                                       />
                                     </td>
@@ -1489,10 +1609,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={1}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[180px] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="min-w-[3.5rem] border border-gray-300 p-0">
+                                    <td className="border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         value={row.unit}
@@ -1508,10 +1628,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={2}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[3rem] border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-sm focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="min-w-[5.5rem] border border-gray-300 p-0">
+                                    <td className="border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         inputMode="decimal"
@@ -1528,10 +1648,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={3}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[4.5rem] border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="min-w-[6.5rem] border border-gray-300 p-0">
+                                    <td className="border border-gray-300 p-0">
                                       <input
                                         type="text"
                                         inputMode="decimal"
@@ -1548,10 +1668,10 @@ export function MaterialOrderPage() {
                                         data-order-row={addedRowIndex}
                                         data-order-col={4}
                                         onKeyDown={handleOrderTableKeyDown}
-                                        className="h-full min-h-[28px] w-full min-w-[5.5rem] border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
+                                        className="h-full min-h-[28px] w-full border-0 bg-transparent px-2 py-1 text-right text-sm tabular-nums focus:bg-blue-50/50 focus:outline-none"
                                       />
                                     </td>
-                                    <td className="min-w-[6rem] border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
+                                    <td className="overflow-hidden border border-gray-300 px-2 py-1 text-right font-medium tabular-nums text-gray-900">
                                       {formatNum(amount)}
                                     </td>
                                     <td className="border border-gray-300 p-0">
