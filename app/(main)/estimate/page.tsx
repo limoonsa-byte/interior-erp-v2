@@ -2943,13 +2943,13 @@ export default function EstimatePage() {
             <table className="w-full min-w-[680px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="row-actions-sticky w-36 p-2 text-center sm:hidden" aria-label="작업" />
+                  <th className="row-actions-sticky w-44 p-2 text-center sm:hidden" aria-label="작업" />
                   <th className="p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
-                  <th className="hidden w-40 p-2 sm:table-cell sm:p-3" />
+                  <th className="hidden min-w-[11rem] whitespace-nowrap p-2 sm:table-cell sm:p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -2980,15 +2980,17 @@ export default function EstimatePage() {
                         const prRate = (Number(est.profitPercent) ?? 10) / 100;
                         const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
                         const actions = (
-                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                          <div className="flex shrink-0 flex-nowrap items-center gap-1 whitespace-nowrap">
                             <button
                               type="button"
                               onClick={() => setFormOpen(est.id)}
-                              className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
+                              className="rounded px-1.5 py-1 text-blue-600 hover:underline active:bg-blue-50"
                             >
                               수정
                             </button>
-                            <span className="text-gray-300">|</span>
+                            <span className="text-gray-300" aria-hidden>
+                              |
+                            </span>
                             <button
                               type="button"
                               onClick={() => {
@@ -3014,12 +3016,14 @@ export default function EstimatePage() {
                                 setFormResetToken((v) => v + 1);
                                 setFormOpen("new");
                               }}
-                              className="rounded px-2 py-1 text-sky-700 hover:underline active:bg-sky-50"
+                              className="rounded px-1.5 py-1 text-sky-700 hover:underline active:bg-sky-50"
                               title="항목·단가까지 복사해 새 견적으로 작성"
                             >
                               복사
                             </button>
-                            <span className="text-gray-300">|</span>
+                            <span className="text-gray-300" aria-hidden>
+                              |
+                            </span>
                             <button
                               type="button"
                               onClick={() => {
@@ -3028,7 +3032,7 @@ export default function EstimatePage() {
                                   .then((res) => res.ok && load())
                                   .catch(() => alert("삭제 실패"));
                               }}
-                              className="rounded px-2 py-1 text-red-500 hover:underline active:bg-red-50"
+                              className="rounded px-1.5 py-1 text-red-500 hover:underline active:bg-red-50"
                             >
                               삭제
                             </button>
