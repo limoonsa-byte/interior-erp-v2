@@ -1716,14 +1716,14 @@ function EstimateForm({
         </div>
       )}
       <div className="estimate-edit-table-wrap overflow-x-auto -mx-4 sm:-mx-6 md:mx-0 px-4 sm:px-6 md:px-0">
-        <table className="estimate-edit-table w-full min-w-[860px] md:min-w-[980px] border-collapse text-sm">
+        <table className="estimate-edit-table w-full min-w-[920px] md:min-w-[1040px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-left text-gray-700">
               <th className="p-2 w-16 whitespace-nowrap" title="끌어서 항목 순서 변경">No</th>
               <th className="p-2 whitespace-nowrap">품목</th>
               <th className="p-2 whitespace-nowrap">규격</th>
               <th className="p-2 w-24 whitespace-nowrap text-center">단위</th>
-              <th className="p-2 w-20 whitespace-nowrap text-center">수량</th>
+              <th className="p-2 w-28 min-w-[5.5rem] whitespace-nowrap text-center">수량</th>
               <th className="p-2 w-28 whitespace-nowrap">재료비단가</th>
               <th className="p-2 w-28 whitespace-nowrap">재료비금액</th>
               <th className="p-2 w-28 whitespace-nowrap">노무비단가</th>
@@ -1985,14 +1985,14 @@ function EstimateForm({
                           placeholder="식, m²"
                         />
                       </td>
-                      <td className="p-2">
+                      <td className="p-2 min-w-[5.5rem]">
                         <input
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={3}
                           inputMode="decimal"
                           autoComplete="off"
-                          className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          className="w-full min-w-[4.5rem] rounded border border-gray-300 px-2 py-1 text-sm text-center tabular-nums"
                           style={rowTextStyle}
                           value={displayNumericField(item.qty, true)}
                           onCompositionEnd={(e) => {
@@ -2003,7 +2003,7 @@ function EstimateForm({
                             const raw = sanitizeSignedDecimal(e.target.value);
                             updateItem(origIdx, "qty", raw === "" ? "" : raw);
                           }}
-                          placeholder="숫자 (음수·소수)"
+                          placeholder="수량"
                         />
                       </td>
                       <td className="p-2">
