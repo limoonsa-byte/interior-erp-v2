@@ -119,6 +119,27 @@ function formatDateYMD(dateStr: string | undefined): string {
   return `${y}-${m}-${day}`;
 }
 
+/** 견적 항목 글자색. 기본 검정, 강조용 빨강/파랑/초록 */
+type EstimateItemTextColor = "black" | "red" | "blue" | "green";
+
+const ESTIMATE_ITEM_TEXT_COLORS: { value: EstimateItemTextColor; label: string; hex: string }[] = [
+  { value: "black", label: "검정", hex: "#111827" },
+  { value: "red", label: "빨강", hex: "#dc2626" },
+  { value: "blue", label: "파랑", hex: "#2563eb" },
+  { value: "green", label: "초록", hex: "#16a34a" },
+];
+
+function normalizeItemTextColor(value: unknown): EstimateItemTextColor {
+  const v = String(value ?? "").trim().toLowerCase();
+  if (v === "red" || v === "blue" || v === "green") return v;
+  return "black";
+}
+
+function itemTextColorHex(value: unknown): string {
+  const color = normalizeItemTextColor(value);
+  return ESTIMATE_ITEM_TEXT_COLORS.find((c) => c.value === color)?.hex ?? "#111827";
+}
+
 type EstimateItem = {
   processGroup?: string;
   category: string;
@@ -131,6 +152,8 @@ type EstimateItem = {
   laborUnitPrice?: number | string;
   unitPrice?: number;
   note: string;
+  /** 항목 글자색 (검정/빨강/파랑/초록) */
+  textColor?: EstimateItemTextColor;
 };
 
 /** 스마트 현장관리에서 보내는 데이터 형식 (해당 앱에서 postMessage로 전달 시 사용) */
@@ -182,6 +205,7 @@ const emptyItem: EstimateItem = {
   materialUnitPrice: 0,
   laborUnitPrice: 0,
   note: "",
+  textColor: "black",
 };
 
 const ESTIMATE_ITEM_DND_MIME = "application/x-estimate-item-row";
@@ -387,6 +411,7 @@ function EstimateForm({
           qty: parseQty(i.qty),
           materialUnitPrice: Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0,
           laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
+          textColor: normalizeItemTextColor(i.textColor),
         }))
       : [{ ...emptyItem }]
   );
@@ -705,6 +730,7 @@ function EstimateForm({
       qty: "",
       materialUnitPrice: Number(i.materialUnitPrice ?? (i as EstimateItem & { unitPrice?: number }).unitPrice ?? 0) || 0,
       laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
+      textColor: normalizeItemTextColor(i.textColor),
     }));
     setItems(normalized.length > 0 ? normalized : [{ ...emptyItem }]);
     if (t.processOrder && t.processOrder.length > 0) setProcessOrder(t.processOrder);
@@ -748,6 +774,7 @@ function EstimateForm({
         materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
         laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
         note: it.note,
+        textColor: normalizeItemTextColor(it.textColor),
       })),
       processOrder,
       note,
@@ -1204,6 +1231,7 @@ function EstimateForm({
             materialUnitPrice: Number(it.materialUnitPrice ?? 0) || 0,
             laborUnitPrice: Number(it.laborUnitPrice ?? 0) || 0,
             note: it.note,
+            textColor: normalizeItemTextColor(it.textColor),
           })),
         };
         const url = isEdit ? `/api/estimates/${estimate.id}` : "/api/estimates";
@@ -1678,6 +1706,7 @@ function EstimateForm({
               <th className="p-2 w-28 whitespace-nowrap">금액</th>
               <th className="p-2 w-28 whitespace-nowrap">합산금액</th>
               <th className="p-2 whitespace-nowrap">비고</th>
+              <th className="w-14 p-2 text-center whitespace-nowrap" title="항목 글자색">색</th>
               <th className="w-10 p-2" />
             </tr>
           </thead>
@@ -1780,6 +1809,7 @@ function EstimateForm({
                     <td className="p-2 text-right tabular-nums font-semibold text-gray-900">{formatNumber(runningTotal)}</td>
                     <td className="p-2" />
                     <td className="p-2" />
+                    <td className="p-2" />
                   </tr>
                 );
                 if (isCollapsed) return;
@@ -1789,6 +1819,8 @@ function EstimateForm({
                   const currentDataRow = dataRowIndex++;
                   const isDragging = draggingItemIndex === origIdx;
                   const isDragOver = dragOverItem?.index === origIdx;
+                  const rowColor = itemTextColorHex(item.textColor);
+                  const rowTextStyle = { color: rowColor } as React.CSSProperties;
                   rows.push(
                     <tr
                       key={`item-${origIdx}`}
@@ -1799,6 +1831,7 @@ function EstimateForm({
                             : "border-b-2 border-b-blue-500"
                           : ""
                       }`}
+                      style={rowTextStyle}
                       onDragOver={(e) => {
                         if (e.dataTransfer.types.includes(ESTIMATE_ITEM_DND_MIME)) {
                           e.preventDefault();
@@ -1822,7 +1855,7 @@ function EstimateForm({
                         }
                       }}
                     >
-                      <td className="p-2 font-mono text-gray-600">
+                      <td className="p-2 font-mono" style={rowTextStyle}>
                         <div className="flex items-center gap-0.5">
                           <button
                             type="button"
@@ -1854,6 +1887,7 @@ function EstimateForm({
                           data-estimate-row={currentDataRow}
                           data-estimate-col={0}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-category` ? composition.value : (item.category ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-category`, value: item.category ?? "" })}
                           onCompositionEnd={(e) => {
@@ -1878,6 +1912,7 @@ function EstimateForm({
                           data-estimate-row={currentDataRow}
                           data-estimate-col={1}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-spec` ? composition.value : (item.spec ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-spec`, value: item.spec ?? "" })}
                           onCompositionEnd={(e) => {
@@ -1902,6 +1937,7 @@ function EstimateForm({
                           data-estimate-row={currentDataRow}
                           data-estimate-col={2}
                           className="w-full min-w-[56px] rounded border border-gray-300 px-2 py-1 text-center text-sm"
+                          style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-unit` ? composition.value : (item.unit ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-unit`, value: item.unit ?? "" })}
                           onCompositionEnd={(e) => {
@@ -1929,6 +1965,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={displayNumericField(item.qty, true)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
@@ -1950,6 +1987,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={displayNumericField(item.materialUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
@@ -1962,7 +2000,7 @@ function EstimateForm({
                           placeholder="숫자 (음수·소수)"
                         />
                       </td>
-                      <td className="p-2 text-right font-medium">{formatNumber(materialAmount(item))}</td>
+                      <td className="p-2 text-right font-medium" style={rowTextStyle}>{formatNumber(materialAmount(item))}</td>
                       <td className="p-2">
                         <input
                           type="text"
@@ -1972,6 +2010,7 @@ function EstimateForm({
                           autoComplete="off"
                           lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={displayNumericField(item.laborUnitPrice)}
                           onCompositionEnd={(e) => {
                             const raw = sanitizeSignedDecimal(e.currentTarget.value);
@@ -1984,8 +2023,8 @@ function EstimateForm({
                           placeholder="숫자 (음수·소수)"
                         />
                       </td>
-                      <td className="p-2 text-right font-medium">{formatNumber(laborAmount(item))}</td>
-                      <td className="p-2 text-right font-medium">{formatNumber(amount(item))}</td>
+                      <td className="p-2 text-right font-medium" style={rowTextStyle}>{formatNumber(laborAmount(item))}</td>
+                      <td className="p-2 text-right font-medium" style={rowTextStyle}>{formatNumber(amount(item))}</td>
                       <td className="p-2" />
                       <td className="p-2">
                         <input
@@ -1993,6 +2032,7 @@ function EstimateForm({
                           data-estimate-row={currentDataRow}
                           data-estimate-col={6}
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
+                          style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-note` ? composition.value : (item.note ?? "")}
                           onCompositionStart={() => setComposition({ key: `item-${origIdx}-note`, value: item.note ?? "" })}
                           onCompositionEnd={(e) => {
@@ -2010,6 +2050,24 @@ function EstimateForm({
                           }}
                           placeholder="비고"
                         />
+                      </td>
+                      <td className="p-2">
+                        <div className="flex items-center justify-center gap-1" title="항목 글자색">
+                          {ESTIMATE_ITEM_TEXT_COLORS.map((opt) => {
+                            const selected = normalizeItemTextColor(item.textColor) === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateItem(origIdx, "textColor", opt.value)}
+                                className={`h-4 w-4 rounded-full border ${selected ? "ring-2 ring-offset-1 ring-gray-500 border-gray-700" : "border-gray-300"}`}
+                                style={{ backgroundColor: opt.hex }}
+                                aria-label={`${opt.label} 글자색`}
+                                title={opt.label}
+                              />
+                            );
+                          })}
+                        </div>
                       </td>
                       <td className="p-2">
                         <button
@@ -2036,7 +2094,7 @@ function EstimateForm({
                     <td className="p-2 text-right">{formatNumber(groupLabor)}</td>
                     <td className="p-2 text-right">{formatNumber(groupTotal)}</td>
                     <td className="p-2" />
-                    <td className="p-2" colSpan={2} />
+                    <td className="p-2" colSpan={3} />
                   </tr>
                 );
               });
@@ -2262,8 +2320,10 @@ function EstimateForm({
                             }
                             visibleIndices.forEach((origIdx, subNo) => {
                               const item = items[origIdx];
+                              const previewColor = itemTextColorHex(item.textColor);
+                              const previewStyle = { color: previewColor } as React.CSSProperties;
                               rows.push(
-                                <tr key={origIdx}>
+                                <tr key={origIdx} style={previewStyle}>
                                   <td className="border border-gray-300 p-1.5">{subNo + 1}</td>
                                   <td className="border border-gray-300 p-1.5 estimate-preview-item-col">{item.category ?? ""}</td>
                                   <td className="border border-gray-300 p-1.5">{item.spec ?? ""}</td>
