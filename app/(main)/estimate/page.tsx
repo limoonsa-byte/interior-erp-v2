@@ -194,6 +194,14 @@ type ConsultationPreFill = {
   titleSuggestion?: string;
   /** + 추가 견적서 작성으로 연 경우 */
   additional?: boolean;
+  /** 목록「복사」: 항목·비율 등까지 새 견적 폼에 채움 */
+  copyFrom?: {
+    note?: string;
+    overheadPercent?: number;
+    profitPercent?: number;
+    processOrder?: string[];
+    items?: EstimateItem[];
+  };
 };
 
 const emptyItem: EstimateItem = {
@@ -207,6 +215,33 @@ const emptyItem: EstimateItem = {
   note: "",
   textColor: "black",
 };
+
+function mapItemsForForm(source: EstimateItem[] | undefined): EstimateItem[] {
+  if (!source?.length) return [{ ...emptyItem }];
+  return source.map((i) => ({
+    ...emptyItem,
+    ...i,
+    processGroup: i.processGroup ?? "",
+    qty: parseQty(i.qty),
+    materialUnitPrice: Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0,
+    laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
+    textColor: normalizeItemTextColor(i.textColor),
+  }));
+}
+
+function processOrderFromItems(items: EstimateItem[] | undefined, saved?: string[]): string[] {
+  if (saved && saved.length > 0) return saved;
+  const order: string[] = [];
+  const seen = new Set<string>();
+  (items ?? []).forEach((i) => {
+    const g = i.processGroup ?? "";
+    if (g && !seen.has(g)) {
+      seen.add(g);
+      order.push(g);
+    }
+  });
+  return order;
+}
 
 const ESTIMATE_ITEM_DND_MIME = "application/x-estimate-item-row";
 
@@ -385,6 +420,7 @@ function EstimateForm({
   onCancel: () => void;
 }) {
   const isEdit = estimate !== null;
+  const isCopy = !isEdit && !!consultationPreFill?.copyFrom;
   const showAdditionalMark = isAdditional || (!isEdit && !!consultationPreFill?.additional);
   const [customerName, setCustomerName] = useState(estimate?.customerName ?? consultationPreFill?.customerName ?? "");
   const [contact, setContact] = useState(estimate?.contact ?? consultationPreFill?.contact ?? "");
@@ -396,24 +432,22 @@ function EstimateForm({
     ? `(추가) ${title.trim() || "-"}`
     : title.trim() || "-";
   const [estimateDate, setEstimateDate] = useState(() => {
-    const from = estimate?.estimateDate;
-    return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
+    // 복사는 오늘 날짜로 새 견적 작성. 수정만 원본 견적일자 유지
+    if (isEdit) {
+      const from = estimate?.estimateDate;
+      return typeof from === "string" && from.trim() ? from.trim() : getTodayDateLocal();
+    }
+    return getTodayDateLocal();
   });
-  const [note, setNote] = useState(estimate?.note ?? "");
-  const [overheadPercent, setOverheadPercent] = useState(estimate?.overheadPercent ?? 5);
-  const [profitPercent, setProfitPercent] = useState(estimate?.profitPercent ?? 10);
-  const [items, setItems] = useState<EstimateItem[]>(
-    estimate?.items?.length
-      ? estimate.items.map((i) => ({
-          ...emptyItem,
-          ...i,
-          processGroup: i.processGroup ?? "",
-          qty: parseQty(i.qty),
-          materialUnitPrice: Number(i.materialUnitPrice ?? i.unitPrice ?? 0) || 0,
-          laborUnitPrice: Number(i.laborUnitPrice ?? 0) || 0,
-          textColor: normalizeItemTextColor(i.textColor),
-        }))
-      : [{ ...emptyItem }]
+  const [note, setNote] = useState(estimate?.note ?? consultationPreFill?.copyFrom?.note ?? "");
+  const [overheadPercent, setOverheadPercent] = useState(
+    estimate?.overheadPercent ?? consultationPreFill?.copyFrom?.overheadPercent ?? 5
+  );
+  const [profitPercent, setProfitPercent] = useState(
+    estimate?.profitPercent ?? consultationPreFill?.copyFrom?.profitPercent ?? 10
+  );
+  const [items, setItems] = useState<EstimateItem[]>(() =>
+    mapItemsForForm(estimate?.items?.length ? estimate.items : consultationPreFill?.copyFrom?.items)
   );
   const [saving, setSaving] = useState(false);
 
@@ -477,17 +511,13 @@ function EstimateForm({
   const [composition, setComposition] = useState<{ key: string; value: string } | null>(null);
   /** 공정 표시 순서 (맨 아래 추가·순서변경용). 저장된 값 또는 items에서 유지 순서로 추출 */
   const [processOrder, setProcessOrder] = useState<string[]>(() => {
-    if (estimate?.processOrder && estimate.processOrder.length > 0) return estimate.processOrder;
-    const order: string[] = [];
-    const seen = new Set<string>();
-    (estimate?.items ?? []).forEach((i) => {
-      const g = i.processGroup ?? "";
-      if (g && !seen.has(g)) {
-        seen.add(g);
-        order.push(g);
-      }
-    });
-    return order;
+    if (estimate != null) {
+      return processOrderFromItems(estimate.items, estimate.processOrder);
+    }
+    return processOrderFromItems(
+      consultationPreFill?.copyFrom?.items,
+      consultationPreFill?.copyFrom?.processOrder
+    );
   });
   const [processOrderModalOpen, setProcessOrderModalOpen] = useState(false);
   /** 공정 순서 ref - addNewSection에서 항상 맨 뒤에 추가되도록 최신값 참조 */
@@ -1354,6 +1384,11 @@ function EstimateForm({
       onChange={() => markDirty()}
       className="rounded-xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm"
     >
+      {isCopy ? (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+          견적 복사본입니다. 항목·단가는 그대로 채워져 있으며, 저장하면 같은 현장의 <strong>새 견적</strong>(추가)으로 등록됩니다.
+        </div>
+      ) : null}
       <div className="mb-6 grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <div className="mb-1 flex items-center justify-between gap-2">
@@ -2892,7 +2927,7 @@ export default function EstimatePage() {
         />
       ) : (
         <>
-          <p className="text-sm text-gray-500">저장된 견적 목록입니다. 수정·삭제하거나 신규 견적을 작성할 수 있습니다.</p>
+          <p className="text-sm text-gray-500">저장된 견적 목록입니다. 수정·복사·삭제하거나 신규 견적을 작성할 수 있습니다.</p>
           <div className="flex items-center gap-3 mb-2">
             <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-700">
               <input
@@ -2908,13 +2943,13 @@ export default function EstimatePage() {
             <table className="w-full min-w-[680px] text-left text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
               <thead className="border-b border-gray-200 bg-gray-50 text-gray-700">
                 <tr>
-                  <th className="row-actions-sticky w-24 p-2 text-center sm:hidden" aria-label="작업" />
+                  <th className="row-actions-sticky w-36 p-2 text-center sm:hidden" aria-label="작업" />
                   <th className="p-2 sm:p-3">프로젝트 제목</th>
                   <th className="p-2 sm:p-3">견적일자</th>
                   <th className="p-2 sm:p-3">고객명</th>
                   <th className="p-2 sm:p-3">연락처</th>
                   <th className="p-2 sm:p-3 text-right">합계</th>
-                  <th className="hidden w-28 p-2 sm:table-cell sm:w-24 sm:p-3" />
+                  <th className="hidden w-40 p-2 sm:table-cell sm:p-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -2945,13 +2980,44 @@ export default function EstimatePage() {
                         const prRate = (Number(est.profitPercent) ?? 10) / 100;
                         const total = subtotal + Math.floor(subtotal * ohRate) + Math.floor(subtotal * prRate);
                         const actions = (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                             <button
                               type="button"
                               onClick={() => setFormOpen(est.id)}
                               className="rounded px-2 py-1 text-blue-600 hover:underline active:bg-blue-50"
                             >
                               수정
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const projectTitle =
+                                  (est.consultationTitle || group.projectTitle || est.title || "").trim() ||
+                                  undefined;
+                                setConsultationPreFill({
+                                  customerName: est.customerName ?? "",
+                                  contact: est.contact ?? "",
+                                  address: est.address ?? "",
+                                  consultationId: est.consultationId,
+                                  pic: est.picName ?? "",
+                                  titleSuggestion: projectTitle,
+                                  additional: true,
+                                  copyFrom: {
+                                    note: est.note ?? "",
+                                    overheadPercent: est.overheadPercent ?? 5,
+                                    profitPercent: est.profitPercent ?? 10,
+                                    processOrder: est.processOrder,
+                                    items: (est.items ?? []).map((i) => ({ ...i })),
+                                  },
+                                });
+                                setFormResetToken((v) => v + 1);
+                                setFormOpen("new");
+                              }}
+                              className="rounded px-2 py-1 text-sky-700 hover:underline active:bg-sky-50"
+                              title="항목·단가까지 복사해 새 견적으로 작성"
+                            >
+                              복사
                             </button>
                             <span className="text-gray-300">|</span>
                             <button
