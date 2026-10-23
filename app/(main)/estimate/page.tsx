@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback } from "react";
 import { GripVertical } from "lucide-react";
 import { estimateListTitle, orderEstimateGroup, resolveGroupProjectTitle, isAdditionalEstimateTitle } from "@/lib/projectTitle";
 import { compareImportantFirst } from "@/lib/importantSort";
@@ -629,18 +629,43 @@ function EstimateForm({
       .catch(() => setSettlementPhaseAmount(null));
   }, [previewOpen, estimate?.id]);
 
+  /** 항목 추가 직후 품목(한글) 칸으로 포커스 — 버튼 클릭 후 IME가 영문으로 남는 것 방지 */
+  const pendingFocusItemIndexRef = useRef<number | null>(null);
+
   /** 해당 공정(그룹) 아래에 항목 한 줄 추가. indices = 그 그룹의 item 인덱스들 */
   const addRowToProcess = (processGroupName: string, indices: number[]) => {
     if (indices.length === 0) {
-      setItems((prev) => [...prev, { ...emptyItem, processGroup: processGroupName }]);
+      setItems((prev) => {
+        pendingFocusItemIndexRef.current = prev.length;
+        return [...prev, { ...emptyItem, processGroup: processGroupName }];
+      });
       return;
     }
     const lastIdx = Math.max(...indices);
     setItems((prev) => {
+      const insertAt = lastIdx + 1;
+      pendingFocusItemIndexRef.current = insertAt;
       const newItem: EstimateItem = { ...emptyItem, processGroup: processGroupName };
-      return [...prev.slice(0, lastIdx + 1), newItem, ...prev.slice(lastIdx + 1)];
+      return [...prev.slice(0, insertAt), newItem, ...prev.slice(insertAt)];
     });
   };
+
+  useLayoutEffect(() => {
+    const idx = pendingFocusItemIndexRef.current;
+    if (idx == null) return;
+    pendingFocusItemIndexRef.current = null;
+    const el = document.querySelector(
+      `input[data-estimate-item-index="${idx}"][data-estimate-col="0"]`
+    ) as HTMLInputElement | null;
+    if (!el) return;
+    el.focus();
+    // 일부 환경에서 버튼 클릭 후 영문 IME가 남는 경우, 한글 입력 필드로 다시 맞춰 줌
+    try {
+      el.lang = "ko";
+    } catch {
+      /* ignore */
+    }
+  }, [items]);
   /** 공정 추가: 새 공정을 제일 마지막(맨 밑)에 배치 */
   const addNewSection = () => {
     const newId = `\u200B${Date.now()}`;
@@ -1885,7 +1910,9 @@ function EstimateForm({
                         <input
                           type="text"
                           data-estimate-row={currentDataRow}
+                          data-estimate-item-index={origIdx}
                           data-estimate-col={0}
+                          lang="ko"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-category` ? composition.value : (item.category ?? "")}
@@ -1911,6 +1938,7 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={1}
+                          lang="ko"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-spec` ? composition.value : (item.spec ?? "")}
@@ -1936,6 +1964,7 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={2}
+                          lang="ko"
                           className="w-full min-w-[56px] rounded border border-gray-300 px-2 py-1 text-center text-sm"
                           style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-unit` ? composition.value : (item.unit ?? "")}
@@ -1963,7 +1992,6 @@ function EstimateForm({
                           data-estimate-col={3}
                           inputMode="decimal"
                           autoComplete="off"
-                          lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={displayNumericField(item.qty, true)}
@@ -1985,7 +2013,6 @@ function EstimateForm({
                           data-estimate-col={4}
                           inputMode="decimal"
                           autoComplete="off"
-                          lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={displayNumericField(item.materialUnitPrice)}
@@ -2008,7 +2035,6 @@ function EstimateForm({
                           data-estimate-col={5}
                           inputMode="decimal"
                           autoComplete="off"
-                          lang="en"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={displayNumericField(item.laborUnitPrice)}
@@ -2031,6 +2057,7 @@ function EstimateForm({
                           type="text"
                           data-estimate-row={currentDataRow}
                           data-estimate-col={6}
+                          lang="ko"
                           className="w-full rounded border border-gray-300 px-2 py-1 text-sm"
                           style={rowTextStyle}
                           value={composition?.key === `item-${origIdx}-note` ? composition.value : (item.note ?? "")}
