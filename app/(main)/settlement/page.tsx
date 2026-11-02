@@ -1193,6 +1193,13 @@ export default function SettlementPage() {
               </span>
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => setSelectedId(null)}
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 no-print"
+          >
+            ← 목록으로
+          </button>
         </div>
       )}
 
