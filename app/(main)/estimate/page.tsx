@@ -1896,7 +1896,6 @@ function EstimateForm({
                     </td>
                     <td className="p-2" />
                     <td className="p-2" />
-                    <td className="p-2" />
                     <td className="p-2 text-right text-gray-500">-</td>
                     <td className="p-2 text-right tabular-nums font-semibold text-gray-800">{formatNumber(groupMat)}</td>
                     <td className="p-2 text-right text-gray-500">-</td>
