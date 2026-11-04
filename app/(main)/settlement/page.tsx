@@ -107,6 +107,20 @@ function formatNum(n: number): string {
   return n.toLocaleString("ko-KR");
 }
 
+/** 정산 금액 입력: 앞에 - 하나만 허용 (콤마·기타 문자 제거) */
+function sanitizeSignedInteger(value: string): string {
+  let s = value.replace(/,/g, "").replace(/[^\d-]/g, "");
+  const neg = s.startsWith("-");
+  s = s.replace(/-/g, "");
+  return (neg ? "-" : "") + s;
+}
+
+function parseSignedInteger(raw: string): number {
+  if (raw === "" || raw === "-") return 0;
+  const n = parseInt(raw, 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+
 /** 직접 입력 하부항목 — 내용·날짜·금액이 모두 비었으면 저장 시 제외 */
 function isManualSubItemEmpty(s: PhaseSubItem): boolean {
   if (s.fromWorkLog === true) return false;
@@ -188,6 +202,8 @@ export default function SettlementPage() {
   const [settledAt, setSettledAt] = useState("");
   const [phaseRows, setPhaseRows] = useState<PhaseRow[]>([]);
   const [customerPaymentRows, setCustomerPaymentRows] = useState<CustomerPaymentRow[]>([{ item: "", date: "", amount: 0, memo: "" }]);
+  /** 금액 입력 중 "-" 등 중간값을 보여 주기 위한 임시 문자열 */
+  const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
   const [detailLoading, setDetailLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -382,7 +398,7 @@ export default function SettlementPage() {
             const label = (e.label || "").trim();
             const amount = Number(e.amount) || 0;
             const content = typeof e.content === "string" ? e.content : "";
-            if (label && (amount > 0 || content)) {
+            if (label && (amount !== 0 || content)) {
               if (!workLogSubItemsByPhase[label]) workLogSubItemsByPhase[label] = [];
               workLogSubItemsByPhase[label].push({ amount, dateUsed: logDate, content });
             }
@@ -452,6 +468,7 @@ export default function SettlementPage() {
   }, [selectedId]);
 
   useEffect(() => {
+    setAmountDrafts({});
     if (selectedId == null) {
       setEstimate(null);
       setPhaseRows([]);
@@ -895,12 +912,26 @@ export default function SettlementPage() {
                     <td className="py-1 pr-2 text-right border-r border-gray-200">
                       <input
                         type="text"
-                        inputMode="numeric"
-                        value={row.amount === 0 ? "" : row.amount.toLocaleString("ko-KR")}
+                        inputMode="decimal"
+                        value={
+                          Object.prototype.hasOwnProperty.call(amountDrafts, `pay-${i}`)
+                            ? amountDrafts[`pay-${i}`]
+                            : row.amount === 0
+                              ? ""
+                              : row.amount.toLocaleString("ko-KR")
+                        }
                         onChange={(e) => {
-                          const raw = e.target.value.replace(/\D/g, "");
-                          const num = raw === "" ? 0 : parseInt(raw, 10);
-                          if (!Number.isNaN(num)) setCustomerPaymentRow(i, "amount", num);
+                          const raw = sanitizeSignedInteger(e.target.value);
+                          setAmountDrafts((prev) => ({ ...prev, [`pay-${i}`]: raw }));
+                          setCustomerPaymentRow(i, "amount", parseSignedInteger(raw));
+                        }}
+                        onBlur={() => {
+                          setAmountDrafts((prev) => {
+                            if (!Object.prototype.hasOwnProperty.call(prev, `pay-${i}`)) return prev;
+                            const next = { ...prev };
+                            delete next[`pay-${i}`];
+                            return next;
+                          });
                         }}
                         placeholder="0"
                         className="w-full min-w-0 rounded border border-gray-200 px-2 py-1 text-right text-sm min-h-0"
@@ -1025,13 +1056,28 @@ export default function SettlementPage() {
                                     <td className="py-1.5 pr-2 align-top">
                                       <input
                                         type="text"
-                                        inputMode="numeric"
+                                        inputMode="decimal"
                                         readOnly={!!sub.fromWorkLog}
-                                        value={sub.amount === 0 ? "" : sub.amount.toLocaleString("ko-KR")}
+                                        value={
+                                          Object.prototype.hasOwnProperty.call(amountDrafts, `phase-${i}-${origIndex}`)
+                                            ? amountDrafts[`phase-${i}-${origIndex}`]
+                                            : sub.amount === 0
+                                              ? ""
+                                              : sub.amount.toLocaleString("ko-KR")
+                                        }
                                         onChange={(e) => {
-                                          const raw = e.target.value.replace(/\D/g, "");
-                                          const num = raw === "" ? 0 : parseInt(raw, 10);
-                                          if (!Number.isNaN(num)) setPhaseSubItem(i, origIndex, "amount", num);
+                                          const raw = sanitizeSignedInteger(e.target.value);
+                                          setAmountDrafts((prev) => ({ ...prev, [`phase-${i}-${origIndex}`]: raw }));
+                                          setPhaseSubItem(i, origIndex, "amount", parseSignedInteger(raw));
+                                        }}
+                                        onBlur={() => {
+                                          setAmountDrafts((prev) => {
+                                            const key = `phase-${i}-${origIndex}`;
+                                            if (!Object.prototype.hasOwnProperty.call(prev, key)) return prev;
+                                            const next = { ...prev };
+                                            delete next[key];
+                                            return next;
+                                          });
                                         }}
                                         placeholder="0"
                                         title={sub.fromWorkLog ? "작업일지 화면에서 금액을 수정합니다." : undefined}
@@ -1256,7 +1302,7 @@ export default function SettlementPage() {
               </thead>
               <tbody>
                 {customerPaymentRows
-                  .filter((r) => r.item.trim() || r.amount > 0 || r.date)
+                  .filter((r) => r.item.trim() || r.amount !== 0 || r.date)
                   .map((row, i) => (
                     <tr key={i}>
                       <td>{row.item || "-"}</td>
