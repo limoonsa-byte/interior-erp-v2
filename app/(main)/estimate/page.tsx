@@ -1146,7 +1146,18 @@ function EstimateForm({
 
   const removeRow = (idx: number) => {
     if (items.length <= 1) return;
+    const group = items[idx]?.processGroup ?? "";
+    const groupRemains = items.some((it, i) => i !== idx && (it.processGroup ?? "") === group);
     setItems((prev) => prev.filter((_, i) => i !== idx));
+    if (!groupRemains) {
+      setProcessOrder((prev) => prev.filter((name) => name !== group));
+      setCollapsedSections((prev) => {
+        if (!(group in prev)) return prev;
+        const next = { ...prev };
+        delete next[group];
+        return next;
+      });
+    }
   };
   const updateItem = (idx: number, field: keyof EstimateItem, value: string | number) => {
     setItems((prev) => {
@@ -1338,6 +1349,24 @@ function EstimateForm({
     saving,
     onSave: () => persistEstimate({ silent: true }),
   });
+
+  /** 공정과 그 안의 항목을 함께 삭제. 마지막 공정이면 빈 항목 한 줄만 남긴다. */
+  const removeProcess = (processName: string) => {
+    const label = processName.startsWith("\u200B") ? "새 공정" : processName.trim() || "이름 없는 공정";
+    if (!window.confirm(`「${label}」 공정을 삭제할까요?\n이 공정의 항목도 함께 삭제됩니다.`)) return;
+    setItems((prev) => {
+      const next = prev.filter((it) => (it.processGroup ?? "") !== processName);
+      return next.length > 0 ? next : [{ ...emptyItem }];
+    });
+    setProcessOrder((prev) => prev.filter((name) => name !== processName));
+    setCollapsedSections((prev) => {
+      if (!(processName in prev)) return prev;
+      const next = { ...prev };
+      delete next[processName];
+      return next;
+    });
+    markDirty();
+  };
 
   const moveEstimateItem = useCallback(
     (fromIndex: number, toTargetIndex: number, insertBefore: boolean) => {
@@ -1856,6 +1885,13 @@ function EstimateForm({
                             + 항목 추가
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => removeProcess(grp.name)}
+                          className="rounded border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                        >
+                          공정 삭제
+                        </button>
                       </div>
                     </td>
                     <td className="p-2" />
@@ -2134,7 +2170,10 @@ function EstimateForm({
                       <td className="p-2">
                         <button
                           type="button"
-                          onClick={() => removeRow(origIdx)}
+                          onClick={() => {
+                            removeRow(origIdx);
+                            markDirty();
+                          }}
                           className="text-red-500 hover:underline disabled:opacity-40"
                           disabled={items.length <= 1}
                         >
