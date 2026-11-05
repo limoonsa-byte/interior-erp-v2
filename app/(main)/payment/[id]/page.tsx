@@ -68,6 +68,10 @@ type ApprovalEntry = {
   id: string;
   item: string;
   memo: string;
+  /** 현장 인부 DB에서 선택한 인부 id (없으면 빈 문자열) */
+  workerId: string;
+  /** 선택한 인부의 계좌 (또는 직접 표시용) */
+  account: string;
   amount: number;
 };
 
@@ -79,7 +83,22 @@ type ApprovalDateSection = {
 
 type ApprovalStoredPayload = {
   schema?: string;
-  sections?: { date?: unknown; entries?: { item?: unknown; memo?: unknown; amount?: unknown }[] }[];
+  sections?: {
+    date?: unknown;
+    entries?: {
+      item?: unknown;
+      memo?: unknown;
+      workerId?: unknown;
+      account?: unknown;
+      amount?: unknown;
+    }[];
+  }[];
+};
+
+type WorkerOption = {
+  id: number;
+  name: string;
+  bankAccount: string;
 };
 
 function formatNumber(n: number): string {
@@ -109,7 +128,17 @@ function newClientId(): string {
 }
 
 function createEmptyEntry(): ApprovalEntry {
-  return { id: newClientId(), item: "", memo: "", amount: 0 };
+  return { id: newClientId(), item: "", memo: "", workerId: "", account: "", amount: 0 };
+}
+
+function parseWorkerId(raw: unknown): string {
+  if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) return String(Math.trunc(raw));
+  if (typeof raw === "string" && raw.trim() && Number(raw) > 0) return String(Math.trunc(Number(raw)));
+  return "";
+}
+
+function parseAccount(raw: unknown): string {
+  return typeof raw === "string" ? raw : "";
 }
 
 function createEmptySection(date = ""): ApprovalDateSection {
@@ -135,6 +164,8 @@ function parseApprovalSections(raw: unknown): ApprovalDateSection[] | null {
               id: newClientId(),
               item: typeof entry?.item === "string" ? entry.item : "",
               memo: typeof entry?.memo === "string" ? entry.memo : "",
+              workerId: parseWorkerId(entry?.workerId),
+              account: parseAccount(entry?.account),
               amount: Number(entry?.amount) || 0,
             }))
           : [],
@@ -147,7 +178,14 @@ function parseApprovalSections(raw: unknown): ApprovalDateSection[] | null {
     }
     /** 정산 페이지에서 저장한 [{ item, date, amount, memo }, …] 배열 */
     if (Array.isArray(parsed)) {
-      const rows = parsed as { item?: unknown; date?: unknown; amount?: unknown; memo?: unknown }[];
+      const rows = parsed as {
+        item?: unknown;
+        date?: unknown;
+        amount?: unknown;
+        memo?: unknown;
+        workerId?: unknown;
+        account?: unknown;
+      }[];
       if (rows.length === 0) return [createEmptySection("")];
       const byDate = new Map<string, ApprovalEntry[]>();
       for (const r of rows) {
@@ -157,6 +195,8 @@ function parseApprovalSections(raw: unknown): ApprovalDateSection[] | null {
           id: newClientId(),
           item: typeof r?.item === "string" ? r.item : "",
           memo: typeof r?.memo === "string" ? r.memo : "",
+          workerId: parseWorkerId(r?.workerId),
+          account: parseAccount(r?.account),
           amount: Number(r?.amount) || 0,
         };
         const list = byDate.get(key);
@@ -201,6 +241,7 @@ export default function PaymentDetailPage() {
     entryId: string;
     before: boolean;
   } | null>(null);
+  const [workers, setWorkers] = useState<WorkerOption[]>([]);
 
   const load = useCallback(() => {
     if (!Number.isFinite(estimateId) || estimateId <= 0) {
@@ -282,6 +323,23 @@ export default function PaymentDetailPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    fetch("/api/workers", { credentials: "include" })
+      .then(async (r) => {
+        const data = await r.json().catch(() => null);
+        if (!r.ok || !Array.isArray(data)) return [];
+        return (data as { id?: unknown; name?: unknown; bankAccount?: unknown }[])
+          .map((row) => ({
+            id: Number(row.id),
+            name: typeof row.name === "string" ? row.name.trim() : "",
+            bankAccount: typeof row.bankAccount === "string" ? row.bankAccount.trim() : "",
+          }))
+          .filter((row) => Number.isFinite(row.id) && row.id > 0 && row.name);
+      })
+      .then(setWorkers)
+      .catch(() => setWorkers([]));
+  }, []);
+
   /** 인쇄 시 사이드바·메인 영역까지 포함되지 않도록 (자재리스트 material-list-print-open 과 동일 패턴) */
   useEffect(() => {
     if (!showPrintPreview) {
@@ -322,7 +380,12 @@ export default function PaymentDetailPage() {
     return target
       .map((section) => {
         const entries = section.entries.filter(
-          (entry) => entry.item.trim() || entry.memo.trim() || Number(entry.amount) > 0
+          (entry) =>
+            entry.item.trim() ||
+            entry.memo.trim() ||
+            entry.account.trim() ||
+            entry.workerId.trim() ||
+            Number(entry.amount) > 0
         );
         if (entries.length === 0) return null;
         return {
@@ -330,11 +393,15 @@ export default function PaymentDetailPage() {
           entries: entries.map((entry) => ({
             item: entry.item || "-",
             memo: entry.memo || "-",
+            account: entry.account.trim() || "-",
             amount: Number(entry.amount) || 0,
           })),
         };
       })
-      .filter((x): x is { date: string; entries: { item: string; memo: string; amount: number }[] } => x != null);
+      .filter(
+        (x): x is { date: string; entries: { item: string; memo: string; account: string; amount: number }[] } =>
+          x != null
+      );
   }, [sections, printSectionId]);
 
   const printableTotalAmount = useMemo(
@@ -380,6 +447,29 @@ export default function PaymentDetailPage() {
     },
     []
   );
+
+  const setEntryWorker = useCallback((sectionId: string, entryId: string, workerIdRaw: string) => {
+    const worker = workers.find((w) => String(w.id) === workerIdRaw);
+    setSections((prev) =>
+      prev.map((section) => {
+        if (section.id !== sectionId) return section;
+        return {
+          ...section,
+          entries: section.entries.map((entry) => {
+            if (entry.id !== entryId) return entry;
+            if (!worker) {
+              return { ...entry, workerId: "", account: "" };
+            }
+            return {
+              ...entry,
+              workerId: String(worker.id),
+              account: worker.bankAccount || "",
+            };
+          }),
+        };
+      })
+    );
+  }, [workers]);
 
   const addEntry = useCallback((sectionId: string) => {
     setSections((prev) =>
@@ -449,6 +539,8 @@ export default function PaymentDetailPage() {
         entries: section.entries.map((entry) => ({
           item: entry.item?.trim() || "",
           memo: entry.memo?.trim() || "",
+          workerId: entry.workerId?.trim() || "",
+          account: entry.account?.trim() || "",
           amount: Number(entry.amount) || 0,
         })),
       })),
@@ -558,7 +650,8 @@ export default function PaymentDetailPage() {
       </div>
 
       <p className="text-xs text-gray-500">
-        결제 나가기 전 승인용 서류를 작성합니다. 자재리스트처럼 날짜를 큰 항목으로 두고 하위에 항목/비고/금액을 입력하세요.
+        결제 나가기 전 승인용 서류를 작성합니다. 자재리스트처럼 날짜를 큰 항목으로 두고 하위에 항목/비고/계좌/금액을 입력하세요.
+        계좌는 현장 인부 DB에서 이름을 고르면 해당 인부 계좌가 표시됩니다.
         같은 날짜 안에서 항목 왼쪽 ⋮⋮ 를 끌면 순서를 바꿀 수 있습니다. 변경 후 저장하면 반영됩니다.
       </p>
 
@@ -584,12 +677,13 @@ export default function PaymentDetailPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm [&_th]:whitespace-nowrap">
+              <table className="w-full min-w-[920px] text-left text-sm [&_th]:whitespace-nowrap">
                 <thead className="border-b border-gray-200 bg-gray-100 text-gray-700">
                   <tr>
                     <th className="w-10 p-2 sm:p-3" title="끌어서 항목 순서 변경" />
                     <th className="p-2 sm:p-3 font-semibold">항목</th>
                     <th className="p-2 sm:p-3 font-semibold">비고</th>
+                    <th className="min-w-[200px] p-2 sm:p-3 font-semibold">계좌</th>
                     <th className="p-2 sm:p-3 text-right font-semibold">금액</th>
                     <th className="p-2 sm:p-3 w-12" />
                   </tr>
@@ -675,6 +769,40 @@ export default function PaymentDetailPage() {
                           className="w-full rounded border border-gray-300 px-2 py-1.5"
                           placeholder="비고"
                         />
+                      </td>
+                      <td className="p-2 sm:p-3">
+                        <div className="flex min-w-[180px] flex-col gap-1">
+                          <select
+                            value={entry.workerId}
+                            onChange={(e) => setEntryWorker(section.id, entry.id, e.target.value)}
+                            className="w-full rounded border border-gray-300 bg-white px-2 py-1.5 text-sm"
+                            aria-label="현장 인부 선택"
+                          >
+                            <option value="">인부 선택</option>
+                            {entry.workerId &&
+                              !workers.some((worker) => String(worker.id) === entry.workerId) && (
+                                <option value={entry.workerId}>저장된 인부</option>
+                              )}
+                            {workers.map((worker) => (
+                              <option key={worker.id} value={String(worker.id)}>
+                                {worker.name}
+                              </option>
+                            ))}
+                          </select>
+                          <input
+                            type="text"
+                            value={entry.account}
+                            onChange={(e) => setEntry(section.id, entry.id, "account", e.target.value)}
+                            className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs text-gray-700"
+                            placeholder={workers.length === 0 ? "인부 DB에 등록된 계좌 없음" : "계좌 (인부 선택 시 자동)"}
+                            readOnly={Boolean(entry.workerId)}
+                            title={
+                              entry.workerId
+                                ? "현장 인부 DB 계좌입니다. 다른 인부를 선택하거나 선택을 해제하면 변경됩니다."
+                                : "인부를 선택하거나 계좌를 직접 입력할 수 있습니다."
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="p-2 sm:p-3">
                         <input
@@ -796,6 +924,7 @@ export default function PaymentDetailPage() {
                         <tr className="bg-gray-100">
                           <th className="border border-gray-300 p-2 text-left font-semibold">항목</th>
                           <th className="border border-gray-300 p-2 text-left font-semibold">비고</th>
+                          <th className="border border-gray-300 p-2 text-left font-semibold">계좌</th>
                           <th className="border border-gray-300 p-2 text-right font-semibold">금액</th>
                           <th className="payment-approval-sign-col border border-gray-300 p-2 text-center font-semibold">확인 (서명)</th>
                         </tr>
@@ -805,12 +934,13 @@ export default function PaymentDetailPage() {
                           <tr key={`${section.date}-${entryIndex}`}>
                             <td className="border border-gray-300 p-2">{entry.item}</td>
                             <td className="border border-gray-300 p-2 whitespace-pre-wrap">{entry.memo}</td>
+                            <td className="border border-gray-300 p-2 whitespace-pre-wrap">{entry.account}</td>
                             <td className="border border-gray-300 p-2 text-right tabular-nums">{formatNumber(entry.amount)}원</td>
                             <td className="payment-approval-sign-cell border border-gray-300 p-2" aria-label="서명/도장 란" />
                           </tr>
                         ))}
                         <tr className="bg-gray-50">
-                          <td colSpan={2} className="border border-gray-300 p-2 text-right font-semibold">
+                          <td colSpan={3} className="border border-gray-300 p-2 text-right font-semibold">
                             날짜 합계
                           </td>
                           <td className="border border-gray-300 p-2 text-right font-semibold tabular-nums">
