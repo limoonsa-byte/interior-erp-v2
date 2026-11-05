@@ -661,16 +661,15 @@ export function MaterialOrderPage() {
       .finally(() => setTemplateLoadType(null));
   }, []);
 
-  /** 템플릿 불러오기: 빈 서식(기본 발주 유형만, 행은 비움) */
+  /** 템플릿 불러오기: 빈 서식(「기타」유형 1개 + 빈 행 1줄만) */
   const loadEmptyTemplate = useCallback(() => {
-    const labels = [...ORDER_CATEGORIES.map((c) => c.label), "기타"];
-    const rows: Record<string, AddedOrderRow[]> = {};
-    labels.forEach((label) => {
-      rows[label] = [createEmptyAddedRow()];
-    });
+    const labels = ["기타"];
+    const rows: Record<string, AddedOrderRow[]> = {
+      기타: [createEmptyAddedRow()],
+    };
     setVisibleOrderLabels(labels);
     setAddedRowsByLabel(rows);
-    setDeliveryDateByLabel(Object.fromEntries(labels.map((l) => [l, ""])));
+    setDeliveryDateByLabel({ 기타: "" });
     setCollapsedByLabel({});
     setDisplayTitleByLabel({});
     setPreviewLabel(null);
@@ -1195,7 +1194,7 @@ export function MaterialOrderPage() {
                       onClick={loadEmptyTemplate}
                       disabled={templateLoadType !== null}
                       className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      title="마스터/우리회사에 저장된 품목 없이, 기본 발주 유형만 두고 빈 행으로 시작합니다."
+                      title="마스터/우리회사 품목 없이 「기타」발주 유형 1개와 빈 행만 두고 시작합니다."
                     >
                       빈 템플릿
                     </button>
