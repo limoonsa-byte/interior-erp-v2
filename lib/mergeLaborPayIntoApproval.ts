@@ -3,6 +3,8 @@ import { sql } from "@vercel/postgres";
 type ApprovalEntry = {
   item?: string;
   memo?: string;
+  workerId?: string;
+  account?: string;
   amount?: number;
   laborPayRequestId?: number;
 };
@@ -102,9 +104,44 @@ function stripEmptyPlaceholderEntries(entries: ApprovalEntry[]): ApprovalEntry[]
   return entries.filter((e) => {
     const item = String(e.item ?? "").trim();
     const memo = String(e.memo ?? "").trim();
+    const account = String(e.account ?? "").trim();
+    const workerId = String(e.workerId ?? "").trim();
     const amount = Number(e.amount) || 0;
-    return item !== "" || memo !== "" || amount !== 0 || e.laborPayRequestId != null;
+    return (
+      item !== "" ||
+      memo !== "" ||
+      account !== "" ||
+      workerId !== "" ||
+      amount !== 0 ||
+      e.laborPayRequestId != null
+    );
   });
+}
+
+async function lookupWorkerAccount(
+  companyId: number,
+  workerName: string
+): Promise<{ workerId: string; account: string }> {
+  const name = workerName.trim();
+  if (!name) return { workerId: "", account: "" };
+  try {
+    const r = await sql`
+      SELECT id, bank_account
+      FROM company_workers
+      WHERE company_id = ${companyId} AND name = ${name}
+      ORDER BY id ASC
+      LIMIT 1
+    `;
+    if (r.rows.length === 0) return { workerId: "", account: "" };
+    const row = r.rows[0] as { id?: unknown; bank_account?: unknown };
+    const id = Number(row.id);
+    return {
+      workerId: Number.isFinite(id) && id > 0 ? String(Math.trunc(id)) : "",
+      account: typeof row.bank_account === "string" ? row.bank_account.trim() : "",
+    };
+  } catch {
+    return { workerId: "", account: "" };
+  }
 }
 
 /** 인건비 제출 건을 해당 현장 결제 승인서(approval_v1)에 합친다. */
@@ -119,6 +156,7 @@ export async function mergeLaborPayIntoApproval(opts: {
   const { estimateId, companyId, laborPayRequestId, workerName, amount, content } = opts;
   const payload = parseApproval(await loadApprovalJson(estimateId, companyId));
   const sections = Array.isArray(payload.sections) ? [...payload.sections] : [];
+  const workerAccount = await lookupWorkerAccount(companyId, workerName);
 
   // 동일 요청이 이미 있으면 제거 후 다시 넣음 (재제출 방지용 멱등)
   for (const section of sections) {
@@ -137,6 +175,8 @@ export async function mergeLaborPayIntoApproval(opts: {
   section.entries.push({
     item: `인건비 · ${workerName.trim() || "인부"}`,
     memo: content.trim(),
+    workerId: workerAccount.workerId || undefined,
+    account: workerAccount.account || undefined,
     amount: Math.round(amount),
     laborPayRequestId,
   });
