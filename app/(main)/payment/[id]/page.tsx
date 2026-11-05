@@ -2,9 +2,35 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, CreditCard, Eye, Plus, Printer, Save, Trash2, X } from "lucide-react";
+import { ArrowLeft, CreditCard, Eye, GripVertical, Plus, Printer, Save, Trash2, X } from "lucide-react";
+
+const PAYMENT_ENTRY_DND_MIME = "application/x-payment-approval-entry";
+
+/** fromIndex 항목을 toTargetIndex의 앞/뒤로 이동 */
+function reorderEntries<T>(
+  entries: T[],
+  fromIndex: number,
+  toTargetIndex: number,
+  insertBefore: boolean
+): T[] {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= entries.length ||
+    toTargetIndex < 0 ||
+    toTargetIndex >= entries.length
+  ) {
+    return entries;
+  }
+  let insertPos = insertBefore ? toTargetIndex : toTargetIndex + 1;
+  if (fromIndex === insertPos || fromIndex + 1 === insertPos) return entries;
+  const next = [...entries];
+  const [item] = next.splice(fromIndex, 1);
+  if (fromIndex < insertPos) insertPos -= 1;
+  next.splice(insertPos, 0, item);
+  return next;
+}
 
 type Estimate = {
   id: number;
@@ -168,6 +194,13 @@ export default function PaymentDetailPage() {
   const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [printSectionId, setPrintSectionId] = useState<string>("all");
+  /** 같은 날짜 큰항목 안에서 행 순서 드래그 */
+  const [draggingEntry, setDraggingEntry] = useState<{ sectionId: string; entryId: string } | null>(null);
+  const [dragOverEntry, setDragOverEntry] = useState<{
+    sectionId: string;
+    entryId: string;
+    before: boolean;
+  } | null>(null);
 
   const load = useCallback(() => {
     if (!Number.isFinite(estimateId) || estimateId <= 0) {
@@ -366,6 +399,45 @@ export default function PaymentDetailPage() {
     );
   }, []);
 
+  const moveEntry = useCallback(
+    (sectionId: string, fromEntryId: string, toEntryId: string, insertBefore: boolean) => {
+      setSections((prev) =>
+        prev.map((section) => {
+          if (section.id !== sectionId) return section;
+          const fromIndex = section.entries.findIndex((entry) => entry.id === fromEntryId);
+          const toIndex = section.entries.findIndex((entry) => entry.id === toEntryId);
+          if (fromIndex < 0 || toIndex < 0) return section;
+          const nextEntries = reorderEntries(section.entries, fromIndex, toIndex, insertBefore);
+          if (nextEntries === section.entries) return section;
+          return { ...section, entries: nextEntries };
+        })
+      );
+    },
+    []
+  );
+
+  const handleEntryDrop = useCallback(
+    (e: React.DragEvent, sectionId: string, targetEntryId: string) => {
+      const raw = e.dataTransfer.getData(PAYMENT_ENTRY_DND_MIME);
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const payload = JSON.parse(raw) as { sectionId: string; entryId: string };
+        if (payload.sectionId !== sectionId) return;
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2;
+        moveEntry(sectionId, payload.entryId, targetEntryId, insertBefore);
+      } catch {
+        /* ignore */
+      } finally {
+        setDraggingEntry(null);
+        setDragOverEntry(null);
+      }
+    },
+    [moveEntry]
+  );
+
   const handleSave = useCallback(() => {
     if (!Number.isFinite(estimateId) || estimateId <= 0) return;
     setSaving(true);
@@ -487,6 +559,7 @@ export default function PaymentDetailPage() {
 
       <p className="text-xs text-gray-500">
         결제 나가기 전 승인용 서류를 작성합니다. 자재리스트처럼 날짜를 큰 항목으로 두고 하위에 항목/비고/금액을 입력하세요.
+        같은 날짜 안에서 항목 왼쪽 ⋮⋮ 를 끌면 순서를 바꿀 수 있습니다. 변경 후 저장하면 반영됩니다.
       </p>
 
       <div className="flex flex-col gap-5">
@@ -514,6 +587,7 @@ export default function PaymentDetailPage() {
               <table className="w-full min-w-[760px] text-left text-sm [&_th]:whitespace-nowrap">
                 <thead className="border-b border-gray-200 bg-gray-100 text-gray-700">
                   <tr>
+                    <th className="w-10 p-2 sm:p-3" title="끌어서 항목 순서 변경" />
                     <th className="p-2 sm:p-3 font-semibold">항목</th>
                     <th className="p-2 sm:p-3 font-semibold">비고</th>
                     <th className="p-2 sm:p-3 text-right font-semibold">금액</th>
@@ -521,8 +595,69 @@ export default function PaymentDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {section.entries.map((entry) => (
-                    <tr key={entry.id}>
+                  {section.entries.map((entry) => {
+                    const isDragging =
+                      draggingEntry?.sectionId === section.id && draggingEntry?.entryId === entry.id;
+                    const isDragOver =
+                      dragOverEntry?.sectionId === section.id && dragOverEntry?.entryId === entry.id;
+                    return (
+                    <tr
+                      key={entry.id}
+                      className={`${isDragging ? "opacity-50" : ""} ${
+                        isDragOver
+                          ? dragOverEntry?.before
+                            ? "border-t-2 border-t-blue-500"
+                            : "border-b-2 border-b-blue-500"
+                          : ""
+                      }`}
+                      onDragOver={(e) => {
+                        if (e.dataTransfer.types.includes(PAYMENT_ENTRY_DND_MIME)) {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const before = e.clientY < rect.top + rect.height / 2;
+                          setDragOverEntry({ sectionId: section.id, entryId: entry.id, before });
+                        }
+                      }}
+                      onDrop={(e) => handleEntryDrop(e, section.id, entry.id)}
+                      onDragEnter={(e) => {
+                        if (e.dataTransfer.types.includes(PAYMENT_ENTRY_DND_MIME)) {
+                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          const before = e.clientY < rect.top + rect.height / 2;
+                          setDragOverEntry({ sectionId: section.id, entryId: entry.id, before });
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                          setDragOverEntry((prev) =>
+                            prev?.sectionId === section.id && prev?.entryId === entry.id ? null : prev
+                          );
+                        }
+                      }}
+                    >
+                      <td className="p-2 sm:p-3 align-middle">
+                        <button
+                          type="button"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData(
+                              PAYMENT_ENTRY_DND_MIME,
+                              JSON.stringify({ sectionId: section.id, entryId: entry.id })
+                            );
+                            e.dataTransfer.effectAllowed = "move";
+                            setDraggingEntry({ sectionId: section.id, entryId: entry.id });
+                          }}
+                          onDragEnd={() => {
+                            setDraggingEntry(null);
+                            setDragOverEntry(null);
+                          }}
+                          className="inline-flex cursor-grab rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 active:cursor-grabbing"
+                          title="끌어서 순서 변경"
+                          aria-label="행 순서 변경"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </button>
+                      </td>
                       <td className="p-2 sm:p-3">
                         <input
                           type="text"
@@ -561,7 +696,8 @@ export default function PaymentDetailPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
